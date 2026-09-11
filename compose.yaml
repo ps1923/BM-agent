@@ -1,0 +1,75 @@
+services:
+  requirements-harness:
+    build:
+      context: .
+      dockerfile: harnesses/requirements/Dockerfile
+    environment:
+      PORT: 8101
+      HARNESS_HOST: 0.0.0.0
+      HARNESS_PROVIDER: ${HARNESS_PROVIDER:-deterministic}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.openai.com/v1}
+      AI_API_KEY: ${AI_API_KEY:-}
+      REQUIREMENTS_MODEL: ${REQUIREMENTS_MODEL:-}
+    expose:
+      - "8101"
+    networks:
+      - requirements-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8101/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  planner-harness:
+    build:
+      context: .
+      dockerfile: harnesses/planner/Dockerfile
+    environment:
+      PORT: 8102
+      HARNESS_HOST: 0.0.0.0
+      HARNESS_PROVIDER: ${HARNESS_PROVIDER:-deterministic}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.openai.com/v1}
+      AI_API_KEY: ${AI_API_KEY:-}
+      PLANNER_MODEL: ${PLANNER_MODEL:-}
+    expose:
+      - "8102"
+    networks:
+      - planner-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8102/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  bm-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_PORT: 8080
+      DB_URL: ${DB_URL:-jdbc:mysql://host.docker.internal:3306/BM-sql?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+      DB_USER: ${DB_USER:-bm_app}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      REQUIREMENTS_HARNESS_URL: http://requirements-harness:8101
+      PLANNER_HARNESS_URL: http://planner-harness:8102
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://127.0.0.1:8000}
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      requirements-harness:
+        condition: service_healthy
+      planner-harness:
+        condition: service_healthy
+    networks:
+      - requirements-net
+      - planner-net
+    restart: unless-stopped
+
+networks:
+  requirements-net: {}
+  planner-net: {}

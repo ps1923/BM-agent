@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spring Boot 学习工作台</title>
+    <link rel="stylesheet" href="styles.css?v=16" />
+  </head>
+  <body>
+    <main id="libraryView" class="library-view" aria-label="实验文件库">
+      <header class="library-topbar">
+        <div class="library-brand"><span class="library-brand-mark">⌘</span><div><strong>学习实验</strong><small>本地实验工作区</small></div></div>
+        <div class="library-account"><span class="account-dot"></span>我的工作区</div>
+      </header>
+
+      <section class="library-content">
+        <div class="library-heading">
+          <div><p class="library-eyebrow">EXPERIMENTS</p><h1>实验文件库</h1><p>选择一个实验，进入它的学习画布。</p></div>
+          <div class="library-heading-actions"><span class="library-count">3 个文件夹 · 3 个实验</span><button id="manageFoldersButton" class="manage-folders-button" type="button">管理分组</button><button id="createExperimentButton" class="create-experiment-button" type="button" aria-label="创建实验">＋</button></div>
+        </div>
+
+        <section class="recent-section">
+          <div class="section-title"><h2>最近打开</h2><span>按最近打开时间</span></div>
+          <div id="recentExperiments" class="recent-list">
+            <button class="recent-item experiment-link" type="button" data-experiment-id="spring-init"><span class="recent-sequence">start</span><span class="recent-copy"><strong>Spring Boot 项目初始化</strong><small>刚刚打开</small></span><span class="recent-arrow">›</span></button>
+            <button class="recent-item experiment-link" type="button" data-experiment-id="spring-rest"><span class="recent-sequence">1.1</span><span class="recent-copy"><strong>Spring Boot REST 接口</strong><small>昨天打开</small></span><span class="recent-arrow">›</span></button>
+          </div>
+        </section>
+
+        <div class="folder-grid">
+          <section class="folder-card folder-card-wide" data-folder-id="spring" data-folder-name="Spring Boot 基础">
+            <div class="folder-header"><div class="folder-name"><span class="folder-icon">▰</span><div><h2>Spring Boot 基础</h2><p>从项目创建到接口开发</p></div></div><span class="folder-count">3 个实验</span></div>
+            <div class="experiment-list">
+              <div class="experiment-row"><button class="experiment-item experiment-link" type="button" data-experiment-id="spring-init"><span class="experiment-icon">start</span><span class="experiment-copy"><strong>Spring Boot 项目初始化</strong><small>节点 1 · 今天编辑</small></span><span class="experiment-arrow">›</span></button><button class="delete-experiment" type="button" data-delete-experiment-id="spring-init" aria-label="删除 Spring Boot 项目初始化">×</button></div>
+              <div class="experiment-row"><button class="experiment-item experiment-link" type="button" data-experiment-id="spring-rest"><span class="experiment-icon">1.1</span><span class="experiment-copy"><strong>Spring Boot REST 接口</strong><small>节点 4 · 昨天编辑</small></span><span class="experiment-arrow">›</span></button><button class="delete-experiment" type="button" data-delete-experiment-id="spring-rest" aria-label="删除 Spring Boot REST 接口">×</button></div>
+              <div class="experiment-row"><button class="experiment-item experiment-link" type="button" data-experiment-id="spring-data"><span class="experiment-icon">1.2</span><span class="experiment-copy"><strong>连接 MySQL 数据库</strong><small>节点 3 · 3 天前编辑</small></span><span class="experiment-arrow">›</span></button><button class="delete-experiment" type="button" data-delete-experiment-id="spring-data" aria-label="删除 连接 MySQL 数据库">×</button></div>
+            </div>
+          </section>
+
+          <section class="folder-card" data-folder-id="java" data-folder-name="Java 核心">
+            <div class="folder-header"><div class="folder-name"><span class="folder-icon">▰</span><div><h2>Java 核心</h2><p>语言基础与面向对象</p></div></div><span class="folder-count">0</span></div>
+            <div class="empty-folder"><span>＋</span><p>还没有实验</p></div>
+          </section>
+
+          <section class="folder-card" data-folder-id="web" data-folder-name="Web 开发">
+            <div class="folder-header"><div class="folder-name"><span class="folder-icon">▰</span><div><h2>Web 开发</h2><p>前端与服务端实践</p></div></div><span class="folder-count">0</span></div>
+            <div class="empty-folder"><span>＋</span><p>还没有实验</p></div>
+          </section>
+        </div>
+      </section>
+
+      <div id="folderDialog" class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="folderDialogTitle">
+        <div class="folder-dialog-card">
+          <div class="folder-dialog-header"><div><p class="library-eyebrow">WORKSPACE</p><h2 id="folderDialogTitle">管理分组</h2></div><button id="closeFolderDialog" class="dialog-close" type="button" aria-label="关闭分组管理">×</button></div>
+          <p class="folder-dialog-description">用分组整理不同方向的实验。含有实验的分组需要先清空后才能删除。</p>
+          <div id="folderManageList" class="folder-manage-list"></div>
+          <div class="new-folder-row"><input id="newFolderName" type="text" placeholder="新分组名称" aria-label="新分组名称" /><button id="addFolderButton" type="button">＋ 新建分组</button></div>
+        </div>
+      </div>
+
+      <div id="createDialog" class="create-dialog" role="dialog" aria-modal="true" aria-labelledby="createDialogTitle">
+        <div class="create-dialog-card">
+          <div class="create-dialog-chat">
+            <div class="create-agent-mark"><span class="agent-mark-dot"></span><strong>Harness</strong><span>学习规划智能体</span></div>
+            <div class="create-chat-copy"><p class="create-chat-label">导师</p><h2 id="createDialogTitle">我们来创建一个实验</h2><p>告诉我你想做什么，我会帮你拆成适合学习的最小节点。</p></div>
+            <div class="create-chat-hint">我会先和你确认实验方向，再根据周期与难度安排节点数量、初始代码完整程度和主动帮助程度。</div>
+          </div>
+          <div class="create-dialog-form">
+            <div class="create-form-top"><span id="createStepLabel">01 / 03</span><button id="closeCreateDialog" class="dialog-close" type="button" aria-label="关闭创建实验">×</button></div>
+            <div class="step-progress"><span class="is-active"></span><span></span><span></span></div>
+            <div id="createLoading" class="create-loading" role="status" aria-live="polite" aria-hidden="true" hidden><span class="create-loading-spinner" aria-hidden="true"></span><span id="createLoadingText">Harness 正在处理中…</span></div>
+            <section class="create-step is-active" data-step="1"><p class="step-eyebrow">STEP 01 · 方向对话</p><h3>你想做什么或学什么？</h3><p class="step-description">先把想法告诉 Harness，它会只围绕这个方向继续追问和整理。</p><div class="harness-message"><span class="harness-avatar">H</span><p id="creationHarnessMessage"><strong>Harness</strong> 我会记录你的目标，并先帮你确认一个清晰的实验方向。</p></div><textarea id="learningGoal" rows="5" placeholder="例如：我想学习 Spring Boot，并做一个简单的用户登录接口…"></textarea></section>
+            <section class="create-step" data-step="2"><p class="step-eyebrow">STEP 02 · 学习周期</p><h3>你准备投入多久？</h3><p class="step-description">只填写整数，Harness 会把周期换算为总小时数，用来安排节点节奏。</p><div id="directionSummary" class="direction-summary"><span class="direction-summary-label">已识别的实验方向</span><strong id="directionTitle">等待第一段对话</strong><p id="directionDetail">完成方向描述后，这里会显示 Harness 记录的事实。</p></div><div class="harness-message"><span class="harness-avatar">H</span><p><strong>Harness</strong> 已记录方向。接下来只需要告诉我可以投入的时间。</p></div><div class="duration-fields"><label><span>天</span><input id="durationDays" type="number" min="0" step="1" value="1" inputmode="numeric" /></label><span class="duration-separator">天</span><label><span>小时</span><input id="durationHours" type="number" min="0" max="23" step="1" value="0" inputmode="numeric" /></label><span class="duration-separator">小时</span></div><p id="durationPreview" class="duration-preview">当前周期：1 天 0 小时 · 共 24 小时</p></section>
+            <section class="create-step" data-step="3"><p class="step-eyebrow">STEP 03 · 节点难度</p><h3>选择这次实验的难度</h3><p class="step-description">难度会影响节点拆分密度、初始代码完整程度和 Harness 的主动程度。</p><div class="harness-message"><span class="harness-avatar">H</span><p><strong>Harness</strong> 记下这个选择后，我会生成一份可确认的实验清单。</p></div><div class="choice-list difficulty-list"><button class="choice-item is-selected" type="button" data-choice-group="difficulty" data-value="入门"><strong>入门</strong><small>更多解释，代码从骨架开始</small></button><button class="choice-item" type="button" data-choice-group="difficulty" data-value="简单"><strong>简单</strong><small>保留少量空白，跟着提示完成</small></button><button class="choice-item" type="button" data-choice-group="difficulty" data-value="普通"><strong>普通</strong><small>完成关键代码，提示适度出现</small></button><button class="choice-item" type="button" data-choice-group="difficulty" data-value="困难"><strong>困难</strong><small>只保留必要上下文，独立解决问题</small></button><button class="choice-item" type="button" data-choice-group="difficulty" data-value="挑战"><strong>挑战</strong><small>只给目标和验收标准，尽可能独立完成</small></button></div></section>
+            <section id="createPlan" class="create-plan"><div class="plan-topline"><div><p class="step-eyebrow">HARNESS PLAN</p><h3>实验方案已生成</h3></div><span class="plan-confirm-mark">待确认</span></div><p class="step-description">Harness 已把方向、周期和难度整理成阶段节点。确认后才会创建新的实验。</p><div class="plan-facts"><div><span>实验方向</span><strong id="planDirection"></strong></div><div><span>学习周期</span><strong id="planDuration"></strong></div><div><span>节点难度</span><strong id="planDifficulty"></strong></div></div><div class="plan-section"><span class="plan-section-label">实验目的</span><p id="planPurpose"></p></div><div class="plan-section"><span class="plan-section-label">节点分布与阶段性任务</span><div id="planNodes" class="plan-node-list"></div></div></section>
+            <button id="createStepButton" class="create-step-button" type="button">下一步 <span>→</span></button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <main id="canvasView" class="canvas-view is-hidden" aria-label="可拖动画布">
+      <div class="canvas-nav">
+        <button id="backToLibrary" class="canvas-back-button" type="button" aria-label="返回实验文件库">‹</button>
+        <div><small>SPRING BOOT 基础</small><strong id="currentExperimentName">Spring Boot 项目初始化</strong></div>
+      </div>
+
+      <section id="bubble" class="bubble" aria-label="Spring Boot 项目初始化节点">
+        <div class="bubble-meta"><span class="bubble-sequence">start</span><span class="bubble-status" aria-label="未完成"></span></div>
+        <h1>Spring Boot 项目初始化</h1>
+        <p>创建第一个 Spring Boot 项目，理解应用入口、依赖管理与启动流程。</p>
+      </section>
+
+      <aside id="inspector" class="inspector" aria-label="节点介绍">
+        <div class="inspector-header"><div class="inspector-sequence"><span>start</span><span class="inspector-status"></span></div><span class="inspector-kicker">学习节点</span></div>
+        <div class="inspector-body">
+          <h2>Spring Boot 项目初始化</h2>
+          <p class="inspector-intro">从零创建一个可运行的 Spring Boot 项目，认识项目目录、启动类和依赖配置，为后续实验建立基础。</p>
+          <dl class="node-facts">
+            <div class="node-fact"><dt>用时</dt><dd>约 45 分钟</dd></div>
+            <div class="node-fact"><dt>完成度</dt><dd class="completion-value">0%</dd><div class="completion-track"><span></span></div></div>
+            <div class="node-fact"><dt>文件位置</dt><dd class="file-location">src/main/java/com/example/demo/DemoApplication.java</dd></div>
+            <div class="node-fact"><dt>名称</dt><dd>Spring Boot 项目初始化</dd></div>
+          </dl>
+        </div>
+        <div class="inspector-footer"><button id="startNodeButton" class="start-node-button" type="button" aria-label="开始攻克节点"><span class="start-node-icon" aria-hidden="true"></span><span>开始攻克节点</span></button></div>
+      </aside>
+    </main>
+
+    <main id="editorView" class="editor-view" aria-label="节点攻克编辑器">
+      <header class="editor-topbar">
+        <button id="backToCanvas" class="back-button" type="button" aria-label="返回画布">‹</button>
+        <div class="workspace-name"><span class="workspace-dot"></span><span>springboot-learning</span></div>
+        <div class="editor-file-path">/01-project-init</div>
+        <div class="editor-top-status"><span class="status-dot"></span> 本地工作区</div>
+      </header>
+      <section class="editor-workspace">
+        <aside class="task-panel editor-panel">
+          <div class="panel-heading"><span>任务</span><span class="panel-count">3</span></div>
+          <div class="task-list"><button class="task-item is-active" type="button"><span class="task-check"></span><span>创建 Spring Boot 项目</span></button><button class="task-item" type="button"><span class="task-check"></span><span>配置项目依赖</span></button><button class="task-item" type="button"><span class="task-check"></span><span>运行第一个接口</span></button></div>
+          <div class="task-note"><span class="note-mark">i</span><span>完成左侧任务后，再进入下一个节点。</span></div>
+        </aside>
+        <section class="code-panel editor-panel">
+          <div class="code-tabs"><span class="code-tab is-active">DemoApplication.java</span><span class="code-tab">pom.xml</span></div>
+          <div class="code-editor"><div class="line-numbers" aria-hidden="true">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12</div><textarea id="codeEditor" spellcheck="false" aria-label="代码编辑器">package com.example.demo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class DemoApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(DemoApplication.class, args);
+    }
+}</textarea></div>
+        </section>
+        <aside class="chat-panel editor-panel">
+          <div class="panel-heading"><span>智能体</span><div class="agent-heading-actions"><button id="softenButton" class="soften-top-button" type="button" aria-label="服软：让智能体直接给下一步">服软</button><span class="agent-online"><span class="status-dot"></span>在线</span></div></div>
+          <div id="chatMessages" class="chat-messages"><div class="chat-message agent-message"><div class="message-label">导师</div><p>先从启动类开始。你可以检查 <code>DemoApplication.java</code>，确认它包含 <code>@SpringBootApplication</code>。</p></div></div>
+          <div class="chat-composer"><div class="chat-input-row"><textarea id="chatInput" rows="2" placeholder="告诉智能体你遇到的问题…" aria-label="发送给智能体"></textarea><button id="sendButton" class="send-button" type="button" aria-label="发送消息">↑</button></div></div>
+        </aside>
+      </section>
+      <section class="terminal-panel editor-panel" aria-label="终端"><div class="terminal-heading"><span>终端</span><span class="terminal-shell">zsh</span></div><div id="terminalOutput" class="terminal-output"><div><span class="terminal-prompt">$</span> ./mvnw spring-boot:run</div><div class="terminal-muted">等待执行…</div></div><div class="terminal-input-row"><span class="terminal-prompt">$</span><input id="terminalInput" type="text" placeholder="输入终端命令…" aria-label="终端命令" /></div></section>
+    </main>
+    <script src="app.js?v=18"></script>
+  </body>
+</html>

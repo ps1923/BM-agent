@@ -1,0 +1,40 @@
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: bm-hs-api
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/BM-sql?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USER:bm_app}
+    password: ${DB_PASSWORD:}
+  ai:
+    mcp:
+      client:
+        enabled: true
+        name: bm-hs-api
+        version: 0.1.0
+        type: SYNC
+        request-timeout: 120s
+        toolcallback:
+          enabled: false
+        streamable-http:
+          connections:
+            requirements:
+              url: ${REQUIREMENTS_HARNESS_URL:http://127.0.0.1:8101}
+              endpoint: /mcp
+            planner:
+              url: ${PLANNER_HARNESS_URL:http://127.0.0.1:8102}
+              endpoint: /mcp
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+bm-hs:
+  demo-user-id: ${DEMO_USER_ID:1}
+  allow-demo-user-header: ${ALLOW_DEMO_USER_HEADER:false}
+  allowed-origin: ${ALLOWED_ORIGIN:http://127.0.0.1:8000}
