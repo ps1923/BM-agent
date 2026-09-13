@@ -23,6 +23,11 @@ const folderManageList = document.querySelector('#folderManageList');
 const newFolderName = document.querySelector('#newFolderName');
 const addFolderButton = document.querySelector('#addFolderButton');
 const folderGrid = document.querySelector('.folder-grid');
+const folderNavigation = document.querySelector('#folderNavigation');
+const libraryMainColumn = document.querySelector('#libraryMainColumn');
+const libraryOverviewButton = document.querySelector('#libraryOverviewButton');
+const sidebarExperimentCount = document.querySelector('#sidebarExperimentCount');
+const folderSectionCount = document.querySelector('#folderSectionCount');
 const createStepButton = document.querySelector('#createStepButton');
 const createStepLabel = document.querySelector('#createStepLabel');
 const createLoading = document.querySelector('#createLoading');
@@ -30,8 +35,7 @@ const createLoadingText = document.querySelector('#createLoadingText');
 const learningGoal = document.querySelector('#learningGoal');
 const directionTitle = document.querySelector('#directionTitle');
 const directionDetail = document.querySelector('#directionDetail');
-const durationDays = document.querySelector('#durationDays');
-const durationHours = document.querySelector('#durationHours');
+const durationHoursInput = document.querySelector('#durationHoursInput');
 const durationPreview = document.querySelector('#durationPreview');
 const createPlan = document.querySelector('#createPlan');
 const planDirection = document.querySelector('#planDirection');
@@ -39,9 +43,12 @@ const planDuration = document.querySelector('#planDuration');
 const planDifficulty = document.querySelector('#planDifficulty');
 const planPurpose = document.querySelector('#planPurpose');
 const planNodes = document.querySelector('#planNodes');
+const creationConversation = document.querySelector('#creationConversation');
+const directionReview = document.querySelector('#directionReview');
+const directionTitleReview = document.querySelector('#directionTitleReview');
+const directionDetailReview = document.querySelector('#directionDetailReview');
 const recentExperiments = document.querySelector('#recentExperiments');
 const springBootExperimentList = document.querySelector('.folder-card-wide .experiment-list');
-const creationHarnessMessage = document.querySelector('#creationHarnessMessage');
 const defaultLearningGoalPlaceholder = learningGoal.placeholder;
 const API_BASE_URL = window.BM_API_BASE_URL || 'http://127.0.0.1:8080/api';
 
@@ -66,6 +73,8 @@ let createDialogEpoch = 0;
 let activeTreeNodes = [];
 let selectedTreeNode = null;
 let treeEdgeLayer = null;
+let explicitFolderSelection = '';
+let folderSelectionTimer = 0;
 
 const experimentData = {
   'spring-init': { name: 'Spring Boot 项目初始化', description: '创建第一个 Spring Boot 项目，理解应用入口、依赖管理与启动流程。' },
@@ -242,14 +251,107 @@ function updateLibraryCount() {
   const folderCards = [...document.querySelectorAll('.folder-card')];
   const totalExperiments = document.querySelectorAll('.folder-card .experiment-link').length;
   const libraryCount = document.querySelector('.library-count');
-  if (libraryCount) libraryCount.textContent = `${folderCards.length} 个文件夹 · ${totalExperiments} 个实验`;
+  if (libraryCount) libraryCount.textContent = `${folderCards.length} 个分组 · ${totalExperiments} 个实验`;
+  if (sidebarExperimentCount) sidebarExperimentCount.textContent = totalExperiments;
+  if (folderSectionCount) folderSectionCount.textContent = `${folderCards.length} 个分组`;
   folderCards.forEach((folder) => {
     const count = folder.querySelectorAll('.experiment-link').length;
     const countLabel = folder.querySelector('.folder-count');
     if (countLabel) countLabel.textContent = count ? `${count} 个实验` : '0';
   });
   experimentCount = totalExperiments;
+  renderFolderNavigation();
+  updateActiveFolderFromScroll();
 }
+
+function renderFolderNavigation() {
+  if (!folderNavigation) return;
+  const activeFolderId = folderNavigation.querySelector('.folder-nav-item.is-active')?.dataset.folderId || '';
+  folderNavigation.replaceChildren();
+  const folders = [...document.querySelectorAll('.folder-card')];
+  if (explicitFolderSelection && !folders.some((folder) => folder.dataset.folderId === explicitFolderSelection)) {
+    explicitFolderSelection = '';
+    window.clearTimeout(folderSelectionTimer);
+  }
+  folders.forEach((folder) => {
+    const button = document.createElement('button');
+    button.className = `folder-nav-item${folder.dataset.folderId === activeFolderId ? ' is-active' : ''}`;
+    button.type = 'button';
+    button.dataset.folderId = folder.dataset.folderId;
+    if (folder.dataset.folderId === activeFolderId) button.setAttribute('aria-current', 'page');
+    button.innerHTML = '<span class="folder-nav-icon" aria-hidden="true">▰</span><span class="folder-nav-name"></span><span class="folder-nav-count"></span>';
+    button.querySelector('.folder-nav-name').textContent = folder.dataset.folderName;
+    button.querySelector('.folder-nav-count').textContent = folder.querySelectorAll('.experiment-link').length;
+    folderNavigation.append(button);
+  });
+  if (activeFolderId && !folders.some((folder) => folder.dataset.folderId === activeFolderId)) {
+    setActiveLibraryNavigation();
+  }
+}
+
+function setActiveLibraryNavigation(folderId = '') {
+  libraryOverviewButton.classList.toggle('is-active', !folderId);
+  if (folderId) libraryOverviewButton.removeAttribute('aria-current');
+  else libraryOverviewButton.setAttribute('aria-current', 'page');
+  folderNavigation.querySelectorAll('.folder-nav-item').forEach((button) => {
+    const isActive = button.dataset.folderId === folderId;
+    button.classList.toggle('is-active', isActive);
+    if (isActive) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+}
+
+function updateActiveFolderFromScroll() {
+  if (explicitFolderSelection) {
+    setActiveLibraryNavigation(explicitFolderSelection);
+    window.clearTimeout(folderSelectionTimer);
+    folderSelectionTimer = window.setTimeout(() => { explicitFolderSelection = ''; }, 250);
+    return;
+  }
+
+  const columnRect = libraryMainColumn.getBoundingClientRect();
+  const stickyTop = document.querySelector('.library-topbar').getBoundingClientRect().bottom;
+  const folders = [...document.querySelectorAll('.folder-card')];
+  if (!folders.length) {
+    setActiveLibraryNavigation();
+    return;
+  }
+  const firstFolderTop = folders[0].getBoundingClientRect().top - columnRect.top + libraryMainColumn.scrollTop;
+  if (libraryMainColumn.scrollTop < firstFolderTop - 80) {
+    setActiveLibraryNavigation();
+    return;
+  }
+  const visibleFolders = folders
+    .map((folder) => ({ folder, rect: folder.getBoundingClientRect() }))
+    .map(({ folder, rect }) => ({
+      folder,
+      visibleHeight: Math.max(0, Math.min(rect.bottom, columnRect.bottom) - Math.max(rect.top, stickyTop)),
+    }))
+    .filter(({ visibleHeight }) => visibleHeight > 0)
+    .sort((left, right) => right.visibleHeight - left.visibleHeight);
+
+  setActiveLibraryNavigation(visibleFolders[0]?.folder.dataset.folderId || '');
+}
+
+libraryOverviewButton.addEventListener('click', () => {
+  setActiveLibraryNavigation();
+  libraryMainColumn.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+folderNavigation.addEventListener('click', (event) => {
+  const button = event.target.closest('.folder-nav-item');
+  if (!button) return;
+  explicitFolderSelection = button.dataset.folderId;
+  window.clearTimeout(folderSelectionTimer);
+  folderSelectionTimer = window.setTimeout(() => { explicitFolderSelection = ''; }, 700);
+  setActiveLibraryNavigation(button.dataset.folderId);
+  const folder = [...document.querySelectorAll('.folder-card')]
+    .find((item) => item.dataset.folderId === button.dataset.folderId);
+  folder?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+libraryMainColumn.addEventListener('scroll', updateActiveFolderFromScroll, { passive: true });
+window.addEventListener('resize', updateActiveFolderFromScroll);
 
 function deleteExperiment(experimentId) {
   const data = experimentData[experimentId];
@@ -296,6 +398,8 @@ function renderFolderManager() {
       folder.dataset.folderName = cleanName;
       folder.querySelector('.folder-name h2').textContent = cleanName;
       name.textContent = cleanName;
+      renderFolderNavigation();
+      updateLibraryCount();
     });
 
     const deleteButton = document.createElement('button');
@@ -323,6 +427,7 @@ function createFolderCard(name) {
   const folder = document.createElement('section');
   folder.className = 'folder-card';
   folder.dataset.folderId = `folder-${Date.now()}`;
+  folder.id = folder.dataset.folderId;
   folder.dataset.folderName = name;
   folder.innerHTML = '<div class="folder-header"><div class="folder-name"><span class="folder-icon">▰</span><div><h2></h2><p>自定义实验分组</p></div></div><span class="folder-count">0</span></div><div class="experiment-list"><div class="empty-folder"><span>＋</span><p>还没有实验</p></div></div>';
   folder.querySelector('.folder-name h2').textContent = name;
@@ -487,13 +592,18 @@ function createLibraryExperimentButton(id, name, sequence, meta, recent = false)
 }
 
 function updateDurationPreview() {
-  const days = Math.min(3650, Math.max(0, Number.parseInt(durationDays.value, 10) || 0));
-  const hours = Math.min(23, Math.max(0, Number.parseInt(durationHours.value, 10) || 0));
-  durationDays.value = days;
-  durationHours.value = hours;
-  durationTotalHours = days * 24 + hours;
+  const rawHours = durationHoursInput.value.trim();
+  const numericHours = Number(rawHours);
+  const parsedHours = Number.isFinite(numericHours) ? Math.trunc(numericHours) : 0;
+  durationTotalHours = rawHours ? Math.min(87600, Math.max(0, Number.isNaN(parsedHours) ? 0 : parsedHours)) : 0;
+  if (rawHours && (Number(rawHours) !== parsedHours || parsedHours !== durationTotalHours)) durationHoursInput.value = durationTotalHours;
+  const days = Math.floor(durationTotalHours / 24);
+  const hours = durationTotalHours % 24;
   selectedDuration = `${days} 天 ${hours} 小时`;
-  durationPreview.textContent = `当前周期：${selectedDuration} · 共 ${durationTotalHours} 小时`;
+  durationPreview.classList.toggle('is-invalid', durationTotalHours <= 0);
+  durationPreview.textContent = durationTotalHours > 0
+    ? `当前周期：${selectedDuration} · 共 ${durationTotalHours} 小时`
+    : '请输入大于 0 的整数小时数。';
 }
 
 async function apiRequest(path, options = {}) {
@@ -524,11 +634,26 @@ function difficultyCode(label) {
   return { 入门: 'BEGINNER', 简单: 'EASY', 普通: 'NORMAL', 困难: 'HARD', 挑战: 'CHALLENGE' }[label];
 }
 
+function appendCreationMessage(role, text) {
+  const message = document.createElement('div');
+  message.className = `direction-message ${role === 'user' ? 'is-user' : role === 'error' ? 'is-error' : 'is-agent'}`;
+  const avatar = document.createElement('span');
+  avatar.className = 'direction-message-avatar';
+  avatar.textContent = role === 'user' ? '我' : role === 'error' ? '!' : 'H';
+  const content = document.createElement('div');
+  content.className = 'direction-message-content';
+  const label = document.createElement('strong');
+  label.textContent = role === 'user' ? '你' : role === 'error' ? '连接提示' : 'Harness';
+  const body = document.createElement('p');
+  body.textContent = text;
+  content.append(label, body);
+  message.append(avatar, content);
+  creationConversation.append(message);
+  creationConversation.scrollTop = creationConversation.scrollHeight;
+}
+
 function showCreationMessage(text, isError = false) {
-  creationHarnessMessage.replaceChildren();
-  const name = document.createElement('strong');
-  name.textContent = isError ? '连接提示' : 'Harness';
-  creationHarnessMessage.append(name, document.createTextNode(` ${text}`));
+  appendCreationMessage(isError ? 'error' : 'assistant', text);
 }
 
 function setCreateLoading(active, text = 'Harness 正在处理中…') {
@@ -587,15 +712,21 @@ async function openCreateDialog() {
   pendingPlan = null;
   materializationKey = null;
   createPlan.classList.remove('is-active');
-  durationDays.value = 1;
-  durationHours.value = 0;
+  durationHoursInput.value = 24;
+  learningGoal.value = '';
+  selectedDifficulty = '入门';
+  document.querySelectorAll('[data-choice-group="difficulty"]').forEach((choice) => {
+    choice.classList.toggle('is-selected', choice.dataset.value === selectedDifficulty);
+  });
+  directionReview.hidden = true;
+  creationConversation.replaceChildren();
+  appendCreationMessage('assistant', '告诉我你想学习什么，或想完成什么成果。我会先帮你把方向说清楚；如果关键信息不足，只会一次追问一个问题。');
   updateDurationPreview();
   directionTitle.textContent = '等待第一段对话';
   directionDetail.textContent = '完成方向描述后，这里会显示 Harness 记录的事实。';
   updateCreateStep();
   createDialog.classList.add('is-open');
   learningGoal.placeholder = defaultLearningGoalPlaceholder;
-  showCreationMessage('正在建立独立的需求确认会话…');
   createBusy = true;
   updateCreateStep();
   setCreateLoading(true, '正在建立独立的 Harness 会话…');
@@ -603,7 +734,6 @@ async function openCreateDialog() {
     const session = await apiRequest('/experiment-creation/sessions', { method: 'POST', body: '{}' });
     if (epoch !== createDialogEpoch || !createDialog.classList.contains('is-open')) return;
     creationSessionId = session.sessionId;
-    showCreationMessage('请描述实验方向。我只会确认需求，不会在这一阶段生成节点。');
     learningGoal.focus();
   } catch (error) {
     showCreationMessage(error.message, true);
@@ -628,17 +758,37 @@ function updateCreateStep() {
   createStepLabel.textContent = createPlanReady ? '方案 / 确认' : `0${createStep} / 03`;
   document.querySelectorAll('.create-step').forEach((step) => step.classList.toggle('is-active', !createPlanReady && Number(step.dataset.step) === createStep));
   document.querySelectorAll('.step-progress span').forEach((bar, index) => bar.classList.toggle('is-active', createPlanReady || index < createStep));
-  const label = createPlanReady ? '确认并创建实验' : createStep === 1 && directionReady ? '确认实验方向' : '下一步';
+  document.querySelectorAll('.create-dialog-step').forEach((step) => {
+    const stage = Number(step.dataset.createStage);
+    const isCurrent = !createPlanReady && stage === createStep;
+    const isComplete = createPlanReady || stage < createStep;
+    step.classList.toggle('is-current', isCurrent);
+    step.classList.toggle('is-complete', isComplete);
+    step.setAttribute('aria-label', `${stage}. ${step.querySelector('strong').textContent}，${isComplete ? '已完成' : isCurrent ? '进行中' : '未开始'}`);
+    if (isCurrent) step.setAttribute('aria-current', 'step');
+    else step.removeAttribute('aria-current');
+  });
+  const hasDirectionCorrection = learningGoal.value.trim().length > 0;
+  const label = createPlanReady
+    ? '确认并创建实验'
+    : createStep === 1
+      ? directionReady && !hasDirectionCorrection ? '确认方向并继续' : directionReady ? '补充方向' : '发送给 Harness'
+      : createStep === 2 ? '保存周期并继续' : '生成实验方案';
   createStepButton.innerHTML = `${label} <span>→</span>`;
   createStepButton.disabled = createBusy;
   learningGoal.disabled = createBusy;
-  durationDays.disabled = createBusy;
-  durationHours.disabled = createBusy;
+  durationHoursInput.disabled = createBusy;
   document.querySelectorAll('.choice-item').forEach((choice) => { choice.disabled = createBusy; });
 }
 
-durationDays.addEventListener('input', updateDurationPreview);
-durationHours.addEventListener('input', updateDurationPreview);
+learningGoal.addEventListener('input', updateCreateStep);
+learningGoal.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing || createBusy) return;
+  event.preventDefault();
+  createStepButton.click();
+});
+
+durationHoursInput.addEventListener('input', updateDurationPreview);
 
 document.querySelectorAll('.choice-item').forEach((choice) => {
   choice.addEventListener('click', () => {
@@ -681,7 +831,7 @@ createStepButton.addEventListener('click', async () => {
       return;
     }
 
-    if (createStep === 1 && !directionReady) {
+    if (createStep === 1 && (!directionReady || learningGoal.value.trim())) {
       setCreateLoading(true, 'Harness 正在整理实验方向…');
       const message = learningGoal.value.trim();
       if (!message) {
@@ -691,12 +841,18 @@ createStepButton.addEventListener('click', async () => {
       const envelope = await apiRequest(`/experiment-creation/sessions/${creationSessionId}/messages`, {
         method: 'POST', body: JSON.stringify({ message }),
       });
+      appendCreationMessage('user', message);
       showCreationMessage(envelope.assistantMessage);
       learningGoal.value = '';
       directionTitle.textContent = envelope.intent.observable_outcome || envelope.intent.raw_request;
       directionDetail.textContent = envelope.intent.target_artifact || envelope.assistantMessage;
       directionReady = envelope.status === 'ready_for_confirmation';
-      if (!directionReady) learningGoal.placeholder = envelope.nextQuestion?.text || '请继续补充…';
+      directionTitleReview.textContent = directionTitle.textContent;
+      directionDetailReview.textContent = directionDetail.textContent;
+      directionReview.hidden = !directionReady;
+      learningGoal.placeholder = directionReady
+        ? '如果想修正或补充方向，可以继续告诉 Harness…'
+        : envelope.nextQuestion?.text || '请继续补充…';
       return;
     }
 
@@ -712,7 +868,7 @@ createStepButton.addEventListener('click', async () => {
       setCreateLoading(true, '正在保存学习周期…');
       updateDurationPreview();
       if (durationTotalHours <= 0) {
-        durationDays.focus();
+        durationHoursInput.focus();
         return;
       }
       createStep = 3;
@@ -724,8 +880,8 @@ createStepButton.addEventListener('click', async () => {
     await apiRequest(`/experiment-creation/sessions/${creationSessionId}/configuration`, {
       method: 'PATCH',
       body: JSON.stringify({
-        durationDays: Number.parseInt(durationDays.value, 10) || 0,
-        durationHours: Number.parseInt(durationHours.value, 10) || 0,
+        durationDays: Math.floor(durationTotalHours / 24),
+        durationHours: durationTotalHours % 24,
         difficulty: difficultyCode(selectedDifficulty),
       }),
     });
