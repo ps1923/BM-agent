@@ -133,7 +133,7 @@ function selectTreeNode(element) {
       });
       taskList.append(button);
     });
-    taskCount.textContent = selectedTreeNode.tasks.length;
+    taskCount.textContent = `${selectedTreeNode.tasks.length} 项`;
   }
   inspector.classList.add('is-open');
 }

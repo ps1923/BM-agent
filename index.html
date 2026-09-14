@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spring Boot 学习工作台</title>
-    <link rel="stylesheet" href="styles.css?v=23" />
+    <link rel="stylesheet" href="styles.css?v=24" />
   </head>
   <body>
     <main id="libraryView" class="library-view" aria-label="实验库与创建实验">
@@ -145,18 +145,17 @@
     <main id="editorView" class="editor-view" aria-label="节点攻克编辑器">
       <header class="editor-topbar">
         <button id="backToCanvas" class="back-button" type="button" aria-label="返回画布">‹</button>
-        <div class="workspace-name"><span class="workspace-dot"></span><span>springboot-learning</span></div>
-        <div class="editor-file-path">/01-project-init</div>
-        <div class="editor-top-status"><span class="status-dot"></span> 本地工作区</div>
+        <div class="editor-breadcrumb"><span class="workspace-name"><span class="workspace-dot"></span><span>springboot-learning</span></span><span class="breadcrumb-divider">/</span><span class="editor-file-path">01 项目初始化</span><span class="editor-node-tag">NODE 01</span></div>
+        <div class="editor-top-status"><span class="status-dot"></span><span>本地工作区</span></div>
       </header>
       <section class="editor-workspace">
         <aside class="task-panel editor-panel">
-          <div class="panel-heading"><span>任务</span><span class="panel-count">3</span></div>
+          <div class="panel-heading"><span>本节点任务</span><span class="panel-count">3 项</span></div>
           <div class="task-list"><button class="task-item is-active" type="button"><span class="task-check"></span><span>创建 Spring Boot 项目</span></button><button class="task-item" type="button"><span class="task-check"></span><span>配置项目依赖</span></button><button class="task-item" type="button"><span class="task-check"></span><span>运行第一个接口</span></button></div>
           <div class="task-note"><span class="note-mark">i</span><span>完成左侧任务后，再进入下一个节点。</span></div>
         </aside>
         <section class="code-panel editor-panel">
-          <div class="code-tabs"><span class="code-tab is-active">DemoApplication.java</span><span class="code-tab">pom.xml</span></div>
+          <div class="code-tabs"><span class="code-tab is-active"><span class="file-type-icon java-icon">J</span>DemoApplication.java</span><span class="code-tab"><span class="file-type-icon xml-icon">&lt;/&gt;</span>pom.xml</span><span class="code-location">src / main / java / com / example / demo</span></div>
           <div class="code-editor"><div class="line-numbers" aria-hidden="true">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12</div><textarea id="codeEditor" spellcheck="false" aria-label="代码编辑器">package com.example.demo;
 
 import org.springframework.boot.SpringApplication;
@@ -170,13 +169,13 @@ public class DemoApplication {
 }</textarea></div>
         </section>
         <aside class="chat-panel editor-panel">
-          <div class="panel-heading"><span>智能体</span><div class="agent-heading-actions"><button id="softenButton" class="soften-top-button" type="button" aria-label="服软：让智能体直接给下一步">服软</button><span class="agent-online"><span class="status-dot"></span>在线</span></div></div>
+          <div class="panel-heading agent-panel-heading"><div><span class="agent-title">智能体</span><span class="agent-subtitle">学习搭档</span></div><div class="agent-heading-actions"><button id="softenButton" class="soften-top-button" type="button" aria-label="服软：让智能体直接给下一步">服软</button><span class="agent-online"><span class="status-dot"></span>在线</span></div></div>
           <div id="chatMessages" class="chat-messages"><div class="chat-message agent-message"><div class="message-label">导师</div><p>先从启动类开始。你可以检查 <code>DemoApplication.java</code>，确认它包含 <code>@SpringBootApplication</code>。</p></div></div>
           <div class="chat-composer"><div class="chat-input-row"><textarea id="chatInput" rows="2" placeholder="告诉智能体你遇到的问题…" aria-label="发送给智能体"></textarea><button id="sendButton" class="send-button" type="button" aria-label="发送消息">↑</button></div></div>
         </aside>
       </section>
-      <section class="terminal-panel editor-panel" aria-label="终端"><div class="terminal-heading"><span>终端</span><span class="terminal-shell">zsh</span></div><div id="terminalOutput" class="terminal-output"><div><span class="terminal-prompt">$</span> ./mvnw spring-boot:run</div><div class="terminal-muted">等待执行…</div></div><div class="terminal-input-row"><span class="terminal-prompt">$</span><input id="terminalInput" type="text" placeholder="输入终端命令…" aria-label="终端命令" /></div></section>
+      <section class="terminal-panel editor-panel" aria-label="终端"><div class="terminal-heading"><span class="terminal-title"><span class="terminal-indicator"></span>终端</span><span class="terminal-shell">zsh <span class="terminal-chevron">⌄</span></span></div><div id="terminalOutput" class="terminal-output"><div><span class="terminal-prompt">$</span> ./mvnw spring-boot:run</div><div class="terminal-muted">等待执行…</div></div><div class="terminal-input-row"><span class="terminal-prompt">$</span><input id="terminalInput" type="text" placeholder="输入终端命令…" aria-label="终端命令" /></div></section>
     </main>
-    <script src="app.js?v=23"></script>
+    <script src="app.js?v=24"></script>
   </body>
 </html>
