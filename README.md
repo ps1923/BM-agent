@@ -18,6 +18,18 @@
 - 实验条目支持确认删除；「管理分组」支持新建、重命名，以及删除空分组
 - 「服软」、编辑器聊天和终端输入仍为前端演示，暂不连接后端
 
+## 前端角色与课程演示
+
+当前浏览器原型已包含登录、课程和实验发布入口，FE-01/02/03 使用 `localStorage` 模拟状态，便于后端接口完成前先验收页面流程：
+
+- 学生：`student@demo.com`，密码填写任意非空内容
+- 教师：`teacher@demo.com`，密码填写任意非空内容
+- 教师可创建课程并获得邀请码；学生可使用邀请码加入课程
+- 教师选择实验草稿发布到课程后，学生端会同步显示「已发布」实验
+- 退出会清理当前浏览器登录状态；清理演示数据可在浏览器控制台执行 `localStorage.clear()`
+
+前端状态适配集中在 `app.js` 的 localStorage 区域。接入真实后端时，替换登录、课程查询/创建、加入课程和发布动作即可，页面验收路径不需要改变。
+
 ## 创建链路
 
 ```text
@@ -53,7 +65,7 @@ mysql --user=root --password --execute="SOURCE database/migrations/20260911_add_
 mysql --user=root --password --execute="SOURCE database/verify.sql"
 ```
 
-验证结果中，数据库字符集、19 张必需表、创建流程关键字段和外键应显示 `OK`；`non_utf8mb4_table` 与 `unexpected_source_content_column` 两个结果集应为空。
+验证结果中，数据库字符集、认证与创建流程所需表、关键字段和外键应显示 `OK`；`non_utf8mb4_table` 与 `unexpected_source_content_column` 两个结果集应为空。
 
 如果 MySQL 运行在服务器 Docker 容器中，应把脚本通过标准输入传给容器内客户端，并从容器现有的安全配置中取得管理员凭据。不要为了运行脚本把管理员密码写进命令行，也不要重复安装一个会与现有 `3306` 端口冲突的 MySQL。部署完成后应重新执行验证，并用新的、不含密码的结果替换旧版部署记录。
 
@@ -90,7 +102,7 @@ Compose 只把 Java API 绑定到 `127.0.0.1`，两个 Harness 只在内部网�
 
 ## API 与验证
 
-创建流程依次调用 `/api/experiment-creation` 下的 `POST /sessions`、方向消息、方向确认、配置、计划生成和最终物化接口。最终物化请求必须提供 `Idempotency-Key`。本地默认固定使用演示用户 `1`，并拒绝客户端传入 `X-User-Id`；只有显式设置 `ALLOW_DEMO_USER_HEADER=true` 才能用该请求头测试多用户隔离，它不能代替生产鉴权。
+创建流程依次调用 `/api/experiment-creation` 下的 `POST /sessions`、方向消息、方向确认、配置、计划生成和最终物化接口。最终物化请求必须提供 `Idempotency-Key`。这些业务接口要求先调用 `/api/auth/login` 建立 HttpOnly `BM_SESSION` Cookie；服务端从会话解析用户身份，不再接受 `X-User-Id` 或固定演示用户。退出调用 `/api/auth/logout`，当前用户可通过 `/api/auth/me` 查询。
 
 ```powershell
 mvn -f backend/pom.xml test
@@ -99,3 +111,13 @@ mvn -f backend/pom.xml test
 node --check app.js
 docker compose config --quiet
 ```
+
+## 前端课程发布演示
+
+当前原生前端包含一套不依赖后端的登录、课程和实验发布演示流程。启动静态服务器后访问 `http://127.0.0.1:8000/`：
+
+- 学生：`student@demo.com`，密码任意非空值；使用教师展示的 `SPRING01` 或新课程邀请码加入课程。
+- 教师：`teacher@demo.com`，密码任意非空值；可创建课程、查看邀请码，并把实验库中的草稿发布到课程。
+- 退出会清除当前登录会话；课程成员关系和发布记录仍保存在浏览器 localStorage 中，便于切换学生/教师身份验证同步结果。
+
+教师发布后退出，使用学生账号加入相同课程，即可在学生工作台看到“已发布”实验并打开原有画布与编辑器。前端目前只把 `currentUser`、`courses`、`publishedExperiments` 和实验草稿存入 localStorage；后续接入后端时，替换 `app.js` 中的本地状态适配函数与登录/课程/发布动作即可，不改变页面验收路径或现有实验库、画布、编辑器交互。

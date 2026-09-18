@@ -4,9 +4,47 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spring Boot 学习工作台</title>
-    <link rel="stylesheet" href="styles.css?v=24" />
+    <link rel="stylesheet" href="styles.css?v=25" />
   </head>
   <body>
+    <main id="loginView" class="route-view auth-screen" aria-labelledby="loginTitle">
+      <section class="auth-card">
+        <div class="auth-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>LEARNING WORKSPACE</small></div></div>
+        <div class="auth-copy"><p class="auth-eyebrow">DEMO ACCESS</p><h1 id="loginTitle">进入你的学习工作台</h1><p>选择身份后开始管理课程，或继续完成实验。</p></div>
+        <form id="loginForm" class="auth-form" novalidate>
+          <label for="loginRole">身份<select id="loginRole" name="role"><option value="student">学生</option><option value="teacher">教师</option></select></label>
+          <label for="loginEmail">邮箱<input id="loginEmail" name="email" type="email" autocomplete="username" placeholder="student@demo.com" /></label>
+          <label for="loginPassword">密码<input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="任意非空密码" /></label>
+          <p class="auth-demo-hint">演示账号：student@demo.com / teacher@demo.com，密码可任意填写。</p>
+          <p id="loginError" class="form-message is-error" role="alert" aria-live="polite"></p>
+          <button class="primary-action auth-submit" type="submit">登录工作台 <span>→</span></button>
+        </form>
+      </section>
+    </main>
+
+    <main id="studentView" class="route-view dashboard-view" aria-labelledby="studentTitle">
+      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>学生工作台</small></div></div><div class="dashboard-user"><span id="studentIdentity"></span><button id="studentLogoutButton" class="text-action" type="button">退出</button></div></header>
+      <section class="dashboard-content">
+        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">STUDENT SPACE</p><h1 id="studentTitle">我的课程</h1><p>加入课程后查看教师发布的学习实验。</p></div><button id="studentLibraryButton" class="secondary-action" type="button">打开实验库</button></div>
+        <section class="join-course-card" aria-labelledby="joinCourseTitle"><div><p class="dashboard-eyebrow">JOIN A COURSE</p><h2 id="joinCourseTitle">使用邀请码加入课程</h2><p>向教师获取 8 位邀请码，例如 <code>SPRING01</code>。</p></div><form id="joinCourseForm" class="inline-form" novalidate><label class="visually-hidden" for="joinCode">课程邀请码</label><input id="joinCode" type="text" maxlength="16" autocomplete="off" placeholder="输入邀请码" /><button class="primary-action" type="submit">加入课程</button></form></section>
+        <p id="studentMessage" class="form-message" role="status" aria-live="polite"></p>
+        <section aria-labelledby="studentCoursesTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">ENROLLED COURSES</p><h2 id="studentCoursesTitle">已加入课程</h2></div><span id="studentCourseCount" class="section-count"></span></div><div id="studentCourses" class="course-grid"></div></section>
+      </section>
+    </main>
+
+    <main id="teacherView" class="route-view dashboard-view" aria-labelledby="teacherTitle">
+      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>教师工作台</small></div></div><div class="dashboard-user"><span id="teacherIdentity"></span><button id="teacherLogoutButton" class="text-action" type="button">退出</button></div></header>
+      <section class="dashboard-content">
+        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">TEACHER SPACE</p><h1 id="teacherTitle">课程与实验发布</h1><p>创建课程，选择实验草稿并发布给学生。</p></div><button id="teacherLibraryButton" class="secondary-action" type="button">打开实验库</button></div>
+        <section class="teacher-create-card" aria-labelledby="createCourseTitle"><div><p class="dashboard-eyebrow">NEW COURSE</p><h2 id="createCourseTitle">创建课程</h2><p>创建后会生成一个可分享的邀请码。</p></div><form id="createCourseForm" class="inline-form" novalidate><label class="visually-hidden" for="courseName">课程名称</label><input id="courseName" type="text" maxlength="80" placeholder="例如：Spring Boot 进阶实践" /><button class="primary-action" type="submit">创建课程</button></form></section>
+        <p id="teacherMessage" class="form-message" role="status" aria-live="polite"></p>
+        <div class="teacher-dashboard-grid">
+          <section aria-labelledby="teacherCoursesTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">YOUR COURSES</p><h2 id="teacherCoursesTitle">我的课程</h2></div><span id="teacherCourseCount" class="section-count"></span></div><div id="teacherCourses" class="course-grid course-grid-compact"></div></section>
+          <section class="publish-card" aria-labelledby="publishTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">PUBLISH EXPERIMENT</p><h2 id="publishTitle">发布实验草稿</h2></div></div><p class="publish-description">选择课程和实验草稿，发布后学生即可在对应课程中看到。</p><form id="publishForm" class="publish-form" novalidate><label for="publishCourse">发布到课程<select id="publishCourse"><option value="">请选择课程</option></select></label><label for="publishExperiment">实验草稿<select id="publishExperiment"><option value="">请选择实验</option></select></label><button class="primary-action" type="submit">发布实验</button></form><div id="teacherDrafts" class="draft-list" aria-live="polite"></div></section>
+        </div>
+      </section>
+    </main>
+
     <main id="libraryView" class="library-view" aria-label="实验库与创建实验">
       <div class="library-shell">
         <aside class="library-sidebar" aria-label="实验导航">
@@ -34,7 +72,7 @@
             <div class="library-workflow" aria-label="当前：创建实验，之后进入画布和实验">
               <span class="library-workflow-step is-current"><i>01</i>创建实验</span><span class="library-workflow-line"></span><span class="library-workflow-step"><i>02</i>画布</span><span class="library-workflow-line"></span><span class="library-workflow-step"><i>03</i>实验</span>
             </div>
-            <div class="library-account"><span class="account-dot"></span>我的工作区</div>
+            <div class="library-account"><span class="account-dot"></span><span id="libraryAccountLabel">我的工作区</span><button id="libraryDashboardButton" class="topbar-action" type="button">课程工作台</button><button id="libraryLogoutButton" class="topbar-action is-quiet" type="button">退出</button></div>
           </header>
 
           <section class="library-content" id="libraryContent">
@@ -176,6 +214,6 @@ public class DemoApplication {
       </section>
       <section class="terminal-panel editor-panel" aria-label="终端"><div class="terminal-heading"><span class="terminal-title"><span class="terminal-indicator"></span>终端</span><span class="terminal-shell">zsh <span class="terminal-chevron">⌄</span></span></div><div id="terminalOutput" class="terminal-output"><div><span class="terminal-prompt">$</span> ./mvnw spring-boot:run</div><div class="terminal-muted">等待执行…</div></div><div class="terminal-input-row"><span class="terminal-prompt">$</span><input id="terminalInput" type="text" placeholder="输入终端命令…" aria-label="终端命令" /></div></section>
     </main>
-    <script src="app.js?v=24"></script>
+    <script src="app.js?v=25"></script>
   </body>
 </html>

@@ -13,6 +13,37 @@ const sendButton = document.querySelector('#sendButton');
 const softenButton = document.querySelector('#softenButton');
 const terminalOutput = document.querySelector('#terminalOutput');
 const terminalInput = document.querySelector('#terminalInput');
+const loginView = document.querySelector('#loginView');
+const loginForm = document.querySelector('#loginForm');
+const loginRole = document.querySelector('#loginRole');
+const loginEmail = document.querySelector('#loginEmail');
+const loginPassword = document.querySelector('#loginPassword');
+const loginError = document.querySelector('#loginError');
+const studentView = document.querySelector('#studentView');
+const teacherView = document.querySelector('#teacherView');
+const studentIdentity = document.querySelector('#studentIdentity');
+const teacherIdentity = document.querySelector('#teacherIdentity');
+const studentLogoutButton = document.querySelector('#studentLogoutButton');
+const teacherLogoutButton = document.querySelector('#teacherLogoutButton');
+const studentLibraryButton = document.querySelector('#studentLibraryButton');
+const teacherLibraryButton = document.querySelector('#teacherLibraryButton');
+const joinCourseForm = document.querySelector('#joinCourseForm');
+const joinCode = document.querySelector('#joinCode');
+const studentMessage = document.querySelector('#studentMessage');
+const studentCourses = document.querySelector('#studentCourses');
+const studentCourseCount = document.querySelector('#studentCourseCount');
+const createCourseForm = document.querySelector('#createCourseForm');
+const courseName = document.querySelector('#courseName');
+const teacherMessage = document.querySelector('#teacherMessage');
+const teacherCourses = document.querySelector('#teacherCourses');
+const teacherCourseCount = document.querySelector('#teacherCourseCount');
+const publishForm = document.querySelector('#publishForm');
+const publishCourse = document.querySelector('#publishCourse');
+const publishExperiment = document.querySelector('#publishExperiment');
+const teacherDrafts = document.querySelector('#teacherDrafts');
+const libraryDashboardButton = document.querySelector('#libraryDashboardButton');
+const libraryLogoutButton = document.querySelector('#libraryLogoutButton');
+const libraryAccountLabel = document.querySelector('#libraryAccountLabel');
 const createExperimentButton = document.querySelector('#createExperimentButton');
 const createDialog = document.querySelector('#createDialog');
 const closeCreateDialog = document.querySelector('#closeCreateDialog');
@@ -51,6 +82,25 @@ const recentExperiments = document.querySelector('#recentExperiments');
 const springBootExperimentList = document.querySelector('.folder-card-wide .experiment-list');
 const defaultLearningGoalPlaceholder = learningGoal.placeholder;
 const API_BASE_URL = window.BM_API_BASE_URL || 'http://127.0.0.1:8080/api';
+const STORAGE_KEYS = {
+  currentUser: 'bmhs.demo.currentUser',
+  courses: 'bmhs.demo.courses',
+  publishedExperiments: 'bmhs.demo.publishedExperiments',
+  experimentDrafts: 'bmhs.demo.experimentDrafts',
+  pendingRoute: 'bmhs.demo.pendingRoute',
+};
+const DEMO_USERS = {
+  student: { id: 'student-demo', email: 'student@demo.com', role: 'student', name: '演示学生' },
+  teacher: { id: 'teacher-demo', email: 'teacher@demo.com', role: 'teacher', name: '演示教师' },
+};
+const DEFAULT_COURSE = {
+  id: 'course-spring',
+  name: 'Spring Boot 基础班',
+  inviteCode: 'SPRING01',
+  teacherId: DEMO_USERS.teacher.id,
+  memberIds: [],
+  createdAt: '2026-09-18T00:00:00.000Z',
+};
 
 let bubbleX = window.innerWidth / 2;
 let bubbleY = window.innerHeight / 2;
@@ -81,6 +131,248 @@ const experimentData = {
   'spring-rest': { name: 'Spring Boot REST 接口', description: '从 Controller 到 JSON 响应，完成第一个可访问的 REST 接口。' },
   'spring-data': { name: '连接 MySQL 数据库', description: '配置数据源，理解实体、仓储与数据库之间的基本关系。' },
 };
+
+function readLocalJSON(key, fallback) {
+  try {
+    const value = window.localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function writeLocalJSON(key, value) {
+  window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function ensureDemoState() {
+  const storedCourses = readLocalJSON(STORAGE_KEYS.courses, null);
+  if (!Array.isArray(storedCourses)) writeLocalJSON(STORAGE_KEYS.courses, [DEFAULT_COURSE]);
+  if (!Array.isArray(readLocalJSON(STORAGE_KEYS.publishedExperiments, null))) writeLocalJSON(STORAGE_KEYS.publishedExperiments, []);
+  if (!Array.isArray(readLocalJSON(STORAGE_KEYS.experimentDrafts, null))) writeLocalJSON(STORAGE_KEYS.experimentDrafts, []);
+}
+
+function getCurrentUser() {
+  return readLocalJSON(STORAGE_KEYS.currentUser, null);
+}
+
+function getCourses() {
+  const courses = readLocalJSON(STORAGE_KEYS.courses, []);
+  return Array.isArray(courses) ? courses : [];
+}
+
+function getPublishedExperiments() {
+  const published = readLocalJSON(STORAGE_KEYS.publishedExperiments, []);
+  return Array.isArray(published) ? published : [];
+}
+
+function getExperimentDrafts() {
+  const persisted = readLocalJSON(STORAGE_KEYS.experimentDrafts, []);
+  const drafts = Object.entries(experimentData).map(([id, data]) => ({ id, name: data.name, description: data.description }));
+  if (Array.isArray(persisted)) {
+    persisted.forEach((draft) => {
+      if (draft?.id && !drafts.some((item) => item.id === draft.id)) drafts.push(draft);
+    });
+  }
+  return drafts;
+}
+
+function setMessage(element, text, isError = false) {
+  element.textContent = text;
+  element.classList.toggle('is-error', isError);
+}
+
+function makeInviteCode() {
+  const existing = new Set(getCourses().map((course) => course.inviteCode));
+  let code = '';
+  do {
+    code = `CLASS${Date.now().toString(36).slice(-4).toUpperCase()}`;
+  } while (existing.has(code));
+  return code;
+}
+
+function getCoursePublishedExperiments(courseId) {
+  return getPublishedExperiments().filter((item) => item.courseId === courseId);
+}
+
+function renderPublishedExperiment(item) {
+  const row = document.createElement('div');
+  row.className = 'published-item';
+  const title = document.createElement('strong');
+  title.textContent = item.name;
+  const actions = document.createElement('div');
+  actions.className = 'published-actions';
+  const status = document.createElement('span');
+  status.className = 'status-badge';
+  status.textContent = '已发布';
+  const openButton = document.createElement('button');
+  openButton.className = 'text-action open-published-experiment';
+  openButton.type = 'button';
+  openButton.dataset.experimentId = item.experimentId;
+  openButton.textContent = '打开';
+  actions.append(status, openButton);
+  row.append(title, actions);
+  return row;
+}
+
+function renderStudentDashboard() {
+  const user = getCurrentUser();
+  if (!user || user.role !== 'student') return;
+  studentIdentity.textContent = `${user.name} · ${user.email}`;
+  const enrolled = getCourses().filter((course) => (course.memberIds || []).includes(user.id));
+  studentCourseCount.textContent = `${enrolled.length} 门课程`;
+  studentCourses.replaceChildren();
+  if (!enrolled.length) {
+    const empty = document.createElement('p');
+    empty.className = 'course-empty';
+    empty.textContent = '还没有加入课程，请使用上方邀请码加入。';
+    studentCourses.append(empty);
+    return;
+  }
+  enrolled.forEach((course) => {
+    const card = document.createElement('article');
+    card.className = 'course-card';
+    const header = document.createElement('div');
+    header.className = 'course-card-header';
+    const copy = document.createElement('div');
+    const title = document.createElement('h3');
+    title.textContent = course.name;
+    const description = document.createElement('p');
+    description.textContent = '教师已发布的实验会显示在这里。';
+    copy.append(title, description);
+    const code = document.createElement('span');
+    code.className = 'invite-code';
+    code.textContent = course.inviteCode;
+    header.append(copy, code);
+    const publishedList = document.createElement('div');
+    publishedList.className = 'published-list';
+    const published = getCoursePublishedExperiments(course.id);
+    if (!published.length) {
+      const empty = document.createElement('p');
+      empty.className = 'course-card-footer';
+      empty.textContent = '等待教师发布实验';
+      publishedList.append(empty);
+    } else {
+      published.forEach((item) => publishedList.append(renderPublishedExperiment(item)));
+    }
+    card.append(header, publishedList);
+    studentCourses.append(card);
+  });
+}
+
+function renderTeacherDashboard() {
+  const user = getCurrentUser();
+  if (!user || user.role !== 'teacher') return;
+  teacherIdentity.textContent = `${user.name} · ${user.email}`;
+  const owned = getCourses().filter((course) => course.teacherId === user.id);
+  teacherCourseCount.textContent = `${owned.length} 门课程`;
+  teacherCourses.replaceChildren();
+  publishCourse.replaceChildren();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = owned.length ? '请选择课程' : '请先创建课程';
+  publishCourse.append(placeholder);
+  owned.forEach((course) => {
+    const option = document.createElement('option');
+    option.value = course.id;
+    option.textContent = course.name;
+    publishCourse.append(option);
+
+    const card = document.createElement('article');
+    card.className = 'course-card';
+    const header = document.createElement('div');
+    header.className = 'course-card-header';
+    const title = document.createElement('h3');
+    title.textContent = course.name;
+    const code = document.createElement('span');
+    code.className = 'invite-code';
+    code.textContent = course.inviteCode;
+    header.append(title, code);
+    const footer = document.createElement('div');
+    footer.className = 'course-card-footer';
+    footer.textContent = `${(course.memberIds || []).length} 名学生 · ${getCoursePublishedExperiments(course.id).length} 个已发布实验`;
+    card.append(header, footer);
+    teacherCourses.append(card);
+  });
+  if (!owned.length) {
+    const empty = document.createElement('p');
+    empty.className = 'course-empty';
+    empty.textContent = '还没有课程，请先创建一个课程。';
+    teacherCourses.append(empty);
+  }
+
+  const drafts = getExperimentDrafts();
+  publishExperiment.replaceChildren();
+  const draftPlaceholder = document.createElement('option');
+  draftPlaceholder.value = '';
+  draftPlaceholder.textContent = '请选择实验';
+  publishExperiment.append(draftPlaceholder);
+  teacherDrafts.replaceChildren();
+  drafts.forEach((draft) => {
+    const option = document.createElement('option');
+    option.value = draft.id;
+    option.textContent = draft.name;
+    publishExperiment.append(option);
+    const row = document.createElement('div');
+    row.className = 'draft-item';
+    const title = document.createElement('strong');
+    title.textContent = draft.name;
+    const publishedCount = getPublishedExperiments().filter((item) => item.experimentId === draft.id).length;
+    const status = document.createElement('span');
+    status.className = publishedCount ? 'status-badge' : 'section-count';
+    status.textContent = publishedCount ? `已发布 ${publishedCount} 次` : '草稿';
+    row.append(title, status);
+    teacherDrafts.append(row);
+  });
+}
+
+function hideProtectedViews() {
+  [libraryView, canvasView, editorView].forEach((view) => view.classList.add('auth-hidden'));
+  canvasView.classList.add('is-hidden');
+  editorView.classList.remove('is-visible');
+}
+
+function showRoute(route) {
+  const user = getCurrentUser();
+  loginView.classList.remove('is-visible');
+  studentView.classList.remove('is-visible');
+  teacherView.classList.remove('is-visible');
+  hideProtectedViews();
+  if (!user && route !== 'login') {
+    window.localStorage.setItem(STORAGE_KEYS.pendingRoute, route);
+    loginView.classList.add('is-visible');
+    return;
+  }
+  if (route === 'login') {
+    loginView.classList.add('is-visible');
+    return;
+  }
+  if (route === 'student' && user.role === 'student') {
+    studentView.classList.add('is-visible');
+    renderStudentDashboard();
+    return;
+  }
+  if (route === 'teacher' && user.role === 'teacher') {
+    teacherView.classList.add('is-visible');
+    renderTeacherDashboard();
+    return;
+  }
+  if (route === 'library') {
+    libraryView.classList.remove('auth-hidden');
+    libraryView.style.display = 'block';
+    libraryAccountLabel.textContent = `${user.name} · 实验库`;
+    return;
+  }
+  showRoute(user.role);
+}
+
+function registerExperimentDraft(id, name, description) {
+  const drafts = readLocalJSON(STORAGE_KEYS.experimentDrafts, []);
+  if (!drafts.some((draft) => draft.id === id)) {
+    drafts.push({ id, name, description });
+    writeLocalJSON(STORAGE_KEYS.experimentDrafts, drafts);
+  }
+}
 
 function renderCanvas() {
   bubble.style.left = `${bubbleX}px`;
@@ -212,6 +504,11 @@ function bindTreeNode(element) {
 }
 
 function openExperiment(experimentId) {
+  if (!getCurrentUser()) {
+    showRoute('login');
+    return;
+  }
+  if (libraryView.classList.contains('auth-hidden')) showRoute('library');
   const data = experimentData[experimentId] || { name: '新的学习实验', description: '根据学习目标拆分的实验节点。' };
   touchRecentExperiment(experimentId);
   touchFolderExperiment(experimentId);
@@ -442,9 +739,7 @@ document.querySelectorAll('.delete-experiment').forEach(bindDeleteButton);
 
 backToLibrary.addEventListener('click', () => {
   closeInspector();
-  canvasView.classList.add('is-hidden');
-  editorView.classList.remove('is-visible');
-  libraryView.style.display = 'block';
+  showRoute('library');
 });
 
 canvasView.addEventListener('pointerdown', (event) => {
@@ -616,6 +911,7 @@ async function apiRequest(path, options = {}) {
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...fetchOptions,
+      credentials: 'include',
       signal: timeoutController.signal,
       headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     });
@@ -820,6 +1116,7 @@ createStepButton.addEventListener('click', async () => {
       });
       const id = String(created.experimentId);
       experimentData[id] = { ...created, description: created.description, nodes: created.nodes };
+      registerExperimentDraft(id, created.name, created.description);
       createLibraryExperimentButton(id, created.name, 'start', '刚刚创建', true);
       createLibraryExperimentButton(id, created.name, 'start', `难度 ${created.difficulty} · ${created.nodes.length} 个节点`);
       updateLibraryCount();
@@ -944,5 +1241,150 @@ window.addEventListener('resize', () => {
   if (!panState && !bubbleDragState) renderCanvas();
 });
 
+loginForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const role = loginRole.value;
+  const email = loginEmail.value.trim().toLowerCase();
+  const password = loginPassword.value.trim();
+  if (!email || !password) {
+    setMessage(loginError, '请输入邮箱和密码。', true);
+    return;
+  }
+  const demoUser = DEMO_USERS[role];
+  if (!demoUser || email !== demoUser.email) {
+    setMessage(loginError, '登录失败：请选择匹配的演示账号。', true);
+    return;
+  }
+  writeLocalJSON(STORAGE_KEYS.currentUser, demoUser);
+  window.localStorage.removeItem(STORAGE_KEYS.pendingRoute);
+  loginPassword.value = '';
+  setMessage(loginError, '');
+  showRoute(role);
+});
+
+loginRole.addEventListener('change', () => {
+  loginEmail.value = loginRole.value === 'teacher' ? DEMO_USERS.teacher.email : DEMO_USERS.student.email;
+  setMessage(loginError, '');
+});
+loginEmail.addEventListener('input', () => setMessage(loginError, ''));
+loginPassword.addEventListener('input', () => setMessage(loginError, ''));
+
+joinCourseForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const user = getCurrentUser();
+  const normalizedCode = joinCode.value.trim().toUpperCase();
+  if (!normalizedCode) {
+    setMessage(studentMessage, '请输入课程邀请码。', true);
+    joinCode.focus();
+    return;
+  }
+  const courses = getCourses();
+  const course = courses.find((item) => item.inviteCode.toUpperCase() === normalizedCode);
+  if (!course) {
+    setMessage(studentMessage, '邀请码无效，请向教师确认后重试。', true);
+    return;
+  }
+  course.memberIds ||= [];
+  if (course.memberIds.includes(user.id)) {
+    setMessage(studentMessage, `你已经加入「${course.name}」，无需重复加入。`, true);
+    return;
+  }
+  course.memberIds.push(user.id);
+  writeLocalJSON(STORAGE_KEYS.courses, courses);
+  joinCode.value = '';
+  setMessage(studentMessage, `已加入「${course.name}」，现在可以查看教师发布的实验。`);
+  renderStudentDashboard();
+});
+
+createCourseForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const user = getCurrentUser();
+  const name = courseName.value.trim();
+  if (!name) {
+    setMessage(teacherMessage, '请输入课程名称。', true);
+    courseName.focus();
+    return;
+  }
+  const courses = getCourses();
+  const course = {
+    id: `course-${Date.now()}`,
+    name,
+    inviteCode: makeInviteCode(),
+    teacherId: user.id,
+    memberIds: [],
+    createdAt: new Date().toISOString(),
+  };
+  courses.push(course);
+  writeLocalJSON(STORAGE_KEYS.courses, courses);
+  courseName.value = '';
+  setMessage(teacherMessage, `课程已创建，邀请码是 ${course.inviteCode}。`);
+  renderTeacherDashboard();
+  publishCourse.value = course.id;
+});
+
+publishForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const courseId = publishCourse.value;
+  const experimentId = publishExperiment.value;
+  if (!courseId) {
+    setMessage(teacherMessage, '请选择要发布到的课程。', true);
+    publishCourse.focus();
+    return;
+  }
+  if (!experimentId) {
+    setMessage(teacherMessage, '请选择要发布的实验草稿。', true);
+    publishExperiment.focus();
+    return;
+  }
+  const course = getCourses().find((item) => item.id === courseId);
+  const draft = getExperimentDrafts().find((item) => item.id === experimentId);
+  if (!course || !draft) {
+    setMessage(teacherMessage, '课程或实验草稿不存在，请刷新后重试。', true);
+    return;
+  }
+  const published = getPublishedExperiments();
+  if (published.some((item) => item.courseId === courseId && item.experimentId === experimentId)) {
+    setMessage(teacherMessage, `「${draft.name}」已经发布到「${course.name}」。`, true);
+    return;
+  }
+  published.push({
+    id: `publication-${Date.now()}`,
+    courseId,
+    experimentId,
+    name: draft.name,
+    status: 'published',
+    publishedAt: new Date().toISOString(),
+  });
+  writeLocalJSON(STORAGE_KEYS.publishedExperiments, published);
+  setMessage(teacherMessage, `「${draft.name}」已发布到「${course.name}」，学生端现在可见。`);
+  renderTeacherDashboard();
+  publishCourse.value = courseId;
+  publishExperiment.value = experimentId;
+});
+
+studentCourses.addEventListener('click', (event) => {
+  const button = event.target.closest('.open-published-experiment');
+  if (!button) return;
+  showRoute('library');
+  openExperiment(button.dataset.experimentId);
+});
+
+document.querySelector('#studentLibraryButton').addEventListener('click', () => showRoute('library'));
+document.querySelector('#teacherLibraryButton').addEventListener('click', () => showRoute('library'));
+document.querySelector('#libraryDashboardButton').addEventListener('click', () => showRoute(getCurrentUser()?.role || 'login'));
+
+function logout() {
+  window.localStorage.removeItem(STORAGE_KEYS.currentUser);
+  window.localStorage.removeItem(STORAGE_KEYS.pendingRoute);
+  createDialog.classList.remove('is-open');
+  folderDialog.classList.remove('is-open');
+  closeInspector();
+  showRoute('login');
+}
+
+document.querySelectorAll('#studentLogoutButton, #teacherLogoutButton, #libraryLogoutButton').forEach((button) => button.addEventListener('click', logout));
+
+ensureDemoState();
 renderCanvas();
 updateLibraryCount();
+showRoute(getCurrentUser()?.role || 'login');
