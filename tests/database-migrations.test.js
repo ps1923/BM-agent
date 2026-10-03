@@ -12,6 +12,8 @@ test('task-progress backfill covers runs even when a node_progress row is missin
   assert.match(sql, /LEFT JOIN `node_progress` AS `np`/);
   assert.match(sql, /ON DUPLICATE KEY UPDATE/);
   assert.match(sql, /VALUES\(`status`\) = 'completed'/);
+  assert.match(sql, /'completed', `task_progress`\.`status`/);
+  assert.match(sql, /COALESCE\(`task_progress`\.`completed_at`, VALUES\(`completed_at`\)\)/);
   assert.match(sql, /COALESCE\(`np`\.`completed_at`, `np`\.`updated_at`, CURRENT_TIMESTAMP\(6\)\)/);
 });
 

@@ -16,6 +16,7 @@ LEFT JOIN `node_progress` AS `np`
  AND `np`.`experiment_id` = `er`.`experiment_id`
  AND `np`.`node_id` = `nt`.`node_id`
 ON DUPLICATE KEY UPDATE
-  `status` = IF(VALUES(`status`) = 'completed', 'completed', `status`),
+  `status` = IF(VALUES(`status`) = 'completed', 'completed', `task_progress`.`status`),
   `completed_at` = IF(VALUES(`status`) = 'completed',
-      COALESCE(`completed_at`, VALUES(`completed_at`)), `completed_at`);
+      COALESCE(`task_progress`.`completed_at`, VALUES(`completed_at`)),
+      `task_progress`.`completed_at`);
