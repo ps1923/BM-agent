@@ -25,6 +25,17 @@ test('empty overrides use the environment-specific default', () => {
   assert.equal(resolveApiBaseUrl(new URL('https://student.example.edu/'), '  '), 'https://student.example.edu/api');
 });
 
+test('BM Agent reverse-proxy mount uses its reserved API prefix', () => {
+  assert.equal(
+    resolveApiBaseUrl(new URL('http://47.109.176.135/bm-agent/')),
+    'http://47.109.176.135/bm-agent/api',
+  );
+  assert.equal(
+    resolveApiBaseUrl(new URL('http://47.109.176.135/bm-agentish/')),
+    'http://47.109.176.135/api',
+  );
+});
+
 test('HTTPS rejects insecure API overrides', () => {
   assert.throws(
     () => resolveApiBaseUrl(new URL('https://student.example.edu/'), 'http://api.example.edu/api'),
