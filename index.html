@@ -4,18 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spring Boot 学习工作台</title>
-    <link rel="stylesheet" href="styles.css?v=25" />
+    <link rel="stylesheet" href="styles.css?v=33" />
   </head>
   <body>
+    <div id="routeStatus" class="route-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
     <main id="loginView" class="route-view auth-screen" aria-labelledby="loginTitle">
       <section class="auth-card">
         <div class="auth-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>LEARNING WORKSPACE</small></div></div>
-        <div class="auth-copy"><p class="auth-eyebrow">DEMO ACCESS</p><h1 id="loginTitle">进入你的学习工作台</h1><p>选择身份后开始管理课程，或继续完成实验。</p></div>
+        <div class="auth-copy"><p class="auth-eyebrow">SECURE ACCESS</p><h1 id="loginTitle">进入你的学习工作台</h1><p>使用系统账号登录，进入对应的学生或教师工作台。</p></div>
         <form id="loginForm" class="auth-form" novalidate>
-          <label for="loginRole">身份<select id="loginRole" name="role"><option value="student">学生</option><option value="teacher">教师</option></select></label>
-          <label for="loginEmail">邮箱<input id="loginEmail" name="email" type="email" autocomplete="username" placeholder="student@demo.com" /></label>
-          <label for="loginPassword">密码<input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="任意非空密码" /></label>
-          <p class="auth-demo-hint">演示账号：student@demo.com / teacher@demo.com，密码可任意填写。</p>
+          <label for="loginEmail">邮箱<input id="loginEmail" name="email" type="email" autocomplete="username" placeholder="请输入登录邮箱" /></label>
+          <label for="loginPassword">密码<input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" /></label>
+          <p class="auth-demo-hint">账号由系统管理员提供，登录身份由服务器返回。</p>
           <p id="loginError" class="form-message is-error" role="alert" aria-live="polite"></p>
           <button class="primary-action auth-submit" type="submit">登录工作台 <span>→</span></button>
         </form>
@@ -42,6 +42,25 @@
           <section aria-labelledby="teacherCoursesTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">YOUR COURSES</p><h2 id="teacherCoursesTitle">我的课程</h2></div><span id="teacherCourseCount" class="section-count"></span></div><div id="teacherCourses" class="course-grid course-grid-compact"></div></section>
           <section class="publish-card" aria-labelledby="publishTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">PUBLISH EXPERIMENT</p><h2 id="publishTitle">发布实验草稿</h2></div></div><p class="publish-description">选择课程和实验草稿，发布后学生即可在对应课程中看到。</p><form id="publishForm" class="publish-form" novalidate><label for="publishCourse">发布到课程<select id="publishCourse"><option value="">请选择课程</option></select></label><label for="publishExperiment">实验草稿<select id="publishExperiment"><option value="">请选择实验</option></select></label><button class="primary-action" type="submit">发布实验</button></form><div id="teacherDrafts" class="draft-list" aria-live="polite"></div></section>
         </div>
+        <section class="teacher-monitor-card" aria-labelledby="teacherMonitorTitle">
+          <div class="dashboard-section-heading teacher-monitor-heading"><div><p class="dashboard-eyebrow">LEARNING MONITOR</p><h2 id="teacherMonitorTitle">学生学习进度</h2><p class="publish-description">查看节点完成、命令运行、AI 对话和 Bug 记录，并由教师提交最终评价。</p></div><label class="monitor-course-picker" for="teacherDashboardCourse">课程<select id="teacherDashboardCourse"><option value="">请选择课程</option></select></label></div>
+          <p id="teacherDashboardMessage" class="form-message" role="status" aria-live="polite"></p>
+          <div id="teacherDashboardEmpty" class="monitor-empty">请选择一门课程查看学生进度。</div>
+          <div id="teacherDashboardContent" class="teacher-monitor-content" hidden>
+            <div class="monitor-table-wrap"><table class="progress-table"><thead><tr><th>学生</th><th>实验</th><th>节点进度</th><th>运行状态</th><th>最近打开</th><th>操作</th></tr></thead><tbody id="teacherProgressRows"></tbody></table></div>
+            <aside id="teacherRunDetail" class="teacher-run-detail" hidden>
+              <div class="run-detail-heading"><div><p class="dashboard-eyebrow">SELECTED RUN</p><h3 id="teacherRunTitle">学生运行详情</h3></div><span id="teacherRunStatus" class="section-count"></span></div>
+              <p id="teacherRunSummary" class="run-summary-copy"></p><p id="teacherAiSummary" class="teacher-ai-summary" hidden></p><div class="run-metrics" id="teacherRunMetrics"></div><div class="timeline-list" id="teacherTimeline"></div>
+              <section class="teacher-evidence" aria-labelledby="teacherEvidenceTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">STAGE CODE EVIDENCE</p><h4 id="teacherEvidenceTitle">阶段代码证据</h4><p class="publish-description">只读查看学生完成节点时保存的代码快照。</p></div></div><p id="teacherEvidenceMessage" class="form-message" role="status" aria-live="polite"></p><div class="teacher-evidence-layout"><div id="teacherStageEvidence" class="teacher-stage-evidence"></div><div class="teacher-evidence-preview"><div id="teacherEvidenceFiles" class="teacher-evidence-files"></div><pre id="teacherEvidenceCode" class="teacher-evidence-code" tabindex="0" aria-label="只读代码内容">选择一个阶段快照文件查看。</pre></div></div></section>
+              <form id="teacherReviewForm" class="teacher-review-form" novalidate><label for="teacherRating">教师评分（0–100）<input id="teacherRating" type="number" min="0" max="100" step="1" /></label><label for="teacherFeedback">阶段性评价<textarea id="teacherFeedback" rows="3" maxlength="2000" placeholder="记录学生本阶段的表现和后续建议"></textarea></label><button class="primary-action" type="submit">保存评价</button><p id="teacherReviewMessage" class="form-message" role="status" aria-live="polite"></p></form>
+            </aside>
+          </div>
+          <section class="teacher-bug-review" aria-labelledby="teacherBugReviewTitle">
+            <div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">RAG KNOWLEDGE REVIEW</p><h3 id="teacherBugReviewTitle">Bug 案例审核</h3><p class="publish-description">审核通过后，案例才会进入当前课程的 RAG 知识库。</p></div></div>
+            <p id="teacherBugMessage" class="form-message" role="status" aria-live="polite"></p>
+            <div id="teacherBugList" class="teacher-bug-list"></div>
+          </section>
+        </section>
       </section>
     </main>
 
@@ -57,11 +76,9 @@
             <div class="sidebar-workflow-connector"></div>
             <div class="sidebar-workflow-step"><span>03</span><div><strong>实验</strong><small>完成阶段任务</small></div></div>
           </div>
-          <nav class="library-sidebar-nav" aria-label="实验分组">
+          <nav class="library-sidebar-nav" aria-label="个人实验库">
             <p class="sidebar-caption">我的空间</p>
-            <button id="libraryOverviewButton" class="sidebar-nav-item is-active" type="button" aria-current="page"><span class="sidebar-nav-icon">▦</span><span>全部实验</span><span id="sidebarExperimentCount" class="sidebar-nav-count">3</span></button>
-            <p class="sidebar-caption sidebar-groups-caption">分组</p>
-            <div id="folderNavigation" class="folder-navigation"></div>
+            <button id="libraryOverviewButton" class="sidebar-nav-item is-active" type="button" aria-current="page"><span class="sidebar-nav-icon">▦</span><span>全部实验</span><span id="sidebarExperimentCount" class="sidebar-nav-count">0</span></button>
           </nav>
           <div class="library-sidebar-footer"><span class="sidebar-agent-mark">H</span><div><strong>Harness</strong><small>把想法整理成学习路径</small></div><span class="sidebar-agent-status"></span></div>
         </aside>
@@ -77,51 +94,27 @@
 
           <section class="library-content" id="libraryContent">
             <div class="library-heading">
-              <div><p class="library-eyebrow">YOUR LEARNING SPACE</p><h1>把学习变成一段段可完成的实验</h1><p>继续上次的进度，或和 Harness 一起规划一个新方向。</p></div>
-              <div class="library-heading-actions"><span class="library-count">3 个分组 · 3 个实验</span><button id="manageFoldersButton" class="manage-folders-button" type="button"><span aria-hidden="true">☷</span>管理分组</button><button id="createExperimentButton" class="create-experiment-button" type="button"><span aria-hidden="true">＋</span>创建实验</button></div>
+              <div><p class="library-eyebrow">YOUR LEARNING SPACE</p><h1>把学习变成一段段可完成的实验</h1><p>查看你的个人实验，或和 Harness 一起规划一个新方向。</p></div>
+              <div class="library-heading-actions"><span class="library-count">正在读取…</span><button id="createExperimentButton" class="create-experiment-button" type="button"><span aria-hidden="true">＋</span>创建实验</button></div>
             </div>
 
             <section class="recent-section" aria-labelledby="recentSectionTitle">
-              <div class="section-title"><div><p class="library-eyebrow">PICK UP WHERE YOU LEFT OFF</p><h2 id="recentSectionTitle">最近打开</h2></div><span>按最近打开时间排序</span></div>
+              <div class="section-title"><div><p class="library-eyebrow">PICK UP WHERE YOU LEFT OFF</p><h2 id="recentSectionTitle">最近打开</h2></div><span>本次访问期间</span></div>
               <div id="recentExperiments" class="recent-list">
-                <button class="recent-item experiment-link" type="button" data-experiment-id="spring-init"><span class="recent-sequence">start</span><span class="recent-copy"><strong>Spring Boot 项目初始化</strong><small>刚刚打开</small></span><span class="recent-continue">继续 <span>→</span></span></button>
-                <button class="recent-item experiment-link" type="button" data-experiment-id="spring-rest"><span class="recent-sequence">1.1</span><span class="recent-copy"><strong>Spring Boot REST 接口</strong><small>昨天打开</small></span><span class="recent-continue">继续 <span>→</span></span></button>
+                <p class="library-state recent-empty">打开实验后，这里会显示本次访问中最近查看的内容。</p>
               </div>
             </section>
 
             <section class="experiment-library-section" aria-labelledby="experimentLibraryTitle">
-              <div class="library-section-heading"><div><p class="library-eyebrow">ORGANIZED BY DIRECTION</p><h2 id="experimentLibraryTitle">按分组浏览</h2><p>每个分组都是一条独立的学习方向。</p></div><span id="folderSectionCount" class="folder-section-count">3 个分组</span></div>
-              <div class="folder-grid">
-                <section id="folder-spring" class="folder-card folder-card-wide" data-folder-id="spring" data-folder-name="Spring Boot 基础">
-                  <div class="folder-header"><div class="folder-name"><span class="folder-icon">▰</span><div><h2>Spring Boot 基础</h2><p>从项目创建到接口开发</p></div></div><span class="folder-count">3 个实验</span></div>
-                  <div class="experiment-list">
-                    <div class="experiment-row"><button class="experiment-item experiment-link" type="button" data-experiment-id="spring-init"><span class="experiment-icon">start</span><span class="experiment-copy"><strong>Spring Boot 项目初始化</strong><small>节点 1 · 今天编辑</small></span><span class="experiment-arrow">›</span></button><button class="delete-experiment" type="button" data-delete-experiment-id="spring-init" aria-label="删除 Spring Boot 项目初始化">×</button></div>
-                    <div class="experiment-row"><button class="experiment-item experiment-link" type="button" data-experiment-id="spring-rest"><span class="experiment-icon">1.1</span><span class="experiment-copy"><strong>Spring Boot REST 接口</strong><small>节点 4 · 昨天编辑</small></span><span class="experiment-arrow">›</span></button><button class="delete-experiment" type="button" data-delete-experiment-id="spring-rest" aria-label="删除 Spring Boot REST 接口">×</button></div>
-                    <div class="experiment-row"><button class="experiment-item experiment-link" type="button" data-experiment-id="spring-data"><span class="experiment-icon">1.2</span><span class="experiment-copy"><strong>连接 MySQL 数据库</strong><small>节点 3 · 3 天前编辑</small></span><span class="experiment-arrow">›</span></button><button class="delete-experiment" type="button" data-delete-experiment-id="spring-data" aria-label="删除 连接 MySQL 数据库">×</button></div>
-                  </div>
-                </section>
-
-                <section id="folder-java" class="folder-card" data-folder-id="java" data-folder-name="Java 核心">
-                  <div class="folder-header"><div class="folder-name"><span class="folder-icon">▰</span><div><h2>Java 核心</h2><p>语言基础与面向对象</p></div></div><span class="folder-count">0</span></div>
-                  <div class="empty-folder"><span>＋</span><p>还没有实验</p></div>
-                </section>
-
-                <section id="folder-web" class="folder-card" data-folder-id="web" data-folder-name="Web 开发">
-                  <div class="folder-header"><div class="folder-name"><span class="folder-icon">▰</span><div><h2>Web 开发</h2><p>前端与服务端实践</p></div></div><span class="folder-count">0</span></div>
-                  <div class="empty-folder"><span>＋</span><p>还没有实验</p></div>
+              <div class="library-section-heading"><div><p class="library-eyebrow">YOUR EXPERIMENTS</p><h2 id="experimentLibraryTitle">我的实验</h2><p>你创建的实验会保存在个人空间中。</p></div></div>
+              <div class="folder-grid personal-library-grid">
+                <section id="folder-personal" class="folder-card folder-card-wide" data-folder-id="personal" data-folder-name="我的实验">
+                  <div class="folder-header"><div class="folder-name"><span class="folder-icon">▰</span><div><h2>我的实验</h2><p>仅显示当前账号创建的实验</p></div></div><span class="folder-count">0 个实验</span></div>
+                  <div id="personalExperimentList" class="experiment-list" aria-live="polite"><p class="library-state">正在读取你的实验…</p></div>
                 </section>
               </div>
             </section>
           </section>
-        </div>
-      </div>
-
-      <div id="folderDialog" class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="folderDialogTitle">
-        <div class="folder-dialog-card">
-          <div class="folder-dialog-header"><div><p class="library-eyebrow">WORKSPACE</p><h2 id="folderDialogTitle">管理分组</h2></div><button id="closeFolderDialog" class="dialog-close" type="button" aria-label="关闭分组管理">×</button></div>
-          <p class="folder-dialog-description">用分组整理不同方向的实验。含有实验的分组需要先清空后才能删除。</p>
-          <div id="folderManageList" class="folder-manage-list"></div>
-          <div class="new-folder-row"><input id="newFolderName" type="text" placeholder="新分组名称" aria-label="新分组名称" /><button id="addFolderButton" type="button">＋ 新建分组</button></div>
         </div>
       </div>
 
@@ -184,36 +177,53 @@
       <header class="editor-topbar">
         <button id="backToCanvas" class="back-button" type="button" aria-label="返回画布">‹</button>
         <div class="editor-breadcrumb"><span class="workspace-name"><span class="workspace-dot"></span><span>springboot-learning</span></span><span class="breadcrumb-divider">/</span><span class="editor-file-path">01 项目初始化</span><span class="editor-node-tag">NODE 01</span></div>
-        <div class="editor-top-status"><span class="status-dot"></span><span>本地工作区</span></div>
+        <div class="editor-top-status"><span class="status-dot"></span><span id="workspaceStatus">未启动工作区</span></div>
       </header>
       <section class="editor-workspace">
         <aside class="task-panel editor-panel">
           <div class="panel-heading"><span>本节点任务</span><span class="panel-count">3 项</span></div>
-          <div class="task-list"><button class="task-item is-active" type="button"><span class="task-check"></span><span>创建 Spring Boot 项目</span></button><button class="task-item" type="button"><span class="task-check"></span><span>配置项目依赖</span></button><button class="task-item" type="button"><span class="task-check"></span><span>运行第一个接口</span></button></div>
-          <div class="task-note"><span class="note-mark">i</span><span>完成左侧任务后，再进入下一个节点。</span></div>
+          <div class="task-list"><button class="task-item" type="button" aria-pressed="false" disabled><span class="task-check" aria-hidden="true"></span><span class="task-title">创建 Spring Boot 项目</span><span class="task-state">待完成</span></button><button class="task-item" type="button" aria-pressed="false" disabled><span class="task-check" aria-hidden="true"></span><span class="task-title">配置项目依赖</span><span class="task-state">待完成</span></button><button class="task-item" type="button" aria-pressed="false" disabled><span class="task-check" aria-hidden="true"></span><span class="task-title">运行第一个接口</span><span class="task-state">待完成</span></button></div>
+          <div class="task-note"><span class="note-mark">i</span><span>勾选表示你自我确认已完成；系统会保存记录，但不会自动校验代码。全部勾选后可提交节点完成。</span></div>
+          <button id="recordBugButton" class="secondary-action" type="button" disabled>记录已解决 Bug</button>
+          <button id="deepDiagnosisButton" class="secondary-action" type="button" disabled>深度诊断项目</button>
+          <button id="completeNodeButton" class="secondary-action" type="button" disabled>完成当前节点</button>
         </aside>
         <section class="code-panel editor-panel">
-          <div class="code-tabs"><span class="code-tab is-active"><span class="file-type-icon java-icon">J</span>DemoApplication.java</span><span class="code-tab"><span class="file-type-icon xml-icon">&lt;/&gt;</span>pom.xml</span><span class="code-location">src / main / java / com / example / demo</span></div>
-          <div class="code-editor"><div class="line-numbers" aria-hidden="true">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12</div><textarea id="codeEditor" spellcheck="false" aria-label="代码编辑器">package com.example.demo;
-
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-
-@SpringBootApplication
-public class DemoApplication {
-    public static void main(String[] args) {
-        SpringApplication.run(DemoApplication.class, args);
-    }
-}</textarea></div>
+          <div class="code-tabs"><div id="codeFileTabs" class="code-file-tabs" role="tablist" aria-label="工作区文件"></div><span id="codeLocation" class="code-location"></span><button id="createSnapshotButton" class="secondary-action" type="button" disabled>创建快照</button><button id="saveFileButton" class="secondary-action" type="button" disabled>保存文件</button></div>
+          <div class="code-editor"><div id="codeLineNumbers" class="line-numbers" aria-hidden="true"></div><textarea id="codeEditor" spellcheck="false" aria-label="代码编辑器" placeholder="启动工作区后，选择文件开始编辑。" disabled></textarea></div>
         </section>
         <aside class="chat-panel editor-panel">
           <div class="panel-heading agent-panel-heading"><div><span class="agent-title">智能体</span><span class="agent-subtitle">学习搭档</span></div><div class="agent-heading-actions"><button id="softenButton" class="soften-top-button" type="button" aria-label="服软：让智能体直接给下一步">服软</button><span class="agent-online"><span class="status-dot"></span>在线</span></div></div>
-          <div id="chatMessages" class="chat-messages"><div class="chat-message agent-message"><div class="message-label">导师</div><p>先从启动类开始。你可以检查 <code>DemoApplication.java</code>，确认它包含 <code>@SpringBootApplication</code>。</p></div></div>
+          <div id="chatMessages" class="chat-messages"><div class="chat-message agent-message"><div class="message-label">学习助手</div><p>启动实验工作区后，我会读取当前项目文件和运行信息，再根据你的问题提供指导。</p></div></div>
           <div class="chat-composer"><div class="chat-input-row"><textarea id="chatInput" rows="2" placeholder="告诉智能体你遇到的问题…" aria-label="发送给智能体"></textarea><button id="sendButton" class="send-button" type="button" aria-label="发送消息">↑</button></div></div>
         </aside>
       </section>
-      <section class="terminal-panel editor-panel" aria-label="终端"><div class="terminal-heading"><span class="terminal-title"><span class="terminal-indicator"></span>终端</span><span class="terminal-shell">zsh <span class="terminal-chevron">⌄</span></span></div><div id="terminalOutput" class="terminal-output"><div><span class="terminal-prompt">$</span> ./mvnw spring-boot:run</div><div class="terminal-muted">等待执行…</div></div><div class="terminal-input-row"><span class="terminal-prompt">$</span><input id="terminalInput" type="text" placeholder="输入终端命令…" aria-label="终端命令" /></div></section>
+      <section class="terminal-panel editor-panel" aria-label="终端"><div class="terminal-heading"><span class="terminal-title"><span class="terminal-indicator"></span>终端</span><span class="terminal-shell">受限 Shell <span class="terminal-chevron">⌄</span></span></div><div id="terminalOutput" class="terminal-output"><div class="terminal-muted">工作区启动后才能执行命令。</div></div><div class="terminal-input-row"><span class="terminal-prompt">$</span><input id="terminalInput" type="text" placeholder="请先启动工作区" aria-label="终端命令" disabled /></div></section>
     </main>
-    <script src="app.js?v=25"></script>
+    <div id="bugDialog" class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="bugDialogTitle" aria-hidden="true">
+      <div class="bug-dialog-card">
+        <div class="folder-dialog-header"><div><p class="library-eyebrow">KNOWLEDGE CASE</p><h2 id="bugDialogTitle">记录一个已解决 Bug</h2></div><button id="closeBugDialog" class="dialog-close" type="button" aria-label="关闭 Bug 记录">×</button></div>
+        <p class="folder-dialog-description">先保存为个人案例，教师审核通过后才会进入课程 RAG 知识库。</p>
+        <form id="bugCaseForm" class="bug-dialog-form" novalidate>
+          <label for="bugTitle">案例标题<input id="bugTitle" maxlength="200" placeholder="例如：依赖版本冲突导致启动失败" /></label>
+          <label for="bugTechnologyStack">技术栈<select id="bugTechnologyStack"><option value="">通用案例</option><option value="Java/Spring Boot">Java / Spring Boot</option><option value="Python">Python</option><option value="JavaScript/Node.js">JavaScript / Node.js</option></select></label>
+          <label for="bugProblem">问题现象<textarea id="bugProblem" rows="4" maxlength="20000" placeholder="记录错误现象、终端输出摘要和排查过程"></textarea></label>
+          <label for="bugSolution">解决方法<textarea id="bugSolution" rows="4" maxlength="20000" placeholder="记录最终原因和验证通过的解决步骤"></textarea></label>
+          <p id="bugMessage" class="form-message" role="alert" aria-live="polite"></p>
+          <div class="bug-dialog-actions"><button id="cancelBugButton" class="secondary-action" type="button">取消</button><button id="saveBugButton" class="primary-action" type="submit">保存案例</button></div>
+        </form>
+      </div>
+    </div>
+    <div id="patchDialog" class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="patchDialogTitle" aria-hidden="true">
+      <div class="patch-dialog-card">
+        <div class="folder-dialog-header"><div><p class="library-eyebrow">PATCH REVIEW</p><h2 id="patchDialogTitle">查看补丁差异</h2></div><button id="closePatchDialog" class="dialog-close" type="button" aria-label="关闭补丁预览">×</button></div>
+        <p id="patchDialogDescription" class="folder-dialog-description">确认前请检查每个文件的当前内容和建议内容。系统应用时仍会再次校验文件哈希。</p>
+        <p id="patchDialogMessage" class="form-message" role="status" aria-live="polite"></p>
+        <div id="patchDiffList" class="patch-diff-list"></div>
+        <div class="bug-dialog-actions"><button id="cancelPatchButton" class="secondary-action" type="button">取消</button><button id="confirmPatchButton" class="primary-action" type="button" disabled>确认应用补丁</button></div>
+      </div>
+    </div>
+    <script src="api-config.js?v=1"></script>
+    <script src="app.js?v=45"></script>
   </body>
 </html>

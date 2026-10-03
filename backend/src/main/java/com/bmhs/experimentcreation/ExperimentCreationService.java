@@ -1,5 +1,6 @@
 package com.bmhs.experimentcreation;
 
+import com.bmhs.course.CourseRepository;
 import com.bmhs.experimentcreation.CreationModels.ConfigurationRequest;
 import com.bmhs.experimentcreation.CreationModels.ConfirmedIntent;
 import com.bmhs.experimentcreation.CreationModels.CreateSessionResponse;
@@ -7,6 +8,7 @@ import com.bmhs.experimentcreation.CreationModels.ExperimentTree;
 import com.bmhs.experimentcreation.CreationModels.MaterializedExperiment;
 import com.bmhs.experimentcreation.CreationModels.PlanResponse;
 import com.bmhs.experimentcreation.CreationModels.PositionedNode;
+import com.bmhs.experimentcreation.CreationModels.PositionedTask;
 import com.bmhs.experimentcreation.CreationModels.SessionView;
 import com.bmhs.experimentcreation.CreationModels.StudentIntentEnvelope;
 import com.google.gson.FieldNamingPolicy;
@@ -28,6 +30,7 @@ import java.util.Map;
 @Service
 public class ExperimentCreationService {
     private final CreationRepository repository;
+    private final CourseRepository courseRepository;
     private final HarnessGateway harness;
     private final ExperimentTreeValidator validator;
     private final TreeLayoutService layoutService;
@@ -36,10 +39,12 @@ public class ExperimentCreationService {
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .create();
 
-    public ExperimentCreationService(CreationRepository repository, HarnessGateway harness,
+    public ExperimentCreationService(CreationRepository repository, CourseRepository courseRepository,
+                                     HarnessGateway harness,
                                      ExperimentTreeValidator validator, TreeLayoutService layoutService,
                                      CreationTransactions transactions) {
         this.repository = repository;
+        this.courseRepository = courseRepository;
         this.harness = harness;
         this.validator = validator;
         this.layoutService = layoutService;
@@ -123,7 +128,7 @@ public class ExperimentCreationService {
             if (!idempotencyKey.equals(session.materializationKey())) {
                 throw new ApiException(HttpStatus.CONFLICT, "SESSION_ALREADY_MATERIALIZED", "该会话已经创建过实验");
             }
-            return response(session.experimentId(), session);
+            return courseRepository.findExperiment(session.experimentId(), userId);
         }
         requireStatus(session.status(), "plan_ready");
         if (session.plan() == null || !session.plan().intentHash().equals(session.intentHash())) {
@@ -155,26 +160,18 @@ public class ExperimentCreationService {
             long nodeId = repository.insertNode(experimentId, stageIds.get(node.stage()), parentId, node, index);
             nodeIds.put(node.key(), nodeId);
             for (int taskIndex = 0; taskIndex < node.tasks().size(); taskIndex++) {
-                repository.insertTask(experimentId, nodeId, node.tasks().get(taskIndex), taskIndex);
+                PositionedTask task = node.tasks().get(taskIndex);
+                repository.insertTask(experimentId, nodeId, new CreationModels.PlanTask(
+                        task.title(), task.description(), task.validationType(), task.validationConfig()), taskIndex);
             }
             if (parentId != null) repository.insertDependency(experimentId, parentId, nodeId);
         }
         repository.finishMaterialization(sessionId, session.plan().planId(), idempotencyKey, experimentId);
-        return new MaterializedExperiment(experimentId, session.plan().title(), description,
-                session.difficulty().label(), session.durationMinutes(), session.plan().nodes());
+        return courseRepository.findExperiment(experimentId, userId);
     }
 
     public SessionView get(String sessionId, long userId) {
         return view(repository.find(sessionId, userId));
-    }
-
-    private MaterializedExperiment response(long experimentId, CreationRepository.SessionRecord session) {
-        String description = session.plan() == null ? "" : String.join("；", session.plan().purpose());
-        return new MaterializedExperiment(experimentId,
-                session.plan() == null ? "已创建实验" : session.plan().title(), description,
-                session.difficulty() == null ? "" : session.difficulty().label(),
-                session.durationMinutes() == null ? 0 : session.durationMinutes(),
-                session.plan() == null ? List.of() : session.plan().nodes());
     }
 
     private SessionView view(CreationRepository.SessionRecord session) {

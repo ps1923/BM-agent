@@ -1,11 +1,12 @@
 package com.bmhs.experimentcreation;
 
+import com.bmhs.course.CourseRepository;
 import com.bmhs.experimentcreation.CreationModels.ConfirmedIntent;
 import com.bmhs.experimentcreation.CreationModels.Difficulty;
 import com.bmhs.experimentcreation.CreationModels.ExperimentTree;
 import com.bmhs.experimentcreation.CreationModels.PlanResponse;
 import com.bmhs.experimentcreation.CreationModels.PositionedNode;
-import com.bmhs.experimentcreation.CreationModels.PlanTask;
+import com.bmhs.experimentcreation.CreationModels.PositionedTask;
 import com.bmhs.experimentcreation.CreationModels.StudentIntentEnvelope;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ExperimentCreationServiceTest {
     private CreationRepository repository;
+    private CourseRepository courseRepository;
     private HarnessGateway harness;
     private ExperimentTreeValidator validator;
     private TreeLayoutService layout;
@@ -38,11 +40,12 @@ class ExperimentCreationServiceTest {
     @BeforeEach
     void setUp() {
         repository = mock(CreationRepository.class);
+        courseRepository = mock(CourseRepository.class);
         harness = mock(HarnessGateway.class);
         validator = mock(ExperimentTreeValidator.class);
         layout = mock(TreeLayoutService.class);
         transactions = mock(CreationTransactions.class);
-        service = new ExperimentCreationService(repository, harness, validator, layout, transactions);
+        service = new ExperimentCreationService(repository, courseRepository, harness, validator, layout, transactions);
     }
 
     @Test
@@ -90,7 +93,7 @@ class ExperimentCreationServiceTest {
         ConfirmedIntent confirmed = new ConfirmedIntent(
                 "0.1", "b".repeat(64), "2026-09-11T00:00:00Z",
                 Map.of("raw_request", "目标", "observable_outcome", "成果"));
-        PlanTask task = new PlanTask("创建结构", "建立结构", "manual", Map.of());
+        PositionedTask task = new PositionedTask(null, "创建结构", "建立结构", "manual", Map.of());
         PositionedNode node = new PositionedNode("root", null, 0, "阶段一", "根节点", "节点说明",
                 30, List.of(task, task, task), java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO);
         PlanResponse plan = new PlanResponse("plan-1", 1, confirmed.intentHash(), "实验",
@@ -110,6 +113,45 @@ class ExperimentCreationServiceTest {
         assertThrows(RuntimeException.class,
                 () -> service.materialize("session-3", 7L, "stable-key"));
         verify(repository, never()).finishMaterialization(any(), any(), any(), anyLong());
+    }
+
+    @Test
+    void materializationReturnsPersistedTaskIdsAndReplayReadsTheSameMaterializedExperiment() {
+        ConfirmedIntent confirmed = new ConfirmedIntent(
+                "0.1", "c".repeat(64), "2026-09-11T00:00:00Z",
+                Map.of("raw_request", "目标", "observable_outcome", "成果"));
+        PositionedTask plannedTask = new PositionedTask(null, "创建结构", "建立结构", "manual", Map.of());
+        PositionedNode plannedNode = new PositionedNode("root", null, 0, "阶段一", "根节点", "节点说明",
+                30, List.of(plannedTask), java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO);
+        PlanResponse plan = new PlanResponse("plan-1", 1, confirmed.intentHash(), "实验",
+                List.of("实验目的"), List.of(plannedNode));
+        var session = new CreationRepository.SessionRecord(
+                "session-4", 7L, "plan_ready", null, confirmed, 1, confirmed.intentHash(),
+                180, Difficulty.NORMAL, null, null, plan);
+        var replaySession = new CreationRepository.SessionRecord(
+                "session-4", 7L, "materialized", null, confirmed, 1, confirmed.intentHash(),
+                180, Difficulty.NORMAL, "stable-key", 10L, plan);
+        PositionedTask persistedTask = new PositionedTask(44L, plannedTask.title(), plannedTask.description(),
+                plannedTask.validationType(), plannedTask.validationConfig());
+        PositionedNode persistedNode = new PositionedNode("root", null, 0, "阶段一", "根节点", "节点说明",
+                30, List.of(persistedTask), java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, 30L);
+        var materialized = new CreationModels.MaterializedExperiment(10L, "实验", "实验目的", "普通", 180,
+                List.of(persistedNode));
+
+        when(repository.lock("session-4", 7L)).thenReturn(session, replaySession);
+        when(repository.insertExperiment(anyLong(), any(), any(), any(), any(), anyInt(), any())).thenReturn(10L);
+        when(repository.insertStage(10L, "阶段一", 0)).thenReturn(20L);
+        when(repository.insertNode(eq(10L), eq(20L), eq(null), eq(plannedNode), eq(0))).thenReturn(30L);
+        when(courseRepository.findExperiment(10L, 7L)).thenReturn(materialized);
+
+        var first = service.materialize("session-4", 7L, "stable-key");
+        var replay = service.materialize("session-4", 7L, "stable-key");
+
+        assertEquals(44L, first.nodes().get(0).tasks().get(0).taskId());
+        assertEquals(first, replay);
+        verify(courseRepository, org.mockito.Mockito.times(2)).findExperiment(10L, 7L);
+        verify(repository).insertTask(eq(10L), eq(30L), any(), eq(0));
+        verify(repository).finishMaterialization("session-4", "plan-1", "stable-key", 10L);
     }
 
     @Test

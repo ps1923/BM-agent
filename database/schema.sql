@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `email` VARCHAR(320) NOT NULL,
   `display_name` VARCHAR(100) NOT NULL,
+  `password_hash` VARCHAR(255) NULL,
   `role` VARCHAR(20) NOT NULL DEFAULT 'student',
   `status` VARCHAR(20) NOT NULL DEFAULT 'active',
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -19,6 +20,22 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `uq_users_email` (`email`),
   CONSTRAINT `ck_users_role` CHECK (`role` IN ('student', 'teacher', 'admin')),
   CONSTRAINT `ck_users_status` CHECK (`status` IN ('active', 'disabled'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `user_sessions` (
+  `id` CHAR(36) NOT NULL,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `token_hash` CHAR(64) NOT NULL,
+  `expires_at` DATETIME(6) NOT NULL,
+  `revoked_at` DATETIME(6) NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `last_seen_at` DATETIME(6) NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_user_sessions_token_hash` (`token_hash`),
+  KEY `idx_user_sessions_user_active` (`user_id`, `expires_at`, `revoked_at`),
+  CONSTRAINT `fk_user_sessions_user`
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
+    ON UPDATE RESTRICT ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `experiment_folders` (
@@ -77,6 +94,62 @@ CREATE TABLE IF NOT EXISTS `experiments` (
   CONSTRAINT `ck_experiments_zoom` CHECK (`canvas_zoom` > 0),
   CONSTRAINT `ck_experiments_published_at`
     CHECK (`status` <> 'published' OR `published_at` IS NOT NULL)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `courses` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `teacher_id` BIGINT UNSIGNED NOT NULL,
+  `name` VARCHAR(150) NOT NULL,
+  `invite_code` VARCHAR(16) NOT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'active',
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_courses_invite_code` (`invite_code`),
+  KEY `idx_courses_teacher_status` (`teacher_id`, `status`),
+  CONSTRAINT `fk_courses_teacher`
+    FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `ck_courses_status` CHECK (`status` IN ('active', 'archived'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `course_members` (
+  `course_id` BIGINT UNSIGNED NOT NULL,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'active',
+  `joined_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`course_id`, `student_id`),
+  KEY `idx_course_members_student_status` (`student_id`, `status`),
+  CONSTRAINT `fk_course_members_course`
+    FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+    ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_course_members_student`
+    FOREIGN KEY (`student_id`) REFERENCES `users` (`id`)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `ck_course_members_status` CHECK (`status` IN ('active', 'left'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `course_experiment_assignments` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `course_id` BIGINT UNSIGNED NOT NULL,
+  `experiment_id` BIGINT UNSIGNED NOT NULL,
+  `publisher_id` BIGINT UNSIGNED NOT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'published',
+  `published_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_course_experiment_assignment` (`course_id`, `experiment_id`),
+  KEY `idx_assignments_course_status` (`course_id`, `status`),
+  CONSTRAINT `fk_assignments_course`
+    FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+    ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_assignments_experiment`
+    FOREIGN KEY (`experiment_id`) REFERENCES `experiments` (`id`)
+    ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_assignments_publisher`
+    FOREIGN KEY (`publisher_id`) REFERENCES `users` (`id`)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `ck_assignments_status` CHECK (`status` IN ('published', 'archived'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `experiment_creation_sessions` (
@@ -358,7 +431,7 @@ CREATE TABLE IF NOT EXISTS `coding_workspaces` (
     FOREIGN KEY (`run_id`) REFERENCES `experiment_runs` (`id`)
     ON UPDATE RESTRICT ON DELETE CASCADE,
   CONSTRAINT `ck_coding_workspaces_status`
-    CHECK (`status` IN ('provisioning', 'running', 'stopped', 'error', 'expired')),
+    CHECK (`status` IN ('provisioning', 'starting', 'running', 'stopped', 'error', 'expired')),
   CONSTRAINT `ck_coding_workspaces_cpu`
     CHECK (`cpu_limit` IS NULL OR `cpu_limit` > 0),
   CONSTRAINT `ck_coding_workspaces_memory`
@@ -397,16 +470,21 @@ CREATE TABLE IF NOT EXISTS `workspace_files` (
 CREATE TABLE IF NOT EXISTS `workspace_snapshots` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `workspace_id` BIGINT UNSIGNED NOT NULL,
+  `node_id` BIGINT UNSIGNED NULL,
   `storage_key` VARCHAR(700) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs NOT NULL,
   `snapshot_type` VARCHAR(30) NOT NULL DEFAULT 'manual',
   `description` VARCHAR(500) NULL,
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_workspace_snapshots_key` (`workspace_id`, `storage_key`),
+  UNIQUE KEY `uq_workspace_snapshots_node_completion` (`workspace_id`, `node_id`, `snapshot_type`),
   KEY `idx_workspace_snapshots_created` (`workspace_id`, `created_at`),
   CONSTRAINT `fk_workspace_snapshots_workspace`
     FOREIGN KEY (`workspace_id`) REFERENCES `coding_workspaces` (`id`)
     ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_workspace_snapshots_node`
+    FOREIGN KEY (`node_id`) REFERENCES `experiment_nodes` (`id`)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
   CONSTRAINT `ck_workspace_snapshots_type`
     CHECK (`snapshot_type` IN ('manual', 'node_completion', 'autosave', 'system'))
 ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -484,4 +562,133 @@ CREATE TABLE IF NOT EXISTS `chat_messages` (
     CHECK (`role` IN ('user', 'assistant', 'system', 'tool')),
   CONSTRAINT `ck_chat_messages_type`
     CHECK (`message_type` IN ('normal', 'soften', 'hint', 'event'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `bug_cases` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `experiment_id` BIGINT UNSIGNED NOT NULL,
+  `run_id` BIGINT UNSIGNED NOT NULL,
+  `node_id` BIGINT UNSIGNED NULL,
+  `course_id` BIGINT UNSIGNED NULL,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `title` VARCHAR(200) NOT NULL,
+  `problem` MEDIUMTEXT NOT NULL,
+  `solution` MEDIUMTEXT NULL,
+  `technology_stack` VARCHAR(100) NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+  `visibility` VARCHAR(20) NOT NULL DEFAULT 'personal',
+  `vector_status` VARCHAR(20) NOT NULL DEFAULT 'not_indexed',
+  `chroma_document_id` VARCHAR(120) NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  KEY `idx_bug_cases_student_created` (`student_id`, `created_at`),
+  KEY `idx_bug_cases_course_status` (`course_id`, `status`),
+  CONSTRAINT `fk_bug_cases_run`
+    FOREIGN KEY (`run_id`, `experiment_id`) REFERENCES `experiment_runs` (`id`, `experiment_id`)
+    ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_bug_cases_node`
+    FOREIGN KEY (`node_id`, `experiment_id`) REFERENCES `experiment_nodes` (`id`, `experiment_id`)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `fk_bug_cases_course`
+    FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`)
+    ON UPDATE RESTRICT ON DELETE SET NULL,
+  CONSTRAINT `fk_bug_cases_student`
+    FOREIGN KEY (`student_id`) REFERENCES `users` (`id`)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `ck_bug_cases_status` CHECK (`status` IN ('pending', 'approved', 'rejected')),
+  CONSTRAINT `ck_bug_cases_visibility` CHECK (`visibility` IN ('personal', 'course')),
+  CONSTRAINT `ck_bug_cases_vector_status` CHECK (`vector_status` IN ('not_indexed', 'indexed', 'failed'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `bug_case_reviews` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `bug_case_id` BIGINT UNSIGNED NOT NULL,
+  `teacher_id` BIGINT UNSIGNED NOT NULL,
+  `decision` VARCHAR(20) NOT NULL,
+  `feedback` VARCHAR(1000) NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  KEY `idx_bug_case_reviews_case_created` (`bug_case_id`, `created_at`),
+  CONSTRAINT `fk_bug_case_reviews_case`
+    FOREIGN KEY (`bug_case_id`) REFERENCES `bug_cases` (`id`)
+    ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_bug_case_reviews_teacher`
+    FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `ck_bug_case_reviews_decision` CHECK (`decision` IN ('approved', 'rejected'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `diagnosis_tasks` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `run_id` BIGINT UNSIGNED NOT NULL,
+  `experiment_id` BIGINT UNSIGNED NOT NULL,
+  `workspace_id` BIGINT UNSIGNED NOT NULL,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'queued',
+  `result_json` MEDIUMTEXT NULL,
+  `error_message` VARCHAR(200) NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `started_at` DATETIME(6) NULL,
+  `completed_at` DATETIME(6) NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_diagnosis_tasks_run_status` (`run_id`, `student_id`, `status`),
+  CONSTRAINT `fk_diagnosis_tasks_run` FOREIGN KEY (`run_id`, `experiment_id`)
+    REFERENCES `experiment_runs` (`id`, `experiment_id`) ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_diagnosis_tasks_workspace` FOREIGN KEY (`workspace_id`) REFERENCES `coding_workspaces` (`id`)
+    ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_diagnosis_tasks_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `ck_diagnosis_tasks_status` CHECK (`status` IN ('queued', 'running', 'completed', 'failed', 'cancelled'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `code_patches` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `experiment_id` BIGINT UNSIGNED NOT NULL,
+  `run_id` BIGINT UNSIGNED NOT NULL,
+  `workspace_id` BIGINT UNSIGNED NOT NULL,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `description` VARCHAR(500) NULL,
+  `patch_json` MEDIUMTEXT NOT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `applied_at` DATETIME(6) NULL,
+  `applied_snapshot_id` BIGINT UNSIGNED NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_code_patches_run_status` (`run_id`, `status`),
+  CONSTRAINT `fk_code_patches_run`
+    FOREIGN KEY (`run_id`, `experiment_id`) REFERENCES `experiment_runs` (`id`, `experiment_id`)
+    ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_code_patches_workspace`
+    FOREIGN KEY (`workspace_id`) REFERENCES `coding_workspaces` (`id`)
+    ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_code_patches_student`
+    FOREIGN KEY (`student_id`) REFERENCES `users` (`id`)
+    ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `fk_code_patches_snapshot`
+    FOREIGN KEY (`applied_snapshot_id`) REFERENCES `workspace_snapshots` (`id`)
+    ON UPDATE RESTRICT ON DELETE SET NULL,
+  CONSTRAINT `ck_code_patches_status` CHECK (`status` IN ('pending', 'applied', 'rejected')),
+  CONSTRAINT `ck_code_patches_applied_at` CHECK (`status` <> 'applied' OR `applied_at` IS NOT NULL)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `teacher_reviews` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `course_id` BIGINT UNSIGNED NOT NULL,
+  `experiment_id` BIGINT UNSIGNED NOT NULL,
+  `run_id` BIGINT UNSIGNED NOT NULL,
+  `teacher_id` BIGINT UNSIGNED NOT NULL,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `rating` TINYINT UNSIGNED NULL,
+  `feedback` VARCHAR(2000) NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_teacher_reviews_run_teacher` (`run_id`, `teacher_id`),
+  KEY `idx_teacher_reviews_course_updated` (`course_id`, `updated_at`),
+  CONSTRAINT `fk_teacher_reviews_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_teacher_reviews_run` FOREIGN KEY (`run_id`, `experiment_id`) REFERENCES `experiment_runs` (`id`, `experiment_id`) ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_teacher_reviews_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `fk_teacher_reviews_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `ck_teacher_reviews_rating` CHECK (`rating` IS NULL OR (`rating` >= 0 AND `rating` <= 100))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,0 +1,447 @@
+{
+  "collectionName": "bm_hs_eval_1789814197",
+  "collectionId": "addf591b-c55e-4d15-878b-e70dfa178bdf",
+  "model": "deepseek-chat",
+  "cases": [
+    {
+      "id": "RAG-001",
+      "title": "启动类缺少 Spring Boot 注解",
+      "retrievedIds": [
+        "eval-RAG-001",
+        "eval-RAG-012",
+        "eval-RAG-014"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# 问题分析：Spring Boot 启动类缺少配置注解\n\n## 一、Bug 现象\n\n应用启动时报\"找不到 Spring Boot 配置\"，且启动类中**只有 main 方法**，没有任何 Spring Boot 相关注解。\n\n## 二、原因说明\n\nSpring Boot 应用的启动类必须通过注解来触发自动配置和组件扫描。仅有 `main` 方法是不够的，因为：\n\n1. **缺少 `@SpringBootApplication` 注解**\n   - 该注解是组合注解，包含：\n     - `@SpringBootConfiguration`：标识为配置类\n     - `@EnableAutoConfiguration`：启用 Spring Boot 自动配置机制\n     - `@ComponentScan`：扫描当前包及子包下的 Bean\n   - 没有它，Spring 容器无法被正确初始化，也就\"找不到配置\"。\n\n2. **缺少 `SpringApplication.run(...)` 调用**\n   - 即使有注解，`main` 方法内也必须调用 `SpringApplication.run` 来真正启动容器。\n\n3. **包结构问题（次要）**\n   - 启动类应位于根包，其他组件在其子包下，否则 `@ComponentScan` 扫不到。\n\n## 三、修复步骤",
+        "coverage": 1.0,
+        "seconds": 1.41,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：历史案例相关\n\n你给出的问题与历史案例 **“启动类缺少 Spring Boot 注解”** 高度相关，属于同一类问题；与 **“测试上下文启动失败”** 也有一定关联，因为二者都可能报 `Unable to find @SpringBootConfiguration`。  \n**“缺少 Python 模块”** 这个案例不相关，因为当前问题是 Java / Spring Boot 配置类识别问题，不是 Python 依赖缺失。\n\n---\n\n## 原因分析\n\nSpring Boot 启动时，需要找到一个带有 `@SpringBootConfiguration` 的配置类。通常这个注解包含在：\n\n```java\n@SpringBootApplication\n```\n\n而 `@SpringBootApplication` 等价于：\n\n```java\n@SpringBootConfiguration\n@EnableAutoConfiguration\n@ComponentScan\n```\n\n如果启动类只有：\n\n```java\npublic static void main(String[] args) {\n    ...\n}\n```\n\n但没有加 `@SpringBootApplication`，Spring Boot 就无法识别配置类，因此可能报：\n\n```text\nUnable to find a @SpringBootConfiguration\n```\n\n或者：\n\n```text\nFound multiple @SpringBootConfiguration annotated classes\n```\n\n常见原因包括：\n\n1. 启动类忘记添加 `@SpringBootApplication`。\n2. 启动类没有调用",
+        "coverage": 0.6667,
+        "seconds": 1.74,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-002",
+      "title": "组件扫描范围不包含业务包",
+      "retrievedIds": [
+        "eval-RAG-002",
+        "eval-RAG-013",
+        "eval-RAG-012"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# 问题分析：Controller 已注册但 Service 注入失败（多级包结构）\n\n## 一、可能的原因\n\n在 Spring / Spring Boot 项目中，Controller 能被扫描注册，但 Service 注入失败，且项目使用**多级包结构**，最常见的原因有以下几类：\n\n### 1. 组件扫描范围不匹配（最常见）\n- 启动类（`@SpringBootApplication`）所在包是扫描的**根包**。\n- 如果 Service 所在的包**不在启动类包及其子包下**，则不会被扫描，导致容器中没有该 Bean，注入时报 `NoSuchBeanDefinitionException`。\n- 而 Controller 恰好位于扫描范围内，所以能注册成功 —— 这正好解释了\"Controller 注册成功但 Service 注入失败\"的现象。\n\n### 2. Service 实现类缺少注解\n- 实现类上没有 `@Service`（或 `@Component` / `@Repository`），只有接口，容器里没有对应 Bean。\n\n### 3. 注入类型与 Bean 类型不匹配\n- 接口有多个实现类，未用 `@Qualifier` 或 `@Primary` 指定，导致 `NoUniqueBeanDefinitionException`。\n\n### 4.",
+        "coverage": 0.0,
+        "seconds": 1.63,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：历史案例相关\n\n**相关案例：** “组件扫描范围不包含业务包”\n\n**原因：** 当前问题与历史案例高度一致——Controller 已注册但 Service 注入失败，且项目使用多级包结构。这通常不是 Service 本身的问题，而是 **Spring 的组件扫描范围没有覆盖到 Service 所在的业务包**。\n\nSpring Boot 默认只扫描**主启动类所在包及其子包**。如果主类在 `com.example.demo`，而 Service 在 `com.example.demo.service.impl` 或更深的 `com.example.demo.module.user.service`，理论上应被扫描到；但一旦出现以下情况，扫描就会断裂：\n\n- 主启动类被放在了较浅或较偏的包，例如 `com.example` 或 `com.example.demo.web`；\n- Service 位于与主类**平行的兄弟包**，例如主类在 `com.example.app`，Service 在 `com.example.service`；\n- 多模块/多级包下，业务包不在主类包路径之下。\n\n此时 Controller 能注册（可能它恰好在扫描范围内，或被显式注册），但 Service 不在扫描范围内，于是注入失败，典型报错为：",
+        "coverage": 0.6667,
+        "seconds": 1.68,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-003",
+      "title": "缺少 Web Starter 依赖",
+      "retrievedIds": [
+        "eval-RAG-003",
+        "eval-RAG-013",
+        "eval-RAG-014"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# Bug 分析：`@RestController` 无法解析\n\n## 一、原因分析\n\n`@RestController` 是 Spring Web 模块（`spring-web`）提供的注解，位于包 `org.springframework.web.bind.annotation`。\n\n它**不属于** Spring Boot 的核心依赖，而是由 `spring-boot-starter-web` 传递引入的。\n\n你的 `pom.xml` 中只有测试依赖（例如 `spring-boot-starter-test`），因此：\n\n- 编译期 classpath 中不存在 `spring-web` 相关 jar；\n- IDE / 编译器找不到 `org.springframework.web.bind.annotation.RestController` 这个符号；\n- 报错通常表现为：`Cannot resolve symbol 'RestController'` 或 `package org.springframework.web.bind.annotation does not exist`。\n\n**根本原因：缺少 Web 起步依赖，而不是代码本身写错。**\n\n---\n\n## 二、修复步骤\n\n### 1. 在 `pom.xml` 的 `<dependencies>` 中加入 Web 起步依赖\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-web</artifactId>\n</dependency>\n```\n\n> 若项目已通过 `spring-boot-starter-parent` 管理",
+        "coverage": 1.0,
+        "seconds": 1.42,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：历史案例相关\n\n你给出的历史案例 **“缺少 Web Starter 依赖”** 与当前问题**高度相关**，甚至可以说是同一个问题。当前问题描述为：\n\n- `RestController` 注解无法解析\n- `pom.xml` 只有测试依赖\n\n这与历史案例中的关键词 `spring-boot-starter-web`、`pom.xml`、`依赖` 完全对应。\n\n另一个历史案例 **“MockMvc 未注册”** 与当前问题**不相关**，因为当前问题是编译期注解无法解析，而不是测试中 `MockMvc` 注入失败。  \n**“缺少 Python 模块”** 也**不相关**，因为当前是 Java / Spring Boot 项目，不是 Python 环境。\n\n---\n\n## 原因分析\n\n`@RestController` 来自 Spring Web 模块，通常由以下依赖提供：\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-web</artifactId>\n</dependency>\n```\n\n如果 `pom.xml` 中只有测试依赖，例如：\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-test</artifactId>",
+        "coverage": 1.0,
+        "seconds": 1.41,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-004",
+      "title": "服务端口被占用",
+      "retrievedIds": [
+        "eval-RAG-004",
+        "eval-RAG-001",
+        "eval-RAG-012"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# Bug 分析：应用启动失败，提示 `address already in use`\n\n## 一、原因说明\n\n`address already in use`（地址已被占用）是操作系统在应用尝试**绑定（bind）某个网络端口**时返回的错误，通常对应 `EADDRINUSE`（Linux/macOS）或 `WSAEADDRINUSE`（Windows）。\n\n根本原因是：**目标端口当前已被另一个进程占用**，导致新进程无法绑定同一地址+端口组合。常见触发场景：\n\n1. **上一次的应用进程没有正常退出**（崩溃、被挂起、后台残留），仍持有该端口。\n2. **同一应用被重复启动**（例如开了两个终端各跑一次）。\n3. **端口被其他程序占用**（如 8080 被别的服务、代理、IDE 内置服务器占用）。\n4. **TIME_WAIT 状态残留**：连接刚关闭，端口处于 `TIME_WAIT`，短时间内无法立即复用。\n5. **配置冲突**：多个服务配置了相同端口，或端口号写错。\n\n> 注意：该错误是**运行时/环境层面**的问题，不是代码逻辑错误，因此排查重点在“谁占用了端口”。\n\n---\n\n##",
+        "coverage": 0.3333,
+        "seconds": 1.88,
+        "error": null
+      },
+      "withRag": {
+        "answer": "# Bug 分析：应用启动失败并提示 address already in use\n\n## 一、案例相关性判断\n\n**相关。** 当前问题与历史案例「服务端口被占用」完全一致：\n\n- 当前问题：应用启动失败并提示 `address already in use`\n- 历史案例：服务端口被占用，同样报 `address already in use`\n- 解决关键词：`server.port`、端口占用、进程\n\n因此可直接复用该历史案例的排查与修复思路。另外两个历史案例（启动类缺少 `@SpringBootApplication`、测试上下文找不到 `@SpringBootConfiguration`）与本问题无关，因为它们的报错信息分别是「找不到 Spring Boot 配置」和「Unable to find a @SpringBootConfiguration」，与端口占用无关。\n\n## 二、原因说明\n\n`address already in use` 表示应用尝试绑定的端口（默认 8080）已被其他进程占用，操作系统拒绝再次绑定。常见原因：\n\n1. 上一次启动的应用进程未正常退出，仍占用端口。\n2. 同一台机器上启动了另一个使用相同端口的服务。\n3. 配置文件中 `server.port` 与其他服务冲突。\n4. 端口处于 `TIME_WAIT` 状态尚未",
+        "coverage": 1.0,
+        "seconds": 1.56,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-005",
+      "title": "请求体未绑定导致 400",
+      "retrievedIds": [
+        "eval-RAG-005",
+        "eval-RAG-011",
+        "eval-RAG-007"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# POST 接口收到 JSON 后参数对象为空或返回 400 —— 排查与修复\n\n由于你没有贴出具体代码，下面按最常见的几类原因给出分析框架。请对照你的实际代码定位。\n\n---\n\n## 一、常见原因分类\n\n### 1. 缺少 `@RequestBody` 注解\nSpring MVC 中，如果 Controller 方法参数是一个自定义对象，但没加 `@RequestBody`，框架会尝试用**表单/查询参数**的方式绑定（`ModelAttribute`），而不是解析 JSON 请求体。结果就是对象字段全为 null（对象\"为空\"）。\n\n```java\n// 错误\n@PostMapping(\"/user\")\npublic Result add(User user) { ... }\n\n// 正确\n@PostMapping(\"/user\")\npublic Result add(@RequestBody User user) { ... }\n```\n\n### 2. Content-Type 不匹配\n客户端发送时 `Content-Type` 不是 `application/json`（比如是 `text/plain` 或没设置），Spring 不会走 `MappingJackson2HttpMessageConverter`，导致 415 或参数为空。\n\n### 3. JSON 字段名与 Java 字段名不一致\nJSON 里是 `user_name`，Java 字段是 `userName`",
+        "coverage": 1.0,
+        "seconds": 1.77,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：历史案例相关\n\n**相关案例：** 「请求体未绑定导致 400」\n**相关原因：** 当前问题（POST 收到 JSON 后参数对象为空或返回 400）与该案例的症状、根因、解决关键词（`@RequestBody`、`Content-Type`、JSON）完全一致，属于同一类问题。其余两个案例（404 语义、校验注解）与当前症状不匹配，不采用。\n\n---\n\n## 一、原因分析\n\nPOST 接口收到 JSON 后参数对象为空或返回 400，通常由以下几类原因导致：\n\n1. **缺少 `@RequestBody` 注解**\n   控制器方法参数没有加 `@RequestBody`，Spring 会按表单/查询参数方式绑定，JSON 请求体不会被解析，导致参数对象为 `null` 或字段全空。\n\n2. **请求头 `Content-Type` 不正确**\n   客户端发送时未设置 `Content-Type: application/json`（例如发成了 `text/plain` 或 `application/x-www-form-urlencoded`），Spring 不会用 Jackson 反序列化请求体，从而 400 或参数为空。\n\n3. **JSON 结构与目标对象不匹配**\n   字段名拼写",
+        "coverage": 1.0,
+        "seconds": 1.44,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-006",
+      "title": "路径变量名称不一致",
+      "retrievedIds": [
+        "eval-RAG-006",
+        "eval-RAG-001",
+        "eval-RAG-016"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# Bug 分析：GET /tasks/1 路径变量缺失\n\n## 一、问题定位\n\n请求 `GET /tasks/1` 能进入 Controller，但提示路径变量缺失，说明**请求映射匹配成功，但参数绑定失败**。典型原因是 `@PathVariable` 注解使用不当，导致 Spring 无法把 URL 中的 `1` 绑定到方法参数。\n\n## 二、常见原因\n\n### 原因 1：`@PathVariable` 未指定名称，且编译时未保留参数名\n\n```java\n@GetMapping(\"/tasks/{id}\")\npublic Task getTask(@PathVariable Long id) { ... }\n```\n\n如果项目编译时**没有开启 `-parameters`**（Spring Boot 3 / Java 8+ 常见），Spring 无法从字节码中读取参数名 `id`，就会报：\n\n```\nName for argument of type [java.lang.Long] not specified,\nand parameter name information not found in class file either.\n```\n\n### 原因 2：注解名称与占位符不一致\n\n```java\n@GetMapping(\"/tasks/{id}\")\npublic Task getTask(@PathVariable(\"taskId\") Long id) { ... }\n```\n\n占位符是 `{id}`，注解却写 `taskId",
+        "coverage": 0.6667,
+        "seconds": 1.62,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：历史案例相关\n\n历史案例「路径变量名称不一致」与当前问题**高度相关**，属于同一类 Bug。其余两个案例（启动类缺少注解、相对路径依赖当前目录）与当前问题无关。\n\n---\n\n## 原因分析\n\n`GET /tasks/1` 请求能匹配到 Controller 方法，但 Spring 在绑定路径变量时找不到对应名称，典型原因是 **`@PathVariable` 的名称与 `@GetMapping` 路径模板中的占位符名称不一致**。\n\n常见两种写法错误：\n\n**错误写法 1：名称不匹配**\n```java\n@GetMapping(\"/tasks/{id}\")\npublic Task getTask(@PathVariable(\"taskId\") Long id) { ... }\n// 路径里是 {id}，注解里写的是 \"taskId\"，绑定失败\n```\n\n**错误写法 2：依赖参数名推断但编译未保留参数名**\n```java\n@GetMapping(\"/tasks/{id}\")\npublic Task getTask(@PathVariable Long taskId) { ... }\n// 参数名是 taskId，路径占位符是 id，且未显式指定名称\n```\n\nSpring 默认按「路径占位符名 == 参数名（或注解 value）」匹配，两者不一致就会抛出类似：",
+        "coverage": 1.0,
+        "seconds": 1.86,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-007",
+      "title": "校验注解没有生效",
+      "retrievedIds": [
+        "eval-RAG-007",
+        "eval-RAG-005",
+        "eval-RAG-011"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# 问题分析：请求字段为空仍进入业务层，参数校验未返回 400\n\n## 一、可能的原因\n\n根据描述，常见原因有以下几类：\n\n1. **校验注解缺失或未生效**\n   - Controller 方法参数上没有加 `@Valid` / `@Validated`。\n   - DTO 字段上缺少 `@NotNull`、`@NotBlank`、`@NotEmpty` 等约束注解。\n\n2. **校验依赖未引入**\n   - 缺少 `spring-boot-starter-validation`（Spring Boot 2.3+ 后不再默认包含）。\n\n3. **异常未被全局处理**\n   - 校验失败抛出 `MethodArgumentNotValidException`，但没有 `@RestControllerAdvice` 捕获并返回 400，导致被默认处理成 500 或直接放行。\n\n4. **参数绑定方式问题**\n   - 使用 `@RequestBody` 时校验才生效；若用 `@RequestParam` 或普通对象绑定，需要 `@Validated` 在类上。\n   - 嵌套对象未加 `@Valid`，导致内层字段不校验。\n\n5. **业务层未做兜底校验**\n   - 即使 Controller 校验失效",
+        "coverage": 1.0,
+        "seconds": 1.75,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：案例相关\n\n历史案例「校验注解没有生效」与当前问题**高度相关**：症状完全一致（字段为空仍进入业务层、未返回 400），解决关键词（`@Valid`、`@Validated`、校验）也直接对应。因此优先按该案例排查。\n\n另外两个案例相关性较低：\n- 「请求体未绑定导致 400」：症状是参数对象为空或直接 400，与\"未返回 400\"相反，仅在排查 `@RequestBody` 缺失时作参考。\n- 「不存在资源仍返回 200」：属于 404 语义问题，与参数校验无关，可忽略。\n\n---\n\n## 原因分析\n\n参数校验未生效、请求仍进入业务层，常见原因有以下几类（按出现频率排序）：\n\n1. **Controller 方法参数缺少 `@Valid` / `@Validated` 注解**\n   只在 DTO 字段上写了 `@NotNull`、`@NotBlank` 等约束，但没有在方法参数前加 `@Valid`，Spring 不会触发校验。\n\n2. **嵌套对象未加 `@Valid`**\n   校验的是外层对象，但真正为空的字段在嵌套对象里，嵌套字段前缺少 `",
+        "coverage": 1.0,
+        "seconds": 1.9,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-008",
+      "title": "Optional 直接取值抛异常",
+      "retrievedIds": [
+        "eval-RAG-008",
+        "eval-RAG-011",
+        "eval-RAG-013"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# Bug 分析：查询不存在的任务时抛出 NoSuchElementException\n\n## 一、问题定位\n\n`NoSuchElementException` 是 Java 中 `java.util` 包下的运行时异常，通常在以下场景抛出：\n\n- `Iterator.next()` 在无更多元素时被调用\n- `Optional.get()` 在值为空时被调用\n- `Scanner.next()` 在无输入时被调用\n- `List`/`Set` 等集合的某些操作\n\n在\"查询任务\"这一业务场景中，最典型的成因是：**查询结果为空时，直接对返回的 `Optional` 调用了 `.get()`，或对空集合进行了取元素操作**，而没有做存在性判断。\n\n## 二、原因说明\n\n假设查询逻辑类似如下（伪代码示意）：\n\n```java\npublic Task findTaskById(String id) {\n    return taskRepository.findById(id).get();  // 若不存在，抛 NoSuchElementException\n}\n```\n\n或：\n\n```java\nList<Task> tasks = taskRepository.findByName(name);\nreturn tasks.iterator().next();  // 空列表时抛 NoSuchElementException\n```\n\n**根本原因**：代码把\"查询不到\"这一**正常的业务分支",
+        "coverage": 0.3333,
+        "seconds": 1.76,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：案例相关\n\n历史案例 **“Optional 直接取值抛异常”** 与当前问题高度相关：两者都是查询不存在的任务时抛出 `NoSuchElementException`，解决关键词为 `Optional`、`orElseThrow`、`404`。因此可直接沿用该案例的排查与修复思路。\n\n---\n\n## 原因分析\n\n`NoSuchElementException` 通常来自 `java.util.Optional` 的以下调用：\n\n- `optional.get()`：当 Optional 为空时抛出 `NoSuchElementException`。\n- `optional.orElseThrow()`（无参版本）：同样在为空时抛出 `NoSuchElementException`。\n\n典型问题代码：\n\n```java\npublic Task getTask(Long id) {\n    Optional<Task> task = taskRepository.findById(id);\n    return task.get(); // 若不存在，抛 NoSuchElementException\n}\n```\n\n问题本质：\n\n1. 业务上“任务不存在”是**可预期的正常情况**，不应以未捕获的运行时异常形式冒泡。\n2. 直接 `get()` 丢失了语义，无法向调用方（Controller / 客户端）表达“资源不存在”。\n3. 缺少统一的异常到 HTTP 状态码的映射，导致要么 500，",
+        "coverage": 1.0,
+        "seconds": 1.55,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-009",
+      "title": "更新对象覆盖创建时间",
+      "retrievedIds": [
+        "eval-RAG-009",
+        "eval-RAG-014",
+        "eval-RAG-006"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# Bug 分析：更新任务后 `createdAt` 被覆盖\n\n## 一、问题现象\n\n更新任务（如修改标题、状态等）后，`createdAt` 字段被改写为当前时间，原始创建时间丢失。\n\n## 二、原因分析\n\n这类问题的根因通常集中在**更新逻辑对字段的处理方式**上，常见有以下几种：\n\n1. **整体覆盖式更新**\n   更新时用请求体（或新构造的对象）整体替换了原记录，而请求体里没有 `createdAt`（或为 `undefined`/`null`），导致该字段被覆盖或重置。\n\n2. **更新对象里显式写入了 `createdAt`**\n   在构造更新数据时写了 `createdAt: new Date()`，或复用了创建逻辑（create 的字段初始化被带进了 update）。\n\n3. **ORM/数据库默认值或钩子触发**\n   使用了 `save()` 全量保存、或模型上配置了 `default: Date.now` / `onUpdate` 之类的钩子，在更新时重新赋值。\n\n4. **时间戳自动更新机制**\n   某些 ORM 的 `updatedAt` 自动更新逻辑被误配到 `createdAt`",
+        "coverage": 0.6667,
+        "seconds": 1.75,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 相关性判断\n\n**相关。** 当前问题与历史案例「更新对象覆盖创建时间」完全一致：都是更新任务时 `createdAt` 被当前时间覆盖，导致原始创建时间丢失。解决关键词 `createdAt`、`更新`、`保留` 直接对应。\n\n另外两个历史案例（缺少 Python 模块、路径变量名称不一致）与当前问题无关，不采用。\n\n---\n\n## 原因分析\n\n典型成因是更新逻辑把「请求体中的对象」或「新建的对象」直接整体覆盖到数据库记录上，而 `createdAt` 字段被：\n\n1. **请求体传入**：前端/调用方在更新请求里带了 `createdAt`（或为空），后端直接保存；\n2. **实体默认值触发**：`createdAt` 字段上有 `@PrePersist` / 默认值 / `LocalDateTime.now()` 初始化，更新时被重新赋值；\n3. **整体覆盖更新**：使用 `save(requestBody)` 或 `BeanUtils.copyProperties(dto, entity)` 时把 `createdAt` 一并覆盖；\n4. **更新方法里显式重设**：`task.setCreatedAt(LocalDateTime.now())`。\n\n核心问题是：",
+        "coverage": 1.0,
+        "seconds": 1.57,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-010",
+      "title": "并发生成 ID 重复",
+      "retrievedIds": [
+        "eval-RAG-010",
+        "eval-RAG-009",
+        "eval-RAG-014"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# 并发创建数据导致重复 ID / 覆盖记录 —— Bug 分析\n\n## 一、问题现象\n\n多个请求同时创建数据时：\n- 出现**重复 ID**（两条记录拿到同一个 ID）\n- 或**覆盖已有记录**（后写入的覆盖先写入的）\n\n这是典型的**并发竞态条件（Race Condition）**。\n\n---\n\n## 二、常见原因分析\n\n由于你没有提供具体代码，以下是这类问题最常见的几类根因，请对照你的实现定位：\n\n### 1. 应用层「读-改-写」非原子\n典型模式：\n```\nid = max(existing_ids) + 1   // 读\nsave(id, data)               // 写\n```\n两个请求同时读到相同的 `max`，各自 +1 得到相同 ID，后写覆盖先写。\n\n### 2. 自增计数器放在内存中且非线程安全\n如 `self.counter += 1` 在多线程/多协程下不是原子操作，可能丢失更新。\n\n### 3. 数据库未使用自增主键 / 未加唯一约束\n- 主键由应用生成而非数据库生成\n- 没有 `UNIQUE` 约束，重复 ID 能",
+        "coverage": 0.3333,
+        "seconds": 1.91,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 相关性判断\n\n**相关。** 当前问题与历史案例「并发生成 ID 重复」高度一致：都是多个请求并发创建数据时出现重复 ID 或覆盖已有记录，解决关键词为 `AtomicLong`、`并发`、`唯一 ID`。其余两个历史案例（更新覆盖 createdAt、缺少 Python 模块）与本问题无关，不采用。\n\n## 原因分析\n\n并发创建时出现重复 ID / 覆盖记录，通常由以下原因之一导致：\n\n1. **非原子自增**：使用 `max(id) + 1`、`count + 1` 或普通 `int` 变量自增。读取与写回之间存在时间窗口，多个线程可能读到同一个旧值，生成相同 ID。\n2. **共享可变状态无同步**：ID 生成器是普通字段或静态变量，未加锁也未使用原子类，多线程下产生竞态。\n3. **先查后插（check-then-act）**：先查询 ID 是否存在再插入，两步之间被其他线程插入，导致重复或覆盖。\n4. **存储层无唯一约束**：数据库/集合没有对 ID 建唯一索引，重复 ID 直接覆盖旧记录而不报",
+        "coverage": 1.0,
+        "seconds": 1.82,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-011",
+      "title": "不存在资源仍返回 200",
+      "retrievedIds": [
+        "eval-RAG-011",
+        "eval-RAG-008",
+        "eval-RAG-005"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# Bug 分析：查询不存在的任务返回 200 + 空对象而非 404\n\n## 一、问题定位\n\n这是一个典型的 **RESTful 语义错误**：接口在资源不存在时没有正确区分「查询成功但结果为空」和「资源不存在」两种情况，导致 HTTP 状态码语义失真。\n\n常见根因有以下几种（需结合你的实际代码确认）：\n\n1. **查询逻辑用「返回空」代替「抛异常」**\n   例如 `findById` 返回 `null` / `Optional.empty()`，但控制器直接把它序列化成 `{}` 或 `null` 返回 200。\n\n2. **缺少存在性校验**\n   控制器没有判断查询结果是否为空，直接 `return ResponseEntity.ok(result)`。\n\n3. **异常被全局处理器吞掉**\n   抛出了 `NotFoundException`，但全局异常处理器把它映射成了 200，或者根本没注册对应处理器。\n\n4. **ORM 层行为差异**\n   某些 ORM 的 `getById` 返回代理对象而非抛异常，序列化时表现为空对象。\n\n---\n\n## 二、原因说明\n\nHTTP 状态码是接口契约的一部分：\n\n- **200 OK**：请求成功，且响应体是有效资源。\n- **",
+        "coverage": 0.6667,
+        "seconds": 2.02,
+        "error": null
+      },
+      "withRag": {
+        "answer": "# 分析：查询不存在的任务返回 200 和空对象，而不是 404\n\n## 一、案例相关性判断\n\n**相关。** 历史案例「不存在资源仍返回 200」与当前问题**完全一致**（同一现象、同一场景：查询不存在的任务）。历史案例「Optional 直接取值抛异常」属于**同一根因的另一种表现**——都是\"未对不存在资源做显式处理\"，只是当前问题选择了\"返回空对象\"而非\"抛异常\"。因此这两个案例都可作为修复参考。\n\n历史案例「请求体未绑定导致 400」与当前问题**无关**（那是 POST 请求体绑定问题，与查询不存在资源的响应码无关），不纳入本次修复。\n\n---\n\n## 二、原因分析\n\n典型代码形态（Spring Boot + JPA/Repository）：\n\n```java\n@GetMapping(\"/tasks/{id}\")\npublic Task getTask(@PathVariable Long id) {\n    return taskRepository.findById(id).orElse(null); // ← 问题所在\n}\n```\n\n问题链条：\n\n1. `findById(id)` 返回 `Optional<Task>`，任务不存在时是 `Optional.empty()`。\n2. 代码用 `.orElse(null)` 把空 Optional 转成了 `null`",
+        "coverage": 0.3333,
+        "seconds": 1.63,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-012",
+      "title": "测试上下文启动失败",
+      "retrievedIds": [
+        "eval-RAG-012",
+        "eval-RAG-014",
+        "eval-RAG-001"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# 问题分析：`Unable to find a @SpringBootConfiguration`\n\n## 一、原因\n\n这个错误通常出现在运行 Spring Boot 测试时，测试类无法定位到应用的启动配置类。核心原因是 **测试类所在包路径与 `@SpringBootConfiguration`（即 `@SpringBootApplication`）所在包路径不匹配**。\n\nSpring Boot 测试的默认行为是：从测试类所在的包开始，**向上（父包）逐级查找**带有 `@SpringBootConfiguration` 的类。如果找不到，就抛出该异常。\n\n常见触发场景：\n\n1. **包路径不一致**：测试类在 `com.example.demo.test`，而启动类在 `com.example.demo`，测试类向上查找时无法覆盖到启动类所在包（实际上这种情况能查到，但若测试类在完全无关的包，如 `com.example.other`，则查不到）。\n2. **测试类放在了启动类的同级或更外层包**，导致向上查找路径不包含启动类。\n3. **启动类缺少 `@SpringBootApplication` 注解**，或注解被误删。\n4. **多模块项目中**，测试模块没有依赖到包含启动类的模块。\n5. **启动类被",
+        "coverage": 0.3333,
+        "seconds": 1.85,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：历史案例相关\n\n历史案例「测试上下文启动失败」与当前问题**完全相关**，报错信息一致（`Unable to find a @SpringBootConfiguration`），解决关键词也吻合（`SpringBootTest`、`SpringBootConfiguration`、测试包）。\n\n另外两个历史案例**不相关**：\n- 「缺少 Python 模块」是 Python 依赖问题，与 Spring 无关。\n- 「启动类缺少 Spring Boot 注解」虽然也涉及 Spring Boot 配置，但那是**应用启动**报错，而当前是**测试运行**报错，触发场景不同（不过其根因思路可作参考）。\n\n---\n\n## 原因分析\n\n`@SpringBootTest` 在启动测试上下文时，需要向上（沿包路径）查找一个被 `@SpringBootConfiguration` 标注的类（通常就是带 `@SpringBootApplication` 的主启动类）。\n\n报 `Unable to find a @SpringBootConfiguration` 的常见原因：\n\n1. **测试类所在包与主启动类不在同一包或子包下**（最常见）\n   - 例如主启动类在 `com.example.demo`，测试类却在 `com.example.test` 或默认包，Spring 向上找不到",
+        "coverage": 1.0,
+        "seconds": 1.35,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-013",
+      "title": "MockMvc 未注册",
+      "retrievedIds": [
+        "eval-RAG-013",
+        "eval-RAG-012",
+        "eval-RAG-007"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# Controller 测试中 MockMvc 注入失败或字段为空 — Bug 分析\n\n## 一、常见原因\n\n在 Spring Boot 的 Controller 测试中，`MockMvc` 字段为空或注入失败，通常由以下几类原因导致：\n\n### 1. 缺少 `@AutoConfigureMockMvc`\n只写了 `@SpringBootTest` 或 `@WebMvcTest`，但没有加 `@AutoConfigureMockMvc`，Spring 不会自动配置 `MockMvc` Bean，字段自然为 `null`。\n\n### 2. 注解组合错误\n- 用了 `@WebMvcTest` 却同时手动 `new MockMvc()`，或反过来。\n- 用了 `@SpringBootTest` 但没指定 `webEnvironment`，导致 Web 上下文未加载。\n\n### 3. 注入方式错误\n- 字段没有 `@Autowired`，或用了 `@Mock`/`@InjectMocks`（Mockito 注解）去注入 `MockMvc`。\n- 字段是 `private` 且没有 `@Autowired`，Spring 不会注入。\n\n### 4. 测试类未被 Spring 管理\n- 测试类缺少 `@Run",
+        "coverage": 1.0,
+        "seconds": 1.78,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：历史案例相关\n\n你给出的历史案例中，**“MockMvc 未注册”** 与当前问题**直接相关**：两者都是 Controller 测试中 `MockMvc` 注入失败或字段为空。其余两个案例（测试上下文启动失败、校验注解未生效）属于相邻问题，可作为排查时的旁证，但不是主因。\n\n---\n\n## 一、可能原因\n\n`MockMvc` 注入失败或为 `null`，常见原因有以下几类：\n\n1. **缺少 `@AutoConfigureMockMvc`**\n   只写了 `@SpringBootTest`，但没有启用 MockMvc 自动配置，Spring 容器里不会注册 `MockMvc` Bean。\n\n2. **测试类没有使用 Spring 测试运行器**\n   例如漏写 `@SpringBootTest`，或用了 JUnit 4 的 `@RunWith` 与 JUnit 5 混用，导致依赖注入不生效。\n\n3. **注入方式错误**\n   - 字段没有 `@Autowired`；\n   - 用了 `@Mock` 而不是 `@Autowired`；\n   - 手动 `new MockMvc()`，绕过了 Spring 容器。\n\n4. **测试上下文启动",
+        "coverage": 1.0,
+        "seconds": 1.56,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-014",
+      "title": "缺少 Python 模块",
+      "retrievedIds": [
+        "eval-RAG-014",
+        "eval-RAG-015",
+        "eval-RAG-001"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# ModuleNotFoundError 分析与修复\n\n## 一、Bug 现象\n\n执行 Python 程序时抛出类似异常：\n\n```\nModuleNotFoundError: No module named 'xxx'\n```\n\n程序在导入阶段即中断，无法继续运行。\n\n## 二、原因分析\n\n`ModuleNotFoundError` 表示 Python 解释器在 `sys.path` 覆盖的搜索路径中找不到指定模块。常见成因：\n\n1. **依赖未安装**：代码 `import` 的第三方包从未通过 pip/conda 等安装。\n2. **装错环境**：包安装到了另一个 Python 解释器或虚拟环境，当前运行的解释器看不到。\n3. **包名与导入名不一致**：安装名和 `import` 名不同（如 `pip install Pillow` 但 `import PIL`）。\n4. **拼写/大小写错误**：模块名写错。\n5. **本地模块路径问题**：自建模块不在当前工作目录或 `sys.path` 中。\n\n本题场景对应第 1 类：**代码依赖未安装**。\n\n## 三、修复步骤\n\n### 1. 确认缺失的模块名\n从报错信息中提取 `No module named 'xxx'`",
+        "coverage": 0.6667,
+        "seconds": 1.49,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：案例相关\n\n历史案例中的 **“缺少 Python 模块”** 与当前问题**完全对应**，属于同一类故障；**“虚拟环境解释器不一致”** 也高度相关，因为 `ModuleNotFoundError` 经常不是“没装”，而是“装到了另一个解释器里”。  \n**“启动类缺少 Spring Boot 注解”** 属于 Java/Spring 场景，与当前 Python 依赖问题**不相关**，不应作为本次修复依据。\n\n---\n\n## 一、Bug 原因\n\n`ModuleNotFoundError: No module named 'xxx'` 表示 Python 在**当前运行程序所使用的解释器环境**中，找不到代码 import 的模块。常见原因有：\n\n1. **依赖确实未安装**  \n   项目需要 `requests`、`numpy`、`flask` 等第三方包，但当前环境没有安装。\n\n2. **安装到了错误的 Python 解释器 / 虚拟环境**  \n   例如终端里 `pip install requests` 装到了系统 Python，但运行程序用的是 `venv`、`conda` 或 IDE 内置解释器。\n\n3. **使用了 `pip` 而不是 `python -m pip`**  \n   `",
+        "coverage": 0.6667,
+        "seconds": 1.51,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-015",
+      "title": "虚拟环境解释器不一致",
+      "retrievedIds": [
+        "eval-RAG-015",
+        "eval-RAG-014",
+        "eval-RAG-003"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# Bug 分析：终端已安装依赖但运行程序仍提示找不到包\n\n## 一、可能原因\n\n由于你没有提供具体代码、项目结构和报错信息，以下是这类问题的常见原因分类，需要你对照实际情况定位：\n\n### 1. 安装到了错误的 Python 环境\n- 系统里存在多个 Python（如 `python`、`python3`、conda 环境、venv、pyenv）。\n- 你用 `pip install` 装到了 A 环境，但运行程序用的是 B 环境。\n- 典型表现：`pip list` 能看到包，但程序 `import` 失败。\n\n### 2. 包名与导入名不一致\n- 安装名 ≠ 导入名。例如：\n  - 安装 `pip install opencv-python`，导入 `import cv2`\n  - 安装 `pip install Pillow`，导入 `import PIL`\n  - 安装 `pip install scikit-learn`，导入 `import sklearn`\n- 这类情况不是 Bug，而是命名差异。\n\n### 3. 虚拟环境未激活\n- 依赖装在 venv/conda 里，但运行时用的是全局 Python。\n- 或激活了 venv，但 IDE/终端用的是",
+        "coverage": 0.3333,
+        "seconds": 1.61,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：案例相关\n\n当前问题“终端已经安装依赖，但运行程序仍提示找不到包”与历史案例**“虚拟环境解释器不一致”高度相关**，属于同一类根因：**安装依赖的解释器与运行程序的解释器不是同一个**。同时也部分关联“缺少 Python 模块”案例（依赖确实没装到运行环境里）。\n\n---\n\n## 原因分析\n\n“已安装依赖”但“运行报找不到包”，最常见的原因是**安装与运行使用了不同的 Python 解释器 / 环境**，具体表现为：\n\n1. **虚拟环境未激活或激活错**：`pip install` 装到了全局 Python，而运行用的是 venv（或反之）。\n2. **`pip` 与 `python` 指向不同解释器**：`pip` 属于 A 环境，`python` 属于 B 环境。\n3. **IDE / 运行配置指定了另一个解释器**：终端里装好了，但 IDE 运行时用的是它自己配置的解释器。\n4. **多版本 Python 并存**：`python`、`python3`、`py` 指向不同版本，依赖装到了另一个版本下。\n5. **依赖装到了用户目录或错误 site-p",
+        "coverage": 0.6667,
+        "seconds": 1.75,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-016",
+      "title": "相对路径依赖当前目录",
+      "retrievedIds": [
+        "eval-RAG-016",
+        "eval-RAG-017",
+        "eval-RAG-001"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# 从不同目录运行脚本时读取配置文件失败 — Bug 分析\n\n## 一、问题现象\n\n脚本在某个目录下运行正常，切换到其他目录（或通过绝对路径、其他工作目录）运行时，读取配置文件失败（报文件不存在 / 打开失败等）。\n\n## 二、根本原因\n\n这类 Bug 的典型原因是**使用了相对路径来定位配置文件**，而相对路径是相对于**当前工作目录（CWD）**解析的，不是相对于脚本文件所在目录。\n\n- 当你在脚本所在目录运行：CWD == 脚本目录，相对路径恰好命中，正常。\n- 当你在其他目录运行（例如 `cd /tmp && python /path/to/script.py`）：CWD 变成 `/tmp`，相对路径 `config.ini` 被解析为 `/tmp/config.ini`，找不到文件。\n\n关键点：**脚本文件位置**和**运行时工作目录**是两个不同的概念，相对路径只跟后者有关。\n\n## 三、修复步骤\n\n### 1. 定位问题代码\n找到读取配置文件的那一行，检查路径写法。典型问题写法：\n\n```python\n# 错误：依赖当前工作目录\nwith open(\"config.ini\") as f:\n    ...\n```",
+        "coverage": 0.6667,
+        "seconds": 1.42,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 相关性判断\n\n**相关。** 当前问题与历史案例“相对路径依赖当前目录”属于同一类问题：脚本用相对路径读取配置文件，而相对路径的解析基准是**进程当前工作目录（CWD）**，不是脚本所在目录。因此从不同目录运行时，路径解析结果不同，导致读取失败。\n\n（另外两个历史案例不相关：`UnicodeDecodeError` 是编码问题，Spring Boot 注解是 Java 启动类问题，均与本题现象不符。）\n\n---\n\n## 原因分析\n\n典型错误写法：\n\n```python\nwith open(\"config/settings.json\") as f:   # 相对路径\n    cfg = json.load(f)\n```\n\n- 相对路径 `config/settings.json` 会拼接在**当前工作目录**后面。\n- 在项目根目录运行 `python src/main.py` 时，CWD = 项目根，能找到文件。\n- 在 `src/` 目录运行 `python main.py`，或在其他目录运行 `python /path/to/src/main.py` 时，CWD 变了，路径就指向不存在的位置，抛出 `FileNotFoundError`。\n\n核心：**路径基准应是脚本文件位置（`__file__`），",
+        "coverage": 1.0,
+        "seconds": 1.53,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-017",
+      "title": "文本编码读取失败",
+      "retrievedIds": [
+        "eval-RAG-017",
+        "eval-RAG-014",
+        "eval-RAG-016"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# 中文配置文件读取报 UnicodeDecodeError 分析与修复\n\n## 一、Bug 现象\n\n读取中文配置文件时抛出 `UnicodeDecodeError`，典型报错形如：\n\n```\nUnicodeDecodeError: 'gbk' codec can't decode byte 0xXX in position N: illegal multibyte sequence\n```\n\n或\n\n```\nUnicodeDecodeError: 'utf-8' codec can't decode byte 0xXX in position N: invalid start byte\n```\n\n## 二、原因分析\n\n`UnicodeDecodeError` 的本质是：**用某种编码去解码字节流时，遇到了该编码无法解释的字节序列**。在中文配置文件场景下，常见原因有以下几类：\n\n### 1. 编码不匹配（最常见）\n- 文件实际以 **GBK/GB2312** 保存（Windows 记事本、部分编辑器默认），但代码用 `utf-8` 打开。\n- 或文件实际是 **UTF-8**，但代码在 Windows 上用了系统默认编码（`gbk`）打开。\n\n### 2. 使用了平台默认编码\nPython 中 `open(path)` 不指定 `encoding` 时，会",
+        "coverage": 0.6667,
+        "seconds": 1.26,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 相关性判断\n\n**相关。** 当前问题与历史案例「文本编码读取失败」属于同一类问题：读取中文配置文件时触发 `UnicodeDecodeError`，核心关键词一致（`encoding`、`utf-8`、文本）。另外两个历史案例（缺少 Python 模块、相对路径依赖当前目录）与本次报错类型不同，仅作参考，不直接适用。\n\n---\n\n## 原因分析\n\n`UnicodeDecodeError` 的本质是：**用错误的编码去解码字节流**。常见触发场景：\n\n1. **未显式指定编码**：`open()` 在 Windows 上默认使用系统区域编码（如 `gbk`/`cp936`），而配置文件实际是 UTF-8 保存的，中文多字节序列无法按 GBK 解码。\n2. **文件本身编码与读取编码不一致**：文件是 GBK/GB18030，却按 UTF-8 读取（或反之）。\n3. **文件带 BOM**：UTF-8 with BOM 用 `utf-8` 读取时，BOM 字符可能引发问题（应使用 `utf-8-sig`）。\n4. **跨平台差异**：Linux/m",
+        "coverage": 1.0,
+        "seconds": 1.45,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-018",
+      "title": "路由没有允许请求方法",
+      "retrievedIds": [
+        "eval-RAG-018",
+        "eval-RAG-005",
+        "eval-RAG-011"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# 405 Method Not Allowed 分析\n\n## 一、原因\n\n405 表示**服务器收到了请求，但该 URL 对应的路由不接受这个 HTTP 方法**。客户端发的是 POST，而 Flask 端该路径只注册了 GET（或其它方法），于是 Werkzeug 在路由匹配阶段就拒绝了。\n\n常见触发场景：\n\n1. **路由未声明 POST**\n   ```python\n   @app.route('/api/submit')          # 默认只允许 GET\n   def submit():\n       ...\n   ```\n   客户端 POST 过来 → 405。\n\n2. **methods 写错或漏写**\n   ```python\n   @app.route('/api/submit', methods=['GET'])   # 只写了 GET\n   ```\n\n3. **URL 路径不匹配，落到了另一个只支持 GET 的路由上**\n   例如客户端 POST `/api/submit/`，而注册的是 `/api/submit`（或反之），Flask 可能匹配到别的规则。\n\n4. **客户端实际发的是 GET**\n   比如 `requests.post` 写成了 `requests.get`，或前端 `fetch` 没写 `method: 'POST'`（默认 GET），此时服务端只注册了 POST 也会 405。",
+        "coverage": 1.0,
+        "seconds": 1.56,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：历史案例相关\n\n**相关案例：** “路由没有允许请求方法”（关键词：`methods`、`POST`、路由）\n\n**原因：** 该案例与当前问题完全对应。Flask 的 `405 Method Not Allowed` 表示路由存在，但该 URL 规则没有注册客户端使用的 HTTP 方法。Flask 默认只允许 `GET`（以及自动的 `HEAD`、`OPTIONS`），如果视图函数没有显式声明 `methods=['POST']`，POST 请求就会被拒绝。\n\n> 注：另外两个历史案例（请求体未绑定导致 400、不存在资源仍返回 200）与 405 无关，不适用于本次分析。\n\n---\n\n## 修复步骤\n\n1. **定位路由**：找到客户端请求的 URL 对应的视图函数（例如 `/tasks`、`/submit` 等）。\n2. **检查装饰器**：确认 `@app.route(...)` 或 `@bp.route(...)` 是否包含 `methods` 参数。\n3. **添加 POST 方法**：在装饰器中显式声明 `methods=['POST']`（如需同时支持 GET，则写 `methods=['GET', 'POST']`）。\n4. **",
+        "coverage": 1.0,
+        "seconds": 1.55,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-019",
+      "title": "跨域请求被浏览器拦截",
+      "retrievedIds": [
+        "eval-RAG-019",
+        "eval-RAG-004",
+        "eval-RAG-001"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# CORS 跨域问题分析与修复\n\n## 一、问题原因\n\n浏览器控制台出现 `CORS policy` 报错，本质是**浏览器的同源策略**在起作用：\n\n- 当前前端页面的源（协议 + 域名 + 端口）与后端接口的源**不一致**，即构成跨域请求。\n- 浏览器会先发送预检请求（`OPTIONS`），或在简单请求后检查响应头。\n- 如果后端响应中**缺少正确的 CORS 响应头**（如 `Access-Control-Allow-Origin`），浏览器就会拦截响应，前端拿不到数据。\n\n常见触发场景：\n- 前端 `http://localhost:3000`，后端 `http://localhost:8080`（端口不同）。\n- 前端 `http://localhost`，后端 `http://127.0.0.1`（域名不同）。\n- 协议不同（http vs https）。\n\n> 注意：CORS 是**浏览器行为**，用 Postman / curl 直接请求后端通常不会报错，这也是排查时的重要判断依据。\n\n---\n\n## 二、修复步骤\n\n### 方案 1：后端配置 CORS（推荐）\n\n**Node.js / Express：**\n```javascript",
+        "coverage": 1.0,
+        "seconds": 1.49,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：案例相关\n\n历史案例「跨域请求被浏览器拦截」与当前问题**完全对应**：问题描述、报错信息（CORS policy）、解决关键词（CORS、Access-Control-Allow-Origin、跨域）均一致。另外两个案例（端口占用、启动类缺注解）与 CORS 无关，不适用。\n\n---\n\n## 原因分析\n\n浏览器出于**同源策略**，当页面来源（协议 + 域名 + 端口）与后端接口来源不一致时，会拦截响应。典型触发场景：\n\n- 前端 `http://localhost:5173`（或 3000），后端 `http://localhost:8080` → 端口不同即跨域。\n- 后端未返回 `Access-Control-Allow-Origin` 响应头。\n- 非简单请求（如 `Content-Type: application/json`、带自定义头、PUT/DELETE）会先发 **OPTIONS 预检请求**，若后端未正确处理预检，也会报 CORS 错误。\n\n注意：CORS 是**浏览器端**的安全机制，用 Postman/curl 直接调接口通常不会报错——这可用于区分「真跨域」和「接口本身 500」。",
+        "coverage": 1.0,
+        "seconds": 1.48,
+        "error": null
+      }
+    },
+    {
+      "id": "RAG-020",
+      "title": "异步测试缺少异步插件",
+      "retrievedIds": [
+        "eval-RAG-020",
+        "eval-RAG-013",
+        "eval-RAG-012"
+      ],
+      "retrievalHit": true,
+      "noRag": {
+        "answer": "# pytest 运行 async 测试函数时提示未识别或直接跳过\n\n## 一、Bug 现象\n\n用 pytest 运行异步测试函数时，出现以下两类典型表现：\n\n1. **未识别 / 警告**：测试函数被收集到，但执行时报类似\n   `async def functions are not natively supported` 的警告，测试被标记为失败或跳过。\n2. **直接跳过**：测试函数被 pytest 收集后直接 skip，或者根本没被当作测试执行。\n\n## 二、原因分析\n\npytest 的默认测试运行器是**同步**的。当它遇到 `async def` 定义的测试函数时：\n\n- 调用该函数只会返回一个 **coroutine 对象**，并不会真正执行协程体；\n- pytest 不知道如何 await 这个协程，于是要么发出 \"async def functions are not natively supported\" 警告，要么直接跳过；\n- 结果就是协程体里的断言从未运行，测试形同虚设。\n\n根本原因是**缺少异步测试插件**（最常见是 `pytest-asyncio`），或者插件已安装但**未正确配置异步模式**。\n\n## 三、修复步骤\n\n### 步骤 1：确认并安装",
+        "coverage": 1.0,
+        "seconds": 1.78,
+        "error": null
+      },
+      "withRag": {
+        "answer": "## 判断：历史案例是否相关\n\n**相关。** 历史案例「异步测试缺少异步插件」与当前问题**完全对应**：\n\n- 问题现象一致：pytest 运行 async 测试函数时提示未识别或直接跳过。\n- 解决关键词一致：`pytest-asyncio`、`asyncio`、`pytest`。\n\n另外两个历史案例（MockMvc 未注册、测试上下文启动失败）属于 Spring/Java 测试范畴，与当前 Python 异步测试问题**不相关**，不采用。\n\n---\n\n## 原因分析\n\npytest 默认**不支持**直接运行 `async def` 测试函数。当测试函数被声明为 `async def` 时，pytest 会把它当作普通函数收集，但调用后返回的是一个 coroutine 对象，从未被 await，因此表现为：\n\n- 提示 `async def functions are not natively supported`（未识别）；\n- 或直接跳过 / 报 `coroutine was never awaited` 警告。\n\n根本原因是**缺少异步插件**（`pytest-asyncio`）或**未正确配置异步模式**。\n\n---\n\n## 修复步骤\n\n1. **安装异步插件**\n   ```bash\n   pip",
+        "coverage": 1.0,
+        "seconds": 1.6,
+        "error": null
+      }
+    }
+  ]
+}

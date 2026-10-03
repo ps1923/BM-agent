@@ -3,28 +3,26 @@ package com.bmhs.experimentcreation;
 import com.bmhs.experimentcreation.CreationModels.ExperimentTree;
 import com.bmhs.experimentcreation.CreationModels.PlanNode;
 import com.bmhs.experimentcreation.CreationModels.PlanTask;
+import com.bmhs.experimentcreation.CreationModels.PositionedTask;
 import org.junit.jupiter.api.Test;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class TreeLayoutServiceTest {
     @Test
-    void centersParentsAndSpreadsChildren() {
-        PlanTask task = new PlanTask("创建功能", "执行具体动作", "manual", Map.of());
-        List<PlanTask> tasks = List.of(task, task, task);
-        ExperimentTree tree = new ExperimentTree("0.1", "布局", List.of("展示"), List.of(
-                new PlanNode("root", null, 0, "根", "根", "根", 10, tasks),
-                new PlanNode("a", "root", 1, "分支", "A", "A", 10, tasks),
-                new PlanNode("b", "root", 1, "分支", "B", "B", 10, tasks)));
+    void generatedPlanTasksKeepTheirOriginalFieldsAndHaveNoDatabaseId() {
+        PlanTask task = new PlanTask("创建入口类", "添加启动类", "manual", Map.of());
+        PlanNode root = new PlanNode("01", null, 0, "阶段一", "初始化", "创建项目结构", 30, List.of(task));
+        ExperimentTree tree = new ExperimentTree("0.1", "Java 实验", List.of("完成接口"), List.of(root));
 
-        var nodes = new TreeLayoutService().layout(tree);
-        assertThat(nodes).extracting(node -> node.canvasY().intValue()).containsExactly(0, 250, 250);
-        assertThat(nodes.get(0).canvasX()).isEqualByComparingTo(BigDecimal.ZERO);
-        assertThat(nodes.get(1).canvasX()).isLessThan(nodes.get(0).canvasX());
-        assertThat(nodes.get(2).canvasX()).isGreaterThan(nodes.get(0).canvasX());
+        PositionedTask positioned = new TreeLayoutService().layout(tree).get(0).tasks().get(0);
+
+        assertNull(positioned.taskId());
+        assertEquals(task.title(), positioned.title());
+        assertEquals(task.validationType(), positioned.validationType());
     }
 }

@@ -48,15 +48,9 @@ public class CreationRepository {
     }
 
     public SessionRecord create(long userId) {
-        ensureUser(userId);
         String id = UUID.randomUUID().toString();
         jdbc.update("INSERT INTO experiment_creation_sessions (id, user_id) VALUES (?, ?)", id, userId);
         return find(id, userId);
-    }
-
-    private void ensureUser(long userId) {
-        jdbc.update("INSERT IGNORE INTO users (id, email, display_name, role, status) VALUES (?, ?, ?, 'student', 'active')",
-                userId, "demo-" + userId + "@bm.local", "演示学生 " + userId);
     }
 
     public SessionRecord find(String sessionId, long userId) {

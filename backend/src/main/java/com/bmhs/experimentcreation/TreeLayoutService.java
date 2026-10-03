@@ -2,6 +2,7 @@ package com.bmhs.experimentcreation;
 
 import com.bmhs.experimentcreation.CreationModels.ExperimentTree;
 import com.bmhs.experimentcreation.CreationModels.PlanNode;
+import com.bmhs.experimentcreation.CreationModels.PositionedTask;
 import com.bmhs.experimentcreation.CreationModels.PositionedNode;
 import org.springframework.stereotype.Component;
 
@@ -37,9 +38,11 @@ public class TreeLayoutService {
                 .sorted(Comparator.comparingInt(PlanNode::depth).thenComparing(PlanNode::key))
                 .forEach(node -> positioned.add(new PositionedNode(
                         node.key(), node.parentKey(), node.prerequisiteKeys(), node.unlockRule(), node.completionRule(),
-                        node.depth(), node.stage(), node.title(), node.description(), node.estimatedMinutes(), node.tasks(),
+                        node.depth(), node.stage(), node.title(), node.description(), node.estimatedMinutes(),
+                        node.tasks().stream().map(task -> new PositionedTask(null, task.title(), task.description(),
+                                task.validationType(), task.validationConfig())).toList(),
                         BigDecimal.valueOf(rawX.get(node.key()) - rootX),
-                        BigDecimal.valueOf(node.depth() * Y_GAP))));
+                        BigDecimal.valueOf(node.depth() * Y_GAP), null)));
         return positioned;
     }
 

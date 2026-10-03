@@ -1,0 +1,22 @@
+[
+  {"id":"RAG-001","technologyStack":"Java/Spring Boot","title":"启动类缺少 Spring Boot 注解","query":"应用启动时报找不到 Spring Boot 配置，启动类只有 main 方法。","goldKeywords":["SpringBootApplication","SpringApplication.run","启动类"]},
+  {"id":"RAG-002","technologyStack":"Java/Spring Boot","title":"组件扫描范围不包含业务包","query":"Controller 已注册但 Service 注入失败，项目使用了多级包结构。","goldKeywords":["ComponentScan","包路径","主类"]},
+  {"id":"RAG-003","technologyStack":"Java/Spring Boot","title":"缺少 Web Starter 依赖","query":"RestController 注解无法解析，pom.xml 只有测试依赖。","goldKeywords":["spring-boot-starter-web","pom.xml","依赖"]},
+  {"id":"RAG-004","technologyStack":"Java/Spring Boot","title":"服务端口被占用","query":"应用启动失败并提示 address already in use。","goldKeywords":["server.port","端口占用","进程"]},
+  {"id":"RAG-005","technologyStack":"Java/Spring Boot","title":"请求体未绑定导致 400","query":"POST 接口收到 JSON 后参数对象为空或返回 400。","goldKeywords":["RequestBody","Content-Type","JSON"]},
+  {"id":"RAG-006","technologyStack":"Java/Spring Boot","title":"路径变量名称不一致","query":"GET /tasks/1 调用 Controller 时提示路径变量缺失。","goldKeywords":["PathVariable","路径变量","变量名"]},
+  {"id":"RAG-007","technologyStack":"Java/Spring Boot","title":"校验注解没有生效","query":"请求字段为空仍能进入业务层，参数校验没有返回 400。","goldKeywords":["Valid","Validated","校验"]},
+  {"id":"RAG-008","technologyStack":"Java","title":"Optional 直接取值抛异常","query":"查询不存在的任务时出现 NoSuchElementException。","goldKeywords":["Optional","orElseThrow","404"]},
+  {"id":"RAG-009","technologyStack":"Java","title":"更新对象覆盖创建时间","query":"更新任务后 createdAt 被改成当前时间，原始创建时间丢失。","goldKeywords":["createdAt","更新","保留"]},
+  {"id":"RAG-010","technologyStack":"Java","title":"并发生成 ID 重复","query":"多个请求同时创建数据时出现重复 ID 或覆盖已有记录。","goldKeywords":["AtomicLong","并发","唯一 ID"]},
+  {"id":"RAG-011","technologyStack":"Java/Spring Boot","title":"不存在资源仍返回 200","query":"查询不存在的任务返回 200 和空对象，而不是 404。","goldKeywords":["ResponseStatus","404","NotFound"]},
+  {"id":"RAG-012","technologyStack":"Java/Spring Boot","title":"测试上下文启动失败","query":"测试运行时报 Unable to find a @SpringBootConfiguration。","goldKeywords":["SpringBootTest","SpringBootConfiguration","测试包"]},
+  {"id":"RAG-013","technologyStack":"Java/Spring Boot","title":"MockMvc 未注册","query":"Controller 测试中注入 MockMvc 失败或字段为空。","goldKeywords":["AutoConfigureMockMvc","MockMvc","SpringBootTest"]},
+  {"id":"RAG-014","technologyStack":"Python","title":"缺少 Python 模块","query":"执行 Python 程序时报 ModuleNotFoundError，代码依赖未安装。","goldKeywords":["pip","requirements.txt","ModuleNotFoundError"]},
+  {"id":"RAG-015","technologyStack":"Python","title":"虚拟环境解释器不一致","query":"终端已经安装依赖，但运行程序仍提示找不到包。","goldKeywords":["venv","python -m pip","解释器"]},
+  {"id":"RAG-016","technologyStack":"Python","title":"相对路径依赖当前目录","query":"从不同目录运行脚本时读取配置文件失败。","goldKeywords":["Path","__file__","工作目录"]},
+  {"id":"RAG-017","technologyStack":"Python","title":"文本编码读取失败","query":"读取中文配置文件时报 UnicodeDecodeError。","goldKeywords":["encoding","utf-8","文本"]},
+  {"id":"RAG-018","technologyStack":"Python/Flask","title":"路由没有允许请求方法","query":"客户端发送 POST，但 Flask 接口返回 405 Method Not Allowed。","goldKeywords":["methods","POST","路由"]},
+  {"id":"RAG-019","technologyStack":"Web","title":"跨域请求被浏览器拦截","query":"前端调用后端接口失败，浏览器控制台提示 CORS policy。","goldKeywords":["CORS","Access-Control-Allow-Origin","跨域"]},
+  {"id":"RAG-020","technologyStack":"Python/pytest","title":"异步测试缺少异步插件","query":"pytest 运行 async 测试函数时提示未识别或直接跳过。","goldKeywords":["pytest-asyncio","asyncio","pytest"]}
+]

@@ -35,6 +35,43 @@ management:
         include: health,info
 
 bm-hs:
-  demo-user-id: ${DEMO_USER_ID:1}
-  allow-demo-user-header: ${ALLOW_DEMO_USER_HEADER:false}
-  allowed-origin: ${ALLOWED_ORIGIN:http://127.0.0.1:8000}
+  allowed-origin: ${ALLOWED_ORIGIN:http://127.0.0.1:8000,http://localhost:8000}
+  auth:
+    cookie-name: ${AUTH_COOKIE_NAME:BM_SESSION}
+    session-duration: ${AUTH_SESSION_DURATION:PT24H}
+    secure-cookie: ${AUTH_SECURE_COOKIE:false}
+    same-site: ${AUTH_COOKIE_SAME_SITE:Lax}
+  workspace:
+    root-path: ${WORKSPACE_ROOT:/var/lib/bm-hs/workspaces}
+    runtime-image: ${WORKSPACE_RUNTIME_IMAGE:bm-hs/workspace:latest}
+    docker-binary: ${DOCKER_BINARY:docker}
+    cpu-limit: ${WORKSPACE_CPU_LIMIT:1.0}
+    memory-limit-mb: ${WORKSPACE_MEMORY_LIMIT_MB:1024}
+    max-file-bytes: ${WORKSPACE_MAX_FILE_BYTES:2000000}
+    max-snapshot-bytes: ${WORKSPACE_MAX_SNAPSHOT_BYTES:20000000}
+    start-timeout: ${WORKSPACE_START_TIMEOUT:PT30S}
+    command-timeout: ${WORKSPACE_COMMAND_TIMEOUT:PT30S}
+    max-output-bytes: ${WORKSPACE_MAX_OUTPUT_BYTES:65536}
+  ai:
+    base-url: ${DEEPSEEK_BASE_URL:}
+    api-key: ${DEEPSEEK_API_KEY:}
+    model: ${DEEPSEEK_MODEL:deepseek-chat}
+    timeout: ${DEEPSEEK_TIMEOUT:PT45S}
+    max-context-chars: ${GUIDANCE_MAX_CONTEXT_CHARS:120000}
+  diagnosis:
+    max-workers: ${DIAGNOSIS_MAX_WORKERS:2}
+    max-queue: ${DIAGNOSIS_MAX_QUEUE:16}
+    max-context-chars: ${DIAGNOSIS_MAX_CONTEXT_CHARS:180000}
+    max-file-chars: ${DIAGNOSIS_MAX_FILE_CHARS:30000}
+    max-patches: ${DIAGNOSIS_MAX_PATCHES:5}
+  embedding:
+    base-url: ${EMBEDDING_BASE_URL:}
+    api-key: ${EMBEDDING_API_KEY:}
+    model: ${EMBEDDING_MODEL:BAAI/bge-small-zh-v1.5}
+    protocol: ${EMBEDDING_PROTOCOL:openai}
+    timeout: ${EMBEDDING_TIMEOUT:PT20S}
+  chroma:
+    base-url: ${CHROMA_BASE_URL:}
+    collection: ${CHROMA_COLLECTION:bm_hs_bugs}
+    api-key: ${CHROMA_API_KEY:}
+    timeout: ${CHROMA_TIMEOUT:PT20S}

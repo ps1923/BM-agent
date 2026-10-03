@@ -69,6 +69,13 @@ public final class CreationModels {
             String validationType,
             Map<String, Object> validationConfig) {}
 
+    public record PositionedTask(
+            Long taskId,
+            String title,
+            String description,
+            String validationType,
+            Map<String, Object> validationConfig) {}
+
     public record PlanNode(
             String key,
             String parentKey,
@@ -114,9 +121,10 @@ public final class CreationModels {
             String title,
             String description,
             int estimatedMinutes,
-            List<PlanTask> tasks,
+            List<PositionedTask> tasks,
             BigDecimal canvasX,
-            BigDecimal canvasY) {
+            BigDecimal canvasY,
+            Long nodeId) {
         public PositionedNode {
             prerequisiteKeys = prerequisiteKeys == null
                     ? (parentKey == null ? List.of() : List.of(parentKey))
@@ -126,11 +134,18 @@ public final class CreationModels {
         }
 
         public PositionedNode(String key, String parentKey, int depth, String stage, String title,
-                              String description, int estimatedMinutes, List<PlanTask> tasks,
+                              String description, int estimatedMinutes, List<PositionedTask> tasks,
                               BigDecimal canvasX, BigDecimal canvasY) {
+            this(key, parentKey, depth, stage, title, description, estimatedMinutes, tasks,
+                    canvasX, canvasY, null);
+        }
+
+        public PositionedNode(String key, String parentKey, int depth, String stage, String title,
+                              String description, int estimatedMinutes, List<PositionedTask> tasks,
+                              BigDecimal canvasX, BigDecimal canvasY, Long nodeId) {
             this(key, parentKey, parentKey == null ? List.of() : List.of(parentKey),
                     "all_prerequisites_completed", "all_tasks_completed", depth, stage, title,
-                    description, estimatedMinutes, tasks, canvasX, canvasY);
+                    description, estimatedMinutes, tasks, canvasX, canvasY, nodeId);
         }
     }
 
