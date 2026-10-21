@@ -100,11 +100,46 @@ public class BugRepository {
         return rows.get(0);
     }
 
+    public RagModels.BugCaseView findApprovedForExperiment(long bugCaseId, long studentId, long experimentId) {
+        List<RagModels.BugCaseView> rows = jdbc.query("""
+                SELECT b.id, b.experiment_id, b.run_id, b.node_id, b.course_id, b.student_id,
+                       b.title, b.problem, b.solution, b.technology_stack, b.status, b.visibility, b.vector_status,
+                       b.chroma_document_id, b.created_at, b.updated_at
+                FROM bug_cases b
+                WHERE b.id = ? AND b.experiment_id = ? AND b.status = 'approved'
+                  AND EXISTS (SELECT 1 FROM experiment_runs r
+                              WHERE r.experiment_id = b.experiment_id AND r.student_id = ?)
+                """, this::toView, bugCaseId, experimentId, studentId);
+        if (rows.isEmpty()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "BUG_CASE_NOT_FOUND", "实验记忆不存在或无权访问");
+        }
+        return rows.get(0);
+    }
+
+    public List<RagModels.BugCaseView> findForExperimentForTeacher(long teacherId, long experimentId) {
+        assertTeacherCanReviewExperiment(teacherId, experimentId, null);
+        return jdbc.query("""
+                SELECT b.id, b.experiment_id, b.run_id, b.node_id, b.course_id, b.student_id,
+                       b.title, b.problem, b.solution, b.technology_stack, b.status, b.visibility, b.vector_status,
+                       b.chroma_document_id, b.created_at, b.updated_at
+                FROM bug_cases b
+                WHERE b.experiment_id = ? AND (
+                  b.course_id IN (SELECT c.id FROM courses c
+                                  JOIN course_experiment_assignments a ON a.course_id = c.id
+                                  WHERE c.teacher_id = ? AND c.status = 'active'
+                                    AND a.experiment_id = b.experiment_id AND a.status = 'published') OR
+                  (b.course_id IS NULL AND EXISTS (SELECT 1 FROM experiment_reviewers er
+                                                    WHERE er.experiment_id = b.experiment_id AND er.teacher_id = ?)
+                   AND NOT EXISTS (SELECT 1 FROM course_experiment_assignments ca
+                                   WHERE ca.experiment_id = b.experiment_id AND ca.status = 'published'))
+                ) ORDER BY b.updated_at DESC
+                """, this::toView, experimentId, teacherId, teacherId);
+    }
+
     @Transactional
     public RagModels.BugCaseView review(long bugCaseId, long teacherId, RagModels.BugReviewRequest request) {
         RagModels.BugCaseView bug = findById(bugCaseId);
-        if (bug.courseId() == null) throw new ApiException(HttpStatus.CONFLICT, "BUG_CASE_NO_COURSE", "个人案例不能进入课程知识库");
-        assertTeacherOwnsCourse(teacherId, bug.courseId());
+        assertTeacherCanReviewExperiment(teacherId, bug.experimentId(), bug.courseId());
         String status = request.decision();
         String visibility = "approved".equals(status) ? "course" : "personal";
         jdbc.update("UPDATE bug_cases SET status = ?, visibility = ?, vector_status = 'not_indexed', chroma_document_id = NULL WHERE id = ?",
@@ -149,6 +184,31 @@ public class BugRepository {
         Integer found = jdbc.query("SELECT 1 FROM courses WHERE id = ? AND teacher_id = ? AND status = 'active'",
                 rs -> rs.next() ? 1 : null, courseId, teacherId);
         if (found == null) throw new ApiException(HttpStatus.FORBIDDEN, "COURSE_FORBIDDEN", "无权访问该课程案例");
+    }
+
+    private void assertTeacherCanReviewExperiment(long teacherId, long experimentId, Long courseId) {
+        Integer found;
+        if (courseId != null) {
+            found = jdbc.query("""
+                    SELECT 1 FROM courses c JOIN course_experiment_assignments a ON a.course_id = c.id
+                    WHERE c.id = ? AND c.teacher_id = ? AND c.status = 'active'
+                      AND a.experiment_id = ? AND a.status = 'published'
+                    """, rs -> rs.next() ? 1 : null, courseId, teacherId, experimentId);
+        } else {
+            found = jdbc.query("""
+                    SELECT 1 WHERE EXISTS (
+                      SELECT 1 FROM course_experiment_assignments a JOIN courses c ON c.id = a.course_id
+                      WHERE a.experiment_id = ? AND a.status = 'published'
+                        AND c.teacher_id = ? AND c.status = 'active'
+                    ) OR (
+                      NOT EXISTS (SELECT 1 FROM course_experiment_assignments a
+                                  WHERE a.experiment_id = ? AND a.status = 'published') AND
+                      EXISTS (SELECT 1 FROM experiment_reviewers er
+                              WHERE er.experiment_id = ? AND er.teacher_id = ?)
+                    )
+                    """, rs -> rs.next() ? 1 : null, experimentId, teacherId, experimentId, experimentId, teacherId);
+        }
+        if (found == null) throw new ApiException(HttpStatus.FORBIDDEN, "EXPERIMENT_REVIEW_FORBIDDEN", "无权审核该实验的 Bug 记忆");
     }
 
     private boolean nodeBelongs(long experimentId, long nodeId) {

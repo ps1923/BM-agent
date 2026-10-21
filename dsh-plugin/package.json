@@ -1,0 +1,38 @@
+{
+  "name": "bm-hs-dsh-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "BM-HS learning-path and experiment-memory model tools for DeepSeek Harness",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./tools": "./src/tools.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "src/",
+    "test/",
+    "cordis.patch.yml",
+    "README.md",
+    "INTEGRATION-TEST.md"
+  ],
+  "engines": {
+    "node": ">=22",
+    "dsh": "=0.2.1-rc.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": "=0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "=0.2.1-rc.2"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2"
+  }
+}

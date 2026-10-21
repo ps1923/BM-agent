@@ -57,6 +57,13 @@ FROM (
   UNION ALL SELECT 'diagnosis_tasks'
   UNION ALL SELECT 'code_patches'
   UNION ALL SELECT 'teacher_reviews'
+  UNION ALL SELECT 'experiment_reviewers'
+  UNION ALL SELECT 'dsh_instances'
+  UNION ALL SELECT 'dsh_access_tokens'
+  UNION ALL SELECT 'dsh_refresh_tokens'
+  UNION ALL SELECT 'dsh_run_bindings'
+  UNION ALL SELECT 'code_submissions'
+  UNION ALL SELECT 'code_submission_files'
 ) AS expected
 LEFT JOIN `information_schema`.`TABLES` AS actual
   ON actual.`TABLE_SCHEMA` = 'BM-sql'
@@ -185,6 +192,8 @@ FROM (
   UNION ALL SELECT 'user_sessions', 'expires_at', 'datetime(6)', 'NO'
   UNION ALL SELECT 'experiment_plan_drafts', 'plan_json', 'json', 'NO'
   UNION ALL SELECT 'experiment_stages', 'sort_order', 'int', 'NO'
+  UNION ALL SELECT 'command_runs', 'client_command_id', 'char(36)', 'YES'
+  UNION ALL SELECT 'terminal_sessions', 'client_session_id', 'char(36)', 'YES'
 ) AS expected
 LEFT JOIN `information_schema`.`COLUMNS` AS actual
   ON actual.`TABLE_SCHEMA` = 'BM-sql'
@@ -216,6 +225,8 @@ FROM (
   UNION ALL SELECT 'course_members', 'PRIMARY', 0
   UNION ALL SELECT 'course_experiment_assignments', 'PRIMARY', 0
   UNION ALL SELECT 'course_experiment_assignments', 'uq_course_experiment_assignment', 0
+  UNION ALL SELECT 'command_runs', 'uq_command_runs_session_client_id', 0
+  UNION ALL SELECT 'terminal_sessions', 'uq_terminal_sessions_workspace_client_id', 0
 ) AS expected
 LEFT JOIN (
   SELECT `TABLE_NAME`, `INDEX_NAME`, MIN(`NON_UNIQUE`) AS `NON_UNIQUE`
@@ -243,6 +254,66 @@ FROM (
   FROM `information_schema`.`STATISTICS`
   WHERE `TABLE_SCHEMA` = 'BM-sql' AND `TABLE_NAME` = 'user_sessions'
     AND `INDEX_NAME` = 'uq_user_sessions_token_hash' AND `NON_UNIQUE` = 0
+) AS actual;
+
+SELECT CASE WHEN `column_list` = 'terminal_session_id,client_command_id' THEN 'OK' ELSE 'MISMATCH' END
+         AS `terminal_command_idempotency_index_columns_status`,
+       `column_list`
+FROM (
+  SELECT COALESCE(GROUP_CONCAT(`COLUMN_NAME` ORDER BY `SEQ_IN_INDEX` SEPARATOR ','), '') AS `column_list`
+  FROM `information_schema`.`STATISTICS`
+  WHERE `TABLE_SCHEMA` = 'BM-sql' AND `TABLE_NAME` = 'command_runs'
+    AND `INDEX_NAME` = 'uq_command_runs_session_client_id' AND `NON_UNIQUE` = 0
+) AS actual;
+
+SELECT CASE WHEN `column_list` = 'workspace_id,client_session_id' THEN 'OK' ELSE 'MISMATCH' END
+         AS `terminal_session_idempotency_index_columns_status`,
+       `column_list`
+FROM (
+  SELECT COALESCE(GROUP_CONCAT(`COLUMN_NAME` ORDER BY `SEQ_IN_INDEX` SEPARATOR ','), '') AS `column_list`
+  FROM `information_schema`.`STATISTICS`
+  WHERE `TABLE_SCHEMA` = 'BM-sql' AND `TABLE_NAME` = 'terminal_sessions'
+    AND `INDEX_NAME` = 'uq_terminal_sessions_workspace_client_id' AND `NON_UNIQUE` = 0
+) AS actual;
+
+SELECT CASE WHEN COUNT(*) = 1 THEN 'OK' ELSE 'MISMATCH' END AS `dsh_execution_mode_column_status`,
+       MAX(`COLUMN_TYPE`) AS `column_type`, MAX(`COLUMN_DEFAULT`) AS `legacy_default`
+FROM `information_schema`.`COLUMNS`
+WHERE `TABLE_SCHEMA` = 'BM-sql' AND `TABLE_NAME` = 'experiment_runs'
+  AND `COLUMN_NAME` = 'execution_mode' AND `IS_NULLABLE` = 'NO' AND `COLUMN_DEFAULT` = 'legacy';
+
+SELECT CASE WHEN COUNT(*) = 1 THEN 'OK' ELSE 'MISMATCH' END AS `dsh_teacher_review_course_nullable_status`
+FROM `information_schema`.`COLUMNS`
+WHERE `TABLE_SCHEMA` = 'BM-sql' AND `TABLE_NAME` = 'teacher_reviews'
+  AND `COLUMN_NAME` = 'course_id' AND `IS_NULLABLE` = 'YES';
+
+SELECT CASE WHEN COUNT(*) = 2 THEN 'OK' ELSE 'MISMATCH' END AS `dsh_instance_route_columns_status`,
+       GROUP_CONCAT(`COLUMN_NAME` ORDER BY `COLUMN_NAME` SEPARATOR ',') AS `columns`
+FROM `information_schema`.`COLUMNS`
+WHERE `TABLE_SCHEMA` = 'BM-sql' AND `TABLE_NAME` = 'dsh_instances'
+  AND `COLUMN_NAME` IN ('route_key', 'proxy_port');
+
+SELECT CASE WHEN COUNT(*) = 1 THEN 'OK' ELSE 'MISMATCH' END AS `dsh_refresh_token_table_status`
+FROM `information_schema`.`TABLES`
+WHERE `TABLE_SCHEMA` = 'BM-sql' AND `TABLE_NAME` = 'dsh_refresh_tokens' AND `TABLE_TYPE` = 'BASE TABLE';
+
+SELECT CASE WHEN `column_list` = 'experiment_id,student_id,execution_mode' THEN 'OK' ELSE 'MISMATCH' END
+         AS `dsh_run_mode_unique_index_status`, `column_list`
+FROM (
+  SELECT COALESCE(GROUP_CONCAT(`COLUMN_NAME` ORDER BY `SEQ_IN_INDEX` SEPARATOR ','), '') AS `column_list`
+  FROM `information_schema`.`STATISTICS`
+  WHERE `TABLE_SCHEMA` = 'BM-sql' AND `TABLE_NAME` = 'experiment_runs'
+    AND `INDEX_NAME` = 'uq_runs_experiment_student_mode' AND `NON_UNIQUE` = 0
+) AS actual;
+
+SELECT CASE WHEN `column_list` = 'instance_id,workspace_ref,session_ref' AND `non_unique` = 1 THEN 'OK' ELSE 'MISMATCH' END
+         AS `dsh_opaque_binding_index_status`, `column_list`, `non_unique`
+FROM (
+  SELECT COALESCE(GROUP_CONCAT(`COLUMN_NAME` ORDER BY `SEQ_IN_INDEX` SEPARATOR ','), '') AS `column_list`,
+         COALESCE(MIN(`NON_UNIQUE`), -1) AS `non_unique`
+  FROM `information_schema`.`STATISTICS`
+  WHERE `TABLE_SCHEMA` = 'BM-sql' AND `TABLE_NAME` = 'dsh_run_bindings'
+    AND `INDEX_NAME` = 'idx_dsh_run_binding_refs'
 ) AS actual;
 
 SELECT expected.`index_name`, COALESCE(actual.`column_list`, '') AS `column_list`,
@@ -347,26 +418,34 @@ ORDER BY expected.`table_name`, expected.`constraint_name`;
 
 SELECT expected.`table_name`, expected.`constraint_name`,
        CASE WHEN actual.`CHECK_CLAUSE` IS NULL THEN 'MISSING'
-            WHEN LOWER(REPLACE(REPLACE(REPLACE(REPLACE(actual.`CHECK_CLAUSE`, '`', ''), ' ', ''), '(', ''), ')', ''))
-                 = expected.`normalized_clause` THEN 'OK'
+            WHEN LOWER(REGEXP_REPLACE(
+                   REGEXP_REPLACE(
+                     REGEXP_REPLACE(
+                       REPLACE(actual.`CHECK_CLAUSE`, CONCAT(CHAR(92), ''''), ''''),
+                       '[[:space:]]+(?=(?:[^'']*''[^'']*'')*[^'']*$)', ''),
+                     '_utf8mb4(?='')(?=(?:[^'']*''[^'']*'')*[^'']*$)', ''),
+                   '`(?=(?:[^'']*''[^'']*'')*[^'']*$)', ''))
+                 = expected.`normalized_clause`
+             AND REGEXP_LIKE(actual.`CHECK_CLAUSE`, expected.`literal_pattern`, 'cn') THEN 'OK'
             ELSE 'MISMATCH' END AS `definition_status`
 FROM (
   SELECT 'coding_workspaces' AS `table_name`, 'ck_coding_workspaces_status' AS `constraint_name`,
-    'statusin(''provisioning'',''starting'',''running'',''stopped'',''error'',''expired'')' AS `normalized_clause`
-  UNION ALL SELECT 'courses', 'ck_courses_status', 'statusin(''active'',''archived'')'
-  UNION ALL SELECT 'course_members', 'ck_course_members_status', 'statusin(''active'',''left'')'
-  UNION ALL SELECT 'course_experiment_assignments', 'ck_assignments_status', 'statusin(''published'',''archived'')'
-  UNION ALL SELECT 'coding_workspaces', 'ck_coding_workspaces_cpu', 'cpu_limitisnullorcpu_limit>0'
-  UNION ALL SELECT 'coding_workspaces', 'ck_coding_workspaces_memory', 'memory_limit_mbisnullormemory_limit_mb>0'
-  UNION ALL SELECT 'coding_workspaces', 'ck_coding_workspaces_expired_at', 'status<>''expired''orexpires_atisnotnull'
-  UNION ALL SELECT 'bug_cases', 'ck_bug_cases_status', 'statusin(''pending'',''approved'',''rejected'')'
-  UNION ALL SELECT 'bug_cases', 'ck_bug_cases_visibility', 'visibilityin(''personal'',''course'')'
-  UNION ALL SELECT 'bug_cases', 'ck_bug_cases_vector_status', 'vector_statusin(''not_indexed'',''indexed'',''failed'')'
-  UNION ALL SELECT 'bug_case_reviews', 'ck_bug_case_reviews_decision', 'decisionin(''approved'',''rejected'')'
-  UNION ALL SELECT 'diagnosis_tasks', 'ck_diagnosis_tasks_status', 'statusin(''queued'',''running'',''completed'',''failed'',''cancelled'')'
-  UNION ALL SELECT 'code_patches', 'ck_code_patches_status', 'statusin(''pending'',''applied'',''rejected'')'
-  UNION ALL SELECT 'code_patches', 'ck_code_patches_applied_at', 'status<>''applied''orapplied_atisnotnull'
-  UNION ALL SELECT 'teacher_reviews', 'ck_teacher_reviews_rating', 'ratingisnullorrating>=0andrating<=100'
+    '(statusin(''provisioning'',''starting'',''running'',''stopped'',''error'',''expired''))' AS `normalized_clause`,
+    '.*''provisioning''.*''starting''.*''running''.*''stopped''.*''error''.*''expired''.*' AS `literal_pattern`
+  UNION ALL SELECT 'courses', 'ck_courses_status', '(statusin(''active'',''archived''))', '.*''active''.*''archived''.*'
+  UNION ALL SELECT 'course_members', 'ck_course_members_status', '(statusin(''active'',''left''))', '.*''active''.*''left''.*'
+  UNION ALL SELECT 'course_experiment_assignments', 'ck_assignments_status', '(statusin(''published'',''archived''))', '.*''published''.*''archived''.*'
+  UNION ALL SELECT 'coding_workspaces', 'ck_coding_workspaces_cpu', '((cpu_limitisnull)or(cpu_limit>0))', '.*'
+  UNION ALL SELECT 'coding_workspaces', 'ck_coding_workspaces_memory', '((memory_limit_mbisnull)or(memory_limit_mb>0))', '.*'
+  UNION ALL SELECT 'coding_workspaces', 'ck_coding_workspaces_expired_at', '((status<>''expired'')or(expires_atisnotnull))', '.*''expired''.*'
+  UNION ALL SELECT 'bug_cases', 'ck_bug_cases_status', '(statusin(''pending'',''approved'',''rejected''))', '.*''pending''.*''approved''.*''rejected''.*'
+  UNION ALL SELECT 'bug_cases', 'ck_bug_cases_visibility', '(visibilityin(''personal'',''course''))', '.*''personal''.*''course''.*'
+  UNION ALL SELECT 'bug_cases', 'ck_bug_cases_vector_status', '(vector_statusin(''not_indexed'',''indexed'',''failed''))', '.*''not_indexed''.*''indexed''.*''failed''.*'
+  UNION ALL SELECT 'bug_case_reviews', 'ck_bug_case_reviews_decision', '(decisionin(''approved'',''rejected''))', '.*''approved''.*''rejected''.*'
+  UNION ALL SELECT 'diagnosis_tasks', 'ck_diagnosis_tasks_status', '(statusin(''queued'',''running'',''completed'',''failed'',''cancelled''))', '.*''queued''.*''running''.*''completed''.*''failed''.*''cancelled''.*'
+  UNION ALL SELECT 'code_patches', 'ck_code_patches_status', '(statusin(''pending'',''applied'',''rejected''))', '.*''pending''.*''applied''.*''rejected''.*'
+  UNION ALL SELECT 'code_patches', 'ck_code_patches_applied_at', '((status<>''applied'')or(applied_atisnotnull))', '.*''applied''.*'
+  UNION ALL SELECT 'teacher_reviews', 'ck_teacher_reviews_rating', '((ratingisnull)or((rating>=0)and(rating<=100)))', '.*'
 ) AS expected
 LEFT JOIN `information_schema`.`CHECK_CONSTRAINTS` AS actual
   ON actual.`CONSTRAINT_SCHEMA` = 'BM-sql'
@@ -433,6 +512,9 @@ WITH expected AS (
       ORDER BY `ORDINAL_POSITION` SEPARATOR '|'), 256) AS `fingerprint`
   FROM `information_schema`.`COLUMNS`
   WHERE `TABLE_SCHEMA` = 'BM-sql'
+    -- Verified independently above so the pre-existing command_runs fingerprint stays stable.
+    AND NOT (`TABLE_NAME` = 'command_runs' AND `COLUMN_NAME` = 'client_command_id')
+    AND NOT (`TABLE_NAME` = 'terminal_sessions' AND `COLUMN_NAME` = 'client_session_id')
   GROUP BY `TABLE_NAME`
   UNION ALL
   SELECT 'IDX', `TABLE_NAME`,
@@ -441,6 +523,9 @@ WITH expected AS (
       ORDER BY `INDEX_NAME`, `SEQ_IN_INDEX` SEPARATOR '|'), 256)
   FROM `information_schema`.`STATISTICS`
   WHERE `TABLE_SCHEMA` = 'BM-sql'
+    -- Verified independently above so the pre-existing command_runs fingerprint stays stable.
+    AND NOT (`TABLE_NAME` = 'command_runs' AND `INDEX_NAME` = 'uq_command_runs_session_client_id')
+    AND NOT (`TABLE_NAME` = 'terminal_sessions' AND `INDEX_NAME` = 'uq_terminal_sessions_workspace_client_id')
   GROUP BY `TABLE_NAME`
   UNION ALL
   SELECT 'CHK', tc.`TABLE_NAME`,
@@ -528,13 +613,28 @@ SELECT CASE WHEN COUNT(*) = 1 THEN 'OK' ELSE 'MISMATCH' END AS `patch_applied_at
 FROM `information_schema`.`CHECK_CONSTRAINTS` AS `cc`
 WHERE `cc`.`CONSTRAINT_SCHEMA` = 'BM-sql'
   AND `cc`.`CONSTRAINT_NAME` = 'ck_code_patches_applied_at'
-  AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(`cc`.`CHECK_CLAUSE`, '`', ''), ' ', ''), '(', ''), ')', ''))
-      = 'status<>''applied''orapplied_atisnotnull';
+  AND LOWER(REGEXP_REPLACE(
+        REGEXP_REPLACE(
+          REGEXP_REPLACE(
+            REPLACE(`cc`.`CHECK_CLAUSE`, CONCAT(CHAR(92), ''''), ''''),
+            '[[:space:]]+(?=(?:[^'']*''[^'']*'')*[^'']*$)', ''),
+          '_utf8mb4(?='')(?=(?:[^'']*''[^'']*'')*[^'']*$)', ''),
+        '`(?=(?:[^'']*''[^'']*'')*[^'']*$)', ''))
+      = '((status<>''applied'')or(applied_atisnotnull))'
+  AND REGEXP_LIKE(`cc`.`CHECK_CLAUSE`, '.*''applied''.*', 'cn');
 
 SELECT CASE WHEN COUNT(*) = 1 THEN 'OK' ELSE 'MISMATCH' END AS `workspace_starting_status_constraint_status`,
        COUNT(*) AS `constraint_count`
 FROM `information_schema`.`CHECK_CONSTRAINTS` AS `cc`
 WHERE `cc`.`CONSTRAINT_SCHEMA` = 'BM-sql'
   AND `cc`.`CONSTRAINT_NAME` = 'ck_coding_workspaces_status'
-  AND LOWER(REPLACE(REPLACE(REPLACE(REPLACE(`cc`.`CHECK_CLAUSE`, '`', ''), ' ', ''), '(', ''), ')', ''))
-      = 'statusin(''provisioning'',''starting'',''running'',''stopped'',''error'',''expired'')';
+  AND LOWER(REGEXP_REPLACE(
+        REGEXP_REPLACE(
+          REGEXP_REPLACE(
+            REPLACE(`cc`.`CHECK_CLAUSE`, CONCAT(CHAR(92), ''''), ''''),
+            '[[:space:]]+(?=(?:[^'']*''[^'']*'')*[^'']*$)', ''),
+          '_utf8mb4(?='')(?=(?:[^'']*''[^'']*'')*[^'']*$)', ''),
+        '`(?=(?:[^'']*''[^'']*'')*[^'']*$)', ''))
+      = '(statusin(''provisioning'',''starting'',''running'',''stopped'',''error'',''expired''))'
+  AND REGEXP_LIKE(`cc`.`CHECK_CLAUSE`,
+      '.*''provisioning''.*''starting''.*''running''.*''stopped''.*''error''.*''expired''.*', 'cn');

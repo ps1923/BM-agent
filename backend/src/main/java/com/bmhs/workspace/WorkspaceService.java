@@ -86,6 +86,14 @@ public class WorkspaceService {
     private static final Pattern URI_CREDENTIALS = Pattern.compile("(?i)(://[^:/@\\s]+:)[^@/\\s]+@");
     private static final Pattern BEARER_CREDENTIAL = Pattern.compile("(?i)\\bBearer\\s+[A-Za-z0-9._~+/-]+=*");
     private static final Pattern CLOUD_ACCESS_KEY = Pattern.compile("\\b(?:AKIA|ASIA)[A-Z0-9]{16}\\b");
+    private static final Pattern PRIVATE_KEY_BLOCK = Pattern.compile(
+            "-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\\s\\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern COMMON_TOKEN = Pattern.compile(
+            "(?i)\\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|"
+                    + "glpat-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|"
+                    + "(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}|sk-[A-Za-z0-9_-]{20,}|"
+                    + "AIza[0-9A-Za-z_-]{35})\\b");
     private final WorkspaceRepository repository;
     private final WorkspaceTemplateService templateService;
     private final WorkspaceRuntime runtime;
@@ -166,6 +174,11 @@ public class WorkspaceService {
         return repository.toView(run);
     }
 
+    public RunView createDesktopRun(AuthenticatedUser user, long experimentId) {
+        requireStudent(user);
+        return repository.toView(repository.createOrFindDesktopRun(experimentId, user.id()));
+    }
+
     private void ensureTemplate(WorkspaceRecord workspace) {
         Path root = safeRoot(workspace.storagePath());
         try {
@@ -200,7 +213,7 @@ public class WorkspaceService {
                 .anyMatch(node -> node.nodeId() == nodeId && !"completed".equals(node.status()));
         RunProgressView progress = repository.updateNodeProgress(runId, user.id(), nodeId,
                 request.status(), request.progressPercent());
-        if (newlyCompleting) {
+        if (newlyCompleting && "server".equals(run.workspace().workspaceType())) {
             WorkspaceRecord workspace = run.workspace();
             withWorkspacePaused(workspace, () -> {
                 ensureNodeCompletionSnapshot(workspace, nodeId);
@@ -301,10 +314,13 @@ public class WorkspaceService {
         return Set.of("java", "py", "js", "jsx", "ts", "tsx", "c", "h", "cc", "cpp", "hpp",
                 "go", "rs", "rb", "php", "vue", "kt", "kts", "scala", "swift", "cs", "m", "mm",
                 "md", "txt", "html", "css", "sql", "sh", "bat", "ps1").contains(name.substring(dot + 1))
-                && !isSensitiveEvidenceName(name);
+                && !isSensitiveWorkspaceFile(name);
     }
 
-    private boolean isSensitiveEvidenceName(String name) {
+    public static boolean isSensitiveWorkspaceFile(String path) {
+        if (path == null || path.isBlank()) return true;
+        int separator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        String name = path.substring(separator + 1).toLowerCase(Locale.ROOT);
         return name.equals(".env") || name.startsWith(".env.")
                 || name.contains("secret") || name.contains("credential")
                 || name.endsWith(".pem") || name.endsWith(".key");
@@ -340,7 +356,9 @@ public class WorkspaceService {
                     Matcher.quoteReplacement(sensitiveValue.group(1) + "[REDACTED]"));
         }
         sensitiveValue.appendTail(sanitized);
-        String redacted = URI_CREDENTIALS.matcher(sanitized).replaceAll("$1[REDACTED]@");
+        String redacted = PRIVATE_KEY_BLOCK.matcher(sanitized).replaceAll("[REDACTED]");
+        redacted = COMMON_TOKEN.matcher(redacted).replaceAll("[REDACTED]");
+        redacted = URI_CREDENTIALS.matcher(redacted).replaceAll("$1[REDACTED]@");
         redacted = BEARER_CREDENTIAL.matcher(redacted).replaceAll("Bearer [REDACTED]");
         return CLOUD_ACCESS_KEY.matcher(redacted).replaceAll("[REDACTED]");
     }
@@ -628,7 +646,7 @@ public class WorkspaceService {
             String normalized = normalizePath(relativePath);
             rejectReservedWorkspacePath(normalized);
             String fileName = displayName(normalized).toLowerCase(Locale.ROOT);
-            if (isSensitiveEvidenceName(fileName)) return false;
+            if (isSensitiveWorkspaceFile(normalized)) return false;
             if (WORKSPACE_INDEXABLE_NAMES.contains(fileName)) return true;
             int extensionStart = fileName.lastIndexOf('.');
             return extensionStart > 0 && WORKSPACE_INDEXABLE_EXTENSIONS.contains(fileName.substring(extensionStart + 1));
@@ -1238,6 +1256,10 @@ public class WorkspaceService {
     private WorkspaceRecord accessibleWorkspace(AuthenticatedUser user, long workspaceId) {
         requireStudent(user);
         WorkspaceRecord workspace = repository.findWorkspace(workspaceId, user.id());
+        if (!"server".equals(workspace.workspaceType())) {
+            throw new ApiException(HttpStatus.CONFLICT, "DESKTOP_WORKSPACE_IS_LOCAL",
+                    "本地桌面工作区只能由学生桌面端访问，服务器不会读取学生电脑路径");
+        }
         if (!"running".equals(workspace.status())) {
             throw new ApiException(HttpStatus.CONFLICT, "WORKSPACE_NOT_READY", "工作区尚未就绪");
         }

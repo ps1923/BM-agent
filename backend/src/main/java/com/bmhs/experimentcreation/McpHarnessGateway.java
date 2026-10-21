@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
@@ -53,27 +54,39 @@ public class McpHarnessGateway implements HarnessGateway {
     }
 
     private <T> T invoke(String toolName, Map<String, Object> arguments, Class<T> resultType) {
-        McpSyncClient client = null;
+        List<McpSyncClient> providers = new ArrayList<>();
+        boolean discoveryFailed = false;
         for (McpSyncClient candidate : clients) {
             try {
-                boolean providesTool = candidate.listTools().tools().stream()
+                McpSchema.ListToolsResult tools = candidate.listTools();
+                boolean providesTool = tools != null && tools.tools() != null && tools.tools().stream()
                         .anyMatch(tool -> toolName.equals(tool.name()));
-                if (providesTool) {
-                    client = candidate;
-                    break;
-                }
-            } catch (RuntimeException ignored) {
+                if (providesTool) providers.add(candidate);
+            } catch (RuntimeException exception) {
+                discoveryFailed = true;
                 // One unavailable Harness must not hide a healthy, independently registered one.
             }
         }
-        if (client == null) {
+        if (providers.size() > 1) {
+            logger.error("Multiple MCP Harnesses provide the same tool (tool={}, provider_count={}, category=ambiguous)",
+                    toolName, providers.size());
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "HARNESS_TOOL_AMBIGUOUS", "存在多个提供 " + toolName + " 的 Harness，已停止调用以避免路由错误");
+        }
+        if (providers.isEmpty() && discoveryFailed) {
+            logger.warn("MCP Harness tool discovery failed without a healthy provider (tool={}, category=discovery_failed)",
+                    toolName);
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "HARNESS_DISCOVERY_FAILED", "暂时无法确认 " + toolName + " 的 Harness，请稍后重试");
+        }
+        if (providers.isEmpty()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,
                     "HARNESS_UNAVAILABLE", "未找到提供 " + toolName + " 的 Harness");
         }
 
         McpSchema.CallToolResult result;
         try {
-            result = client.callTool(new McpSchema.CallToolRequest(toolName, arguments));
+            result = providers.get(0).callTool(new McpSchema.CallToolRequest(toolName, arguments));
         } catch (RuntimeException exception) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "HARNESS_CALL_FAILED",
                     "Harness 调用失败，请稍后重试");

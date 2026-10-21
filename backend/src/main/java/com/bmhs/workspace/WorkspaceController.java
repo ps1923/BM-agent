@@ -33,6 +33,11 @@ public class WorkspaceController {
         return ResponseEntity.ok(service.createRun(user, experimentId));
     }
 
+    @PostMapping("/desktop/experiments/{experimentId:\\d+}/runs")
+    public ResponseEntity<RunView> createDesktopRun(@PathVariable long experimentId, AuthenticatedUser user) {
+        return ResponseEntity.ok(service.createDesktopRun(user, experimentId));
+    }
+
     @GetMapping("/runs/{runId:\\d+}")
     public ResponseEntity<RunView> getRun(@PathVariable long runId, AuthenticatedUser user) {
         return ResponseEntity.ok(service.getRun(user, runId));

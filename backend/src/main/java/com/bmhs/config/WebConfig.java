@@ -1,6 +1,7 @@
 package com.bmhs.config;
 
 import com.bmhs.auth.CurrentUserArgumentResolver;
+import com.bmhs.dsh.DshPrincipalArgumentResolver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -16,11 +17,14 @@ import java.util.Locale;
 public class WebConfig implements WebMvcConfigurer {
     private final List<String> allowedOrigins;
     private final CurrentUserArgumentResolver currentUserArgumentResolver;
+    private final DshPrincipalArgumentResolver dshPrincipalArgumentResolver;
 
     public WebConfig(@Value("${bm-hs.allowed-origin:http://127.0.0.1:8000,http://localhost:8000}") String allowedOrigin,
-                     CurrentUserArgumentResolver currentUserArgumentResolver) {
+                     CurrentUserArgumentResolver currentUserArgumentResolver,
+                     DshPrincipalArgumentResolver dshPrincipalArgumentResolver) {
         this.allowedOrigins = parseAllowedOrigins(allowedOrigin);
         this.currentUserArgumentResolver = currentUserArgumentResolver;
+        this.dshPrincipalArgumentResolver = dshPrincipalArgumentResolver;
     }
 
     static List<String> parseAllowedOrigins(String configuredOrigins) {
@@ -85,5 +89,6 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
         resolvers.add(currentUserArgumentResolver);
+        resolvers.add(dshPrincipalArgumentResolver);
     }
 }

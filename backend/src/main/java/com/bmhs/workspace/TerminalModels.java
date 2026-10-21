@@ -15,4 +15,8 @@ public final class TerminalModels {
 
     public record CommandView(long id, long terminalSessionId, String commandText, String status,
                               Integer exitCode, String output, Instant createdAt) {}
+
+    public record CommandRecord(long id, long terminalSessionId, String commandText, String workingDirectory,
+                                String status, Integer exitCode, String outputStorageKey, String storagePath,
+                                Instant createdAt) {}
 }

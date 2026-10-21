@@ -96,7 +96,7 @@ class PlanNode(ContractModel):
     stage: str = Field(min_length=2, max_length=150)
     title: str = Field(min_length=2, max_length=150)
     description: str = Field(min_length=2)
-    estimated_minutes: int = Field(gt=0, le=1440)
+    estimated_minutes: int = Field(ge=15, le=1440)
     tasks: list[PlanTask] = Field(min_length=3, max_length=7)
 
 

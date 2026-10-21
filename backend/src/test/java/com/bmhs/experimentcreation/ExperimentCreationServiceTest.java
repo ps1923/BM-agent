@@ -2,6 +2,7 @@ package com.bmhs.experimentcreation;
 
 import com.bmhs.course.CourseRepository;
 import com.bmhs.experimentcreation.CreationModels.ConfirmedIntent;
+import com.bmhs.experimentcreation.CreationModels.ConfigurationRequest;
 import com.bmhs.experimentcreation.CreationModels.Difficulty;
 import com.bmhs.experimentcreation.CreationModels.ExperimentTree;
 import com.bmhs.experimentcreation.CreationModels.PlanResponse;
@@ -13,6 +14,13 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,6 +35,9 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
 import org.mockito.ArgumentCaptor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.times;
 
 class ExperimentCreationServiceTest {
     private CreationRepository repository;
@@ -70,6 +81,98 @@ class ExperimentCreationServiceTest {
 
         verify(harness).generateTree(confirmed, 180, Difficulty.NORMAL);
         verify(harness, never()).clarify(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void repeatedPlanRequestReturnsStoredPlanWithoutCallingHarnessAgain() {
+        ConfirmedIntent confirmed = new ConfirmedIntent(
+                "0.1", "d".repeat(64), "2026-09-11T00:00:00Z", Map.of("raw_request", "目标"));
+        List<PositionedNode> nodes = List.of();
+        PlanResponse stored = new PlanResponse("plan-1", 1, confirmed.intentHash(), "实验", List.of("成果"), nodes);
+        var session = new CreationRepository.SessionRecord("session-ready", 7L, "plan_ready", null,
+                confirmed, 2, confirmed.intentHash(), 180, Difficulty.NORMAL, null, null, stored);
+        when(transactions.snapshot("session-ready", 7L)).thenReturn(session);
+
+        PlanResponse result = service.generatePlan("session-ready", 7L);
+
+        assertSame(stored, result);
+        verify(harness, never()).generateTree(any(), anyInt(), any());
+        verify(transactions, never()).savePlan(any(), any(), any(), any());
+    }
+
+    @Test
+    void concurrentPlanRetriesShareOneHarnessGeneration() throws Exception {
+        ConfirmedIntent confirmed = new ConfirmedIntent(
+                "0.1", "e".repeat(64), "2026-09-11T00:00:00Z", Map.of("raw_request", "目标"));
+        var configured = new CreationRepository.SessionRecord("session-concurrent", 7L, "configured", null,
+                confirmed, 2, confirmed.intentHash(), 180, Difficulty.NORMAL, null, null, null);
+        List<PositionedNode> nodes = List.of();
+        PlanResponse stored = new PlanResponse("plan-2", 1, confirmed.intentHash(), "实验", List.of("成果"), nodes);
+        var planReady = new CreationRepository.SessionRecord("session-concurrent", 7L, "plan_ready", null,
+                confirmed, 2, confirmed.intentHash(), 180, Difficulty.NORMAL, null, null, stored);
+        ExperimentTree tree = new ExperimentTree("0.1", "实验", List.of("成果"), List.of());
+        CountDownLatch harnessStarted = new CountDownLatch(1);
+        CountDownLatch releaseHarness = new CountDownLatch(1);
+        CountDownLatch retryCallingService = new CountDownLatch(1);
+        AtomicReference<Thread> retryWorker = new AtomicReference<>();
+        AtomicInteger workerNumber = new AtomicInteger();
+        when(transactions.snapshot("session-concurrent", 7L)).thenReturn(configured, planReady);
+        when(harness.generateTree(confirmed, 180, Difficulty.NORMAL)).thenAnswer(invocation -> {
+            harnessStarted.countDown();
+            assertTrue(releaseHarness.await(2, TimeUnit.SECONDS));
+            return tree;
+        });
+        when(layout.layout(tree)).thenReturn(nodes);
+        when(transactions.savePlan(eq(configured), eq("实验"), eq(List.of("成果")), eq(nodes))).thenReturn(stored);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2, runnable -> {
+            Thread worker = new Thread(runnable);
+            if (workerNumber.incrementAndGet() == 2) retryWorker.set(worker);
+            return worker;
+        });
+        try {
+            Future<PlanResponse> first = executor.submit(() -> service.generatePlan("session-concurrent", 7L));
+            assertTrue(harnessStarted.await(2, TimeUnit.SECONDS));
+            Future<PlanResponse> retry = executor.submit(() -> {
+                retryCallingService.countDown();
+                return service.generatePlan("session-concurrent", 7L);
+            });
+            assertTrue(retryCallingService.await(2, TimeUnit.SECONDS));
+            long waitDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (retryWorker.get().getState() != Thread.State.WAITING
+                    && System.nanoTime() < waitDeadline) {
+                Thread.sleep(1);
+            }
+            assertEquals(Thread.State.WAITING, retryWorker.get().getState(),
+                    "retry should be waiting on the in-flight plan generation");
+            verify(transactions, times(1)).snapshot("session-concurrent", 7L);
+
+            releaseHarness.countDown();
+
+            assertSame(stored, first.get(2, TimeUnit.SECONDS));
+            assertSame(stored, retry.get(2, TimeUnit.SECONDS));
+            verify(harness, times(1)).generateTree(confirmed, 180, Difficulty.NORMAL);
+            verify(transactions, times(1)).savePlan(eq(configured), eq("实验"), eq(List.of("成果")), eq(nodes));
+        } finally {
+            releaseHarness.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void retryingSameConfigurationDoesNotInvalidateReadyPlan() {
+        ConfirmedIntent confirmed = new ConfirmedIntent(
+                "0.1", "f".repeat(64), "2026-09-11T00:00:00Z", Map.of("raw_request", "目标"));
+        PlanResponse plan = new PlanResponse("plan-3", 1, confirmed.intentHash(), "实验", List.of("成果"), List.of());
+        var session = new CreationRepository.SessionRecord("session-configured", 7L, "plan_ready", null,
+                confirmed, 2, confirmed.intentHash(), 180, Difficulty.NORMAL, null, null, plan);
+        when(repository.lock("session-configured", 7L)).thenReturn(session);
+
+        var result = service.configure("session-configured", 7L, new ConfigurationRequest(0, 3, Difficulty.NORMAL));
+
+        assertEquals("plan_ready", result.status());
+        assertSame(plan, result.plan());
+        verify(repository, never()).configure(any(), anyInt(), any());
     }
 
     @Test

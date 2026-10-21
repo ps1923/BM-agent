@@ -46,6 +46,36 @@ class ChromaClientTest {
     }
 
     @Test
+    void experimentQueryDoesNotRequireCourseMetadata() throws Exception {
+        AtomicReference<String> queryBody = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/collections", exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            if (exchange.getRequestURI().getPath().endsWith("/query")) queryBody.set(body);
+            String response = exchange.getRequestURI().getPath().endsWith("/query")
+                    ? "{\"ids\":[[\"bug-1\"]],\"distances\":[[0.2]]}"
+                    : "{\"id\":\"collection-1\"}";
+            byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ChromaClient client = new ChromaClient("http://127.0.0.1:" + server.getAddress().getPort(),
+                    "test_collection", "", Duration.ofSeconds(2));
+
+            assertEquals(List.of(new RagModels.ChromaHit("bug-1", 0.2)),
+                    client.queryByExperiment(List.of(0.1), null, 7L, null, 8));
+            assertTrue(queryBody.get().contains("\"experiment_id\""));
+            assertTrue(queryBody.get().contains("\"approved\""));
+            org.junit.jupiter.api.Assertions.assertFalse(queryBody.get().contains("\"course_id\""));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void upsertAcceptsChromaNullSuccessResponse() throws Exception {
         AtomicReference<String> upsertBody = new AtomicReference<>();
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);

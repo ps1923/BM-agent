@@ -2,6 +2,7 @@ package com.bmhs.rag;
 
 import com.bmhs.auth.AuthModels.AuthenticatedUser;
 import com.bmhs.auth.AuthContext;
+import com.bmhs.dsh.DshPrincipal;
 import com.bmhs.experimentcreation.ApiException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,10 @@ public class BugService {
         return repository.create(runId, user.id(), request);
     }
 
+    public RagModels.BugCaseView createFromDsh(DshPrincipal principal, long runId, RagModels.BugRequest request) {
+        return repository.create(runId, principal.studentId(), request);
+    }
+
     public List<RagModels.BugCaseView> list(AuthenticatedUser user, Long courseId) {
         if ("student".equals(user.role())) {
             return repository.findVisibleForStudent(user.id());
@@ -38,6 +43,11 @@ public class BugService {
         RagModels.BugCaseView result = repository.review(bugCaseId, user.id(), request);
         if ("approved".equals(result.status())) ragService.indexApproved(result);
         return repository.findById(bugCaseId);
+    }
+
+    public List<RagModels.BugCaseView> listForExperiment(AuthenticatedUser user, long experimentId) {
+        requireRole(user, "teacher");
+        return repository.findForExperimentForTeacher(user.id(), experimentId);
     }
 
     private void requireRole(AuthenticatedUser user, String role) {

@@ -14,7 +14,13 @@ public final class WorkspaceModels {
     private WorkspaceModels() {}
 
     public record RunView(long runId, long experimentId, String runStatus, Long currentNodeId,
-                          long workspaceId, String workspaceStatus) {}
+                          long workspaceId, String workspaceStatus, String workspaceType,
+                          String localWorkspaceId) {
+        public RunView(long runId, long experimentId, String runStatus, Long currentNodeId,
+                       long workspaceId, String workspaceStatus) {
+            this(runId, experimentId, runStatus, currentNodeId, workspaceId, workspaceStatus, "server", null);
+        }
+    }
 
     public record NodeProgressView(long nodeId, String status, BigDecimal progressPercent,
                                    Instant startedAt, Instant completedAt) {}
@@ -52,7 +58,15 @@ public final class WorkspaceModels {
 
     public record WorkspaceRecord(long id, long runId, long experimentId, long studentId,
                                  String storagePath, String runtimeImage, String runtimeInstanceId, String status,
-                                 BigDecimal cpuLimit, int memoryLimitMb) {}
+                                 BigDecimal cpuLimit, int memoryLimitMb, String workspaceType,
+                                 String localWorkspaceId) {
+        public WorkspaceRecord(long id, long runId, long experimentId, long studentId,
+                               String storagePath, String runtimeImage, String runtimeInstanceId, String status,
+                               BigDecimal cpuLimit, int memoryLimitMb) {
+            this(id, runId, experimentId, studentId, storagePath, runtimeImage, runtimeInstanceId, status,
+                    cpuLimit, memoryLimitMb, "server", null);
+        }
+    }
 
     public record RunRecord(long id, long experimentId, long studentId, String status,
                             Long currentNodeId, WorkspaceRecord workspace) {}

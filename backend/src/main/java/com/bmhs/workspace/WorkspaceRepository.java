@@ -23,6 +23,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.UUID;
 import java.util.List;
 
 @Repository
@@ -40,6 +41,10 @@ public class WorkspaceRepository {
         }
         List<RunRecord> existing = findRunByExperimentStudent(experimentId, studentId);
         if (!existing.isEmpty()) {
+            if (!"server".equals(existing.get(0).workspace().workspaceType())) {
+                throw new ApiException(HttpStatus.CONFLICT, "DESKTOP_RUN_REQUIRES_DESKTOP_APP",
+                        "该实验运行实例绑定在学生本地桌面工作区，请使用 BM-HS 学生桌面端");
+            }
             ensureTaskProgress(existing.get(0).id(), experimentId);
             return existing.get(0);
         }
@@ -70,11 +75,54 @@ public class WorkspaceRepository {
         return findRun(runId, studentId);
     }
 
+    @Transactional
+    public RunRecord createOrFindDesktopRun(long experimentId, long studentId) {
+        if (!hasRunnableAccess(experimentId, studentId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "EXPERIMENT_FORBIDDEN", "当前学生不能运行该实验");
+        }
+        List<RunRecord> existing = findRunByExperimentStudent(experimentId, studentId);
+        if (!existing.isEmpty()) {
+            if (!"desktop".equals(existing.get(0).workspace().workspaceType())) {
+                throw new ApiException(HttpStatus.CONFLICT, "SERVER_RUN_REQUIRES_WEB_APP",
+                        "该实验已有服务器工作区运行实例；为避免数据混用，请先由教师处理后再使用桌面端");
+            }
+            ensureTaskProgress(existing.get(0).id(), experimentId);
+            return existing.get(0);
+        }
+        KeyHolder keys = new GeneratedKeyHolder();
+        jdbc.update(connection -> {
+            PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO experiment_runs (experiment_id, student_id, status, last_opened_at)
+                    VALUES (?, ?, 'not_started', CURRENT_TIMESTAMP(6))
+                    """, Statement.RETURN_GENERATED_KEYS);
+            statement.setLong(1, experimentId);
+            statement.setLong(2, studentId);
+            return statement;
+        }, keys);
+        long runId = requiredKey(keys);
+        jdbc.update("""
+                INSERT INTO node_progress (experiment_id, run_id, node_id, status, progress_percent)
+                SELECT experiment_id, ?, id,
+                       CASE WHEN parent_node_id IS NULL THEN 'pending' ELSE 'locked' END, 0
+                FROM experiment_nodes WHERE experiment_id = ?
+                """, runId, experimentId);
+        ensureTaskProgress(runId, experimentId);
+        String localWorkspaceId = UUID.randomUUID().toString();
+        jdbc.update("""
+                INSERT INTO coding_workspaces
+                  (run_id, storage_path, runtime_image, status, cpu_limit, memory_limit_mb,
+                   workspace_type, local_workspace_id)
+                VALUES (?, ?, 'desktop-local', 'running', NULL, NULL, 'desktop', ?)
+                """, runId, "desktop://" + localWorkspaceId, localWorkspaceId);
+        return findRun(runId, studentId);
+    }
+
     public RunRecord findRun(long runId, long studentId) {
         List<RunRecord> records = jdbc.query("""
                 SELECT r.id AS run_id, r.experiment_id, r.student_id, r.status AS run_status,
                        r.current_node_id, w.id AS workspace_id, w.storage_path, w.runtime_image, w.runtime_instance_id,
-                       w.status AS workspace_status, w.cpu_limit, w.memory_limit_mb
+                       w.status AS workspace_status, w.cpu_limit, w.memory_limit_mb,
+                       w.workspace_type, w.local_workspace_id
                 FROM experiment_runs r JOIN coding_workspaces w ON w.run_id = r.id
                 WHERE r.id = ? AND r.student_id = ?
                 """, (rs, rowNum) -> toRunRecord(rs.getLong("run_id"), rs.getLong("experiment_id"),
@@ -82,7 +130,8 @@ public class WorkspaceRepository {
                 new WorkspaceRecord(rs.getLong("workspace_id"), rs.getLong("run_id"), rs.getLong("experiment_id"),
                         rs.getLong("student_id"), rs.getString("storage_path"), rs.getString("runtime_image"),
                         rs.getString("runtime_instance_id"), rs.getString("workspace_status"),
-                        rs.getBigDecimal("cpu_limit"), rs.getInt("memory_limit_mb"))),
+                        rs.getBigDecimal("cpu_limit"), rs.getInt("memory_limit_mb"),
+                        rs.getString("workspace_type"), rs.getString("local_workspace_id"))),
                 runId, studentId);
         if (records.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", "运行实例不存在");
         return records.get(0);
@@ -91,14 +140,16 @@ public class WorkspaceRepository {
     public WorkspaceRecord findWorkspace(long workspaceId, long studentId) {
         List<WorkspaceRecord> records = jdbc.query("""
                 SELECT w.id, w.run_id, r.experiment_id, r.student_id, w.storage_path, w.runtime_image,
-                       w.runtime_instance_id, w.status, w.cpu_limit, w.memory_limit_mb
+                       w.runtime_instance_id, w.status, w.cpu_limit, w.memory_limit_mb,
+                       w.workspace_type, w.local_workspace_id
                 FROM coding_workspaces w JOIN experiment_runs r ON r.id = w.run_id
                 WHERE w.id = ? AND r.student_id = ?
                 """, (rs, rowNum) -> new WorkspaceRecord(rs.getLong("id"), rs.getLong("run_id"),
                 rs.getLong("experiment_id"), rs.getLong("student_id"), rs.getString("storage_path"),
                 rs.getString("runtime_image"), rs.getString("runtime_instance_id"), rs.getString("status"),
                 rs.getBigDecimal("cpu_limit"),
-                rs.getInt("memory_limit_mb")), workspaceId, studentId);
+                rs.getInt("memory_limit_mb"), rs.getString("workspace_type"),
+                rs.getString("local_workspace_id")), workspaceId, studentId);
         if (records.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "WORKSPACE_NOT_FOUND", "工作区不存在");
         return records.get(0);
     }
@@ -451,7 +502,8 @@ public class WorkspaceRepository {
 
     public RunView toView(RunRecord run) {
         return new RunView(run.id(), run.experimentId(), run.status(), run.currentNodeId(),
-                run.workspace().id(), run.workspace().status());
+                run.workspace().id(), run.workspace().status(), run.workspace().workspaceType(),
+                run.workspace().localWorkspaceId());
     }
 
     boolean hasRunnableAccess(long experimentId, long studentId) {
@@ -473,7 +525,7 @@ public class WorkspaceRepository {
     }
 
     private List<RunRecord> findRunByExperimentStudent(long experimentId, long studentId) {
-        return jdbc.query("SELECT id FROM experiment_runs WHERE experiment_id = ? AND student_id = ?",
+        return jdbc.query("SELECT id FROM experiment_runs WHERE experiment_id = ? AND student_id = ? AND execution_mode = 'legacy'",
                 (rs, rowNum) -> findRun(rs.getLong("id"), studentId), experimentId, studentId);
     }
 

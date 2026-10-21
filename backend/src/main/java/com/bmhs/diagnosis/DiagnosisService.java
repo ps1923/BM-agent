@@ -171,21 +171,25 @@ public class DiagnosisService {
     PreparedPrompt buildPrompt(GuidanceModels.ExperimentContext context, FileBundle files,
                                RagModels.RagSearchResult rag, String question) {
         List<DiagnosisFile> promptFiles = files.files().entrySet().stream()
-                .map(entry -> new DiagnosisFile(entry.getKey(), entry.getValue().hash(),
-                        entry.getValue().complete(), entry.getValue().content())).toList();
+                .map(entry -> {
+                    FileSnapshot snapshot = entry.getValue();
+                    String safeContent = WorkspaceService.redactCommonSecrets(snapshot.content());
+                    return new DiagnosisFile(entry.getKey(), snapshot.hash(),
+                            snapshot.complete() && safeContent.equals(snapshot.content()), safeContent);
+                }).toList();
         List<DiagnosisRagReference> references = rag.references().stream().limit(3)
                 .map(reference -> new DiagnosisRagReference(reference.bugCaseId(),
-                        truncate(nullToEmpty(reference.title()), 300),
-                        truncate(nullToEmpty(reference.problem()), 1000),
-                        truncate(nullToEmpty(reference.solution()), 1000))).toList();
+                        truncate(redactForModel(reference.title()), 300),
+                        truncate(redactForModel(reference.problem()), 1000),
+                        truncate(redactForModel(reference.solution()), 1000))).toList();
         DiagnosisPrompt envelope = new DiagnosisPrompt(
                 new DiagnosisExperiment(context.experimentId(), context.runId(),
-                        truncate(nullToEmpty(context.name()), 1000),
-                        truncate(nullToEmpty(context.learningGoal()), 1500),
-                        truncate(nullToEmpty(context.description()), 2000), context.nodeId(),
-                        truncate(nullToEmpty(context.nodeName()), 500),
-                        truncate(nullToEmpty(context.nodeDescription()), 1500)),
-                truncate(nullToEmpty(question), 2000), rag.available(), references, promptFiles);
+                        truncate(redactForModel(context.name()), 1000),
+                        truncate(redactForModel(context.learningGoal()), 1500),
+                        truncate(redactForModel(context.description()), 2000), context.nodeId(),
+                        truncate(redactForModel(context.nodeName()), 500),
+                        truncate(redactForModel(context.nodeDescription()), 1500)),
+                truncate(redactForModel(question), 2000), rag.available(), references, promptFiles);
         String serialized = gson.toJson(envelope);
         int promptLimit = maxContextChars - systemPrompt().length();
         while (serialized.length() > promptLimit) {
@@ -199,6 +203,10 @@ public class DiagnosisService {
         Set<String> patchablePaths = envelope.projectFiles().stream().filter(DiagnosisFile::complete)
                 .map(DiagnosisFile::path).collect(java.util.stream.Collectors.toUnmodifiableSet());
         return new PreparedPrompt(serialized, contextPaths, patchablePaths);
+    }
+
+    private String redactForModel(String value) {
+        return WorkspaceService.redactCommonSecrets(nullToEmpty(value));
     }
 
     private DiagnosisPrompt shrinkPrompt(DiagnosisPrompt prompt, int excess) {
@@ -257,10 +265,7 @@ public class DiagnosisService {
     }
 
     private boolean isSource(String path) {
-        int separator = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-        String fileName = path.substring(separator + 1).toLowerCase(java.util.Locale.ROOT);
-        if (fileName.equals(".env") || fileName.startsWith(".env.") || fileName.contains("secret")
-                || fileName.contains("credential") || fileName.endsWith(".pem") || fileName.endsWith(".key")) return false;
+        if (WorkspaceService.isSensitiveWorkspaceFile(path)) return false;
         int dot = path.lastIndexOf('.');
         return dot > 0 && SOURCE_EXTENSIONS.contains(path.substring(dot + 1).toLowerCase());
     }

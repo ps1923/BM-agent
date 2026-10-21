@@ -69,13 +69,26 @@ public class ChromaClient {
 
     public List<RagModels.ChromaHit> query(List<Double> embedding, Long courseId, Long experimentId,
                                            String technologyStack, int limit) {
+        return query(embedding, courseId, experimentId, technologyStack, limit, false);
+    }
+
+    public List<RagModels.ChromaHit> queryByExperiment(List<Double> embedding, Long courseId, long experimentId,
+                                                        String technologyStack, int limit) {
+        return query(embedding, courseId, experimentId, technologyStack, limit, true);
+    }
+
+    private List<RagModels.ChromaHit> query(List<Double> embedding, Long courseId, Long experimentId,
+                                            String technologyStack, int limit, boolean experimentScoped) {
         String collection = collection();
         JsonObject payload = new JsonObject();
         payload.add("query_embeddings", gson.toJsonTree(List.of(embedding)));
         payload.addProperty("n_results", limit);
         JsonArray conditions = new JsonArray();
-        conditions.add(equalsCondition("course_id", courseId.toString()));
+        if (courseId != null) conditions.add(equalsCondition("course_id", courseId.toString()));
         if (experimentId != null) conditions.add(equalsCondition("experiment_id", experimentId.toString()));
+        if (experimentScoped && experimentId == null) {
+            throw new IllegalArgumentException("实验记忆检索必须指定实验");
+        }
         conditions.add(equalsCondition("status", "approved"));
         if (technologyStack != null && !technologyStack.isBlank()) {
             JsonArray stackOptions = new JsonArray();

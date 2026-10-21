@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 
 const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+const styles = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
 const numberingStart = app.indexOf('function compareTreeSiblings');
 const numberingEnd = app.indexOf('\nfunction renderCanvas', numberingStart);
 assert.ok(numberingStart >= 0 && numberingEnd > numberingStart, 'tree numbering helpers must exist');
@@ -60,6 +61,19 @@ test('tree numbering is independent of API node response order and is used in ca
   assert.match(preview, /buildTreeNodeNumbers\(plan\.nodes\)/);
   assert.match(preview, /nodeNumbers\.get\(planNode\.key\) \|\| planNode\.key/);
   assert.match(preview, /items\.sort\(compareTreeSiblings\)/);
+});
+
+test('plan preview exposes stage outcomes, time, task instructions, and validation method safely', () => {
+  const preview = app.slice(app.indexOf('function renderPlanPreview'), app.indexOf('\nasync function openCreateDialog'));
+
+  assert.match(preview, /planNode\.estimatedMinutes/);
+  assert.match(preview, /planNode\.description/);
+  assert.match(preview, /planTask\.description/);
+  assert.match(preview, /validationLabels\[planTask\.validationType\]/);
+  assert.match(preview, /title\.textContent = planTask\.title/);
+  assert.match(preview, /description\.textContent = planTask\.description/);
+  assert.match(preview, /taskList\.append\(item\)/);
+  assert.match(styles, /\.plan-task-list\s*\{/);
 });
 
 test('legacy trees with multiple roots receive unique hierarchical labels', () => {

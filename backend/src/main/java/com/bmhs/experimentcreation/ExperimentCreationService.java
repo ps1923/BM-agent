@@ -26,6 +26,10 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 @Service
 public class ExperimentCreationService {
@@ -35,6 +39,8 @@ public class ExperimentCreationService {
     private final ExperimentTreeValidator validator;
     private final TreeLayoutService layoutService;
     private final CreationTransactions transactions;
+    private final ConcurrentMap<String, CompletableFuture<PlanResponse>> activePlanGenerations =
+            new ConcurrentHashMap<>();
     private final Gson gson = new GsonBuilder()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .create();
@@ -92,19 +98,61 @@ public class ExperimentCreationService {
         }
         var session = repository.lock(sessionId, userId);
         requireStatus(session.status(), "direction_confirmed", "configured", "plan_ready");
+        if ("plan_ready".equals(session.status())
+                && session.durationMinutes() != null
+                && session.durationMinutes() == request.durationMinutes()
+                && session.difficulty() == request.difficulty()) {
+            return view(session);
+        }
         repository.configure(sessionId, request.durationMinutes(), request.difficulty());
         return view(repository.find(sessionId, userId));
     }
 
     public PlanResponse generatePlan(String sessionId, long userId) {
+        String generationKey = userId + ":" + sessionId;
+        CompletableFuture<PlanResponse> generation = new CompletableFuture<>();
+        CompletableFuture<PlanResponse> active = activePlanGenerations.putIfAbsent(generationKey, generation);
+        if (active != null) return awaitPlanGeneration(active);
+
+        try {
+            PlanResponse plan = generatePlanOnce(sessionId, userId);
+            generation.complete(plan);
+            return plan;
+        } catch (RuntimeException | Error failure) {
+            generation.completeExceptionally(failure);
+            throw failure;
+        } finally {
+            activePlanGenerations.remove(generationKey, generation);
+        }
+    }
+
+    private PlanResponse generatePlanOnce(String sessionId, long userId) {
         var session = transactions.snapshot(sessionId, userId);
         requireStatus(session.status(), "configured", "plan_ready");
+        if ("plan_ready".equals(session.status())) {
+            if (session.plan() == null || !session.plan().intentHash().equals(session.intentHash())) {
+                throw new ApiException(HttpStatus.CONFLICT, "PLAN_RESULT_MISSING",
+                        "已生成的实验方案不可用，请重新保存学习周期后再生成");
+            }
+            return session.plan();
+        }
         if (session.confirmedIntent() == null || session.durationMinutes() == null || session.difficulty() == null) {
             throw new ApiException(HttpStatus.CONFLICT, "SESSION_NOT_CONFIGURED", "请先确认方向、周期和难度");
         }
         ExperimentTree tree = generateValidTree(session);
         List<PositionedNode> nodes = layoutService.layout(tree);
         return transactions.savePlan(session, tree.title(), tree.purpose(), nodes);
+    }
+
+    private PlanResponse awaitPlanGeneration(CompletableFuture<PlanResponse> generation) {
+        try {
+            return generation.join();
+        } catch (CompletionException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof RuntimeException runtimeFailure) throw runtimeFailure;
+            if (cause instanceof Error fatalFailure) throw fatalFailure;
+            throw failure;
+        }
     }
 
     private ExperimentTree generateValidTree(CreationRepository.SessionRecord session) {

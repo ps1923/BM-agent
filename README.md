@@ -1,5 +1,25 @@
 # 学习画布
 
+## 当前 DSH 改造状态（进行中）
+
+目标教学流程已调整为：学生进入集中部署的 DeepSeek Harness（DSH），在 DSH 自建工作区并编码；BM-HS 以 Cordis 工具插件提供实验节点、学生确认后的进度记录、实验专属 Bug 记忆，以及学生主动选择并提交的代码快照。教师仅查看进度和主动提交的快照，不读取 DSH 实时工作区、对话或终端。
+
+本地代码现已增加 DSH 实例启动/状态/停止接口、独立持久卷与容器配置、30 分钟闲置回收、短凭据自动轮换，以及学生工作台的 DSH 入口。当前已在本机恢复 Docker Engine、构建锁定版 DSH 镜像，并验证插件 Bundle 加载、Web 服务启动、凭据不进入 Docker 配置/日志。**真实 BM-HS 登录到 DSH 的完整页面链路和反向代理尚未验收**：尚未在隔离数据库执行迁移或启动 DSH 后端接口，路径前缀代理、Cookie 和 WebSocket 行为也未验证。因此 DSH 启动功能默认关闭，不能开放给学生使用。旧编辑器、终端和工作区接口暂作历史兼容，不代表新基线流程。
+
+启动功能的默认配置为 `DSH_ENABLED=false`。本机锁定版本镜像构建方式：
+
+```powershell
+docker build --file Dockerfile --tag bmhs-dsh:0.2.1-rc.2 .
+```
+
+在 `dsh-plugin` 目录执行此命令。启用前需在隔离环境配置该镜像、可达的 BM-HS HTTPS API 和 DSH 公共 HTTPS 地址，并提供受控的 Docker 管理运行时。容器内访问/刷新凭据经标准输入送入 tmpfs，启动器读取后立即删除；启动 URL 也不会写入 Docker 日志。反向代理必须用 BM-HS 会话校验 `GET /api/student/dsh/proxy-target?routeKey=...`，只代理到回环随机端口；须保留 Host、转发 WebSocket、移除 `/dsh/<routeKey>/` 前缀、把 DSH Cookie 限定到对应路径并避免记录带启动凭据的访问 URL。当前尚未应用任何 Nginx、生产配置或数据库迁移。
+
+兼容基线锁定为 DSH `v0.2.1-rc.2`（上游不可变标签 `dsh-v0.2.1-rc.2`）。DSH 仍处于开发预览阶段且插件 API 可能破坏性变化；上线前必须按锁定版本通过真实安装、工具交互、身份隔离和安全路由验收。[上游版本记录](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)。
+
+新数据库迁移 `database/migrations/20261021_add_dsh_plugin_baseline.sql` 还新增不透明路由、回环代理端口及可轮换续期凭据表；现有旧运行保留为 `legacy`。迁移文件已加入代码但**尚未在任何数据库执行**。执行前需在备份后的隔离数据库检验迁移、回滚预案和 `database/verify.sql`。
+
+DSH 当前 Web 服务默认仅监听回环地址，不能直接把端口暴露到公网。集中式多学生部署必须提供身份认证、每人隔离实例/持久存储、资源限制和安全反向路由；缺少其中任何一项都不能开放给学生。[DSH Web 部署说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/docs/user/guide/public-deployments.md)。
+
 这是一个面向毕业设计的智能编程实验教学系统：教师或学生通过三段式向导创建树状学习实验，学生在独立工作区编写和运行代码，教师通过课程管理查看学习过程。创建前先讨论实验方向，再填写周期与难度，最后预览并确认实验树；确认前不会写入正式实验，确认后由后端一次性创建阶段、节点、任务与连线。
 
 - 点阵画布与可拖动节点
@@ -41,7 +61,7 @@
                            Java 校验、布局、MySQL 事务落库
 ```
 
-规划结果必须是至少 3 层、逐层扩展的有根树，每个节点包含 3–7 个具体任务。坐标、数据库 ID 和持久化均由 Java 后端控制；浏览器不会直连 MCP。
+规划结果是一棵有根树；节点按学生能否在单次学习中完成并自验、成果是否包含多个独立结果及能力跨度递归拆分，因此复杂路径可以达到 `3.1.1` 等多级结构，但不为凑层级添加空壳节点。每个节点包含 3–7 个具体任务。坐标、数据库 ID 和持久化均由 Java 后端控制；浏览器不会直连 MCP。
 
 ## MySQL 数据库
 
@@ -119,7 +139,7 @@ python -m http.server 8000 --bind 127.0.0.1
 
 默认 `HARNESS_PROVIDER=deterministic`，无需模型密钥，适合联调。Harness 使用 `AI_BASE_URL`、`AI_API_KEY` 和两个 Harness 模型名；普通代码指导使用 `DEEPSEEK_BASE_URL`、`DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`。这些变量只通过环境变量提供，且不要提交 `.env`。
 
-Compose 只把 Java API 绑定到 `127.0.0.1`，两个 Harness 只在内部网络暴露。MySQL 使用既有实例。前端在本地 `127.0.0.1:8000` 或 `localhost:8000` 联调时连接本机 `:8080/api`；其他来源默认访问同源 `/api`。可通过页面加载 `app.js` 之前设置 `window.BM_API_BASE_URL` 覆盖 API 基址，HTTPS 页面不允许覆盖到明文 HTTP 地址。
+Compose 只把 Java API 绑定到 `127.0.0.1`，两个 Harness 只在内部网络暴露。MySQL 使用既有实例。前端在本地 `127.0.0.1:8000` 或 `localhost:8000` 联调时连接本机 `:8080/api`；远程根路径部署默认访问同源 `/api`，挂载在 `/bm-agent/` 子路径下时使用同源 `/bm-agent/api`。可通过页面加载 `app.js` 之前设置 `window.BM_API_BASE_URL` 覆盖 API 基址，HTTPS 页面不允许覆盖到明文 HTTP 地址。
 
 远程浏览器不能访问服务器的 `127.0.0.1:8080`。生产页面使用同源 `/api`，因此必须在**现有 HTTPS Nginx 虚拟主机中增量加入**代理规则；不要用下例替换当前站点配置，也不要将 8080 暴露到公网：
 
@@ -136,6 +156,26 @@ location ^~ /api/ {
 ```
 
 `proxy_pass` 不带 URI 后缀，确保 `/api/...` 路径原样送到 Spring API。使用 HTTPS 时，后端环境需设置 `AUTH_SECURE_COOKIE=true`、`AUTH_COOKIE_SAME_SITE=Lax`，并将 `ALLOWED_ORIGIN` 配置为精确的站点 origin（例如 `https://教学系统域名`）。跨源 API 覆盖还要求后端允许精确前端 origin；`SameSite=Lax` Cookie 不应被设计为跨站认证方案。Nginx 规则、TLS 和生产环境变量都必须先检查现有服务器配置、取得维护授权后再应用。
+
+若站点部署在 `/bm-agent/` 子路径，页面默认请求 `/bm-agent/api/...`，Nginx 需要将外部挂载前缀映射到后端原有 `/api/...`，并单独提供静态入口。下面仅为路由示例，不能替换现有站点配置；发布包必须在静态别名目录内包含 `index.html`、`app.js`、`api-config.js` 和 `styles.css`：
+
+```nginx
+location = /bm-agent {
+    return 301 /bm-agent/;
+}
+location ^~ /bm-agent/api/ {
+    proxy_pass http://127.0.0.1:8080/api/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+location ^~ /bm-agent/ {
+    alias /opt/bm-agent/current/public/;
+    index index.html;
+}
+```
+
+`/bm-agent/api/` 的 `proxy_pass` URI 后缀会将该外部前缀替换成后端 `/api/`；该映射与根路径部署示例不同，二者应按站点挂载方式择一配置。
 
 本次代码变更只提供配置逻辑和部署示例，未修改云服务器、Nginx、TLS 或生产环境变量；公网部署状态仍待真实环境验收。生产验收需通过真实 HTTPS 页面登录，确认登录响应的会话 Cookie 同时具有 `Secure`、`HttpOnly`、`SameSite=Lax`，随后 `/api/me` 成功恢复会话；浏览器网络请求目标应为当前站点的 `/api/...`，不得请求访问者设备的 loopback 地址。项目中实现了 Cookie 会话认证，但若尚未配置并验收 TLS 与反向代理，不应宣称公网部署已完成。
 

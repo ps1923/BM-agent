@@ -4,9 +4,11 @@ import com.bmhs.experimentcreation.ApiException;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -28,7 +30,9 @@ class TeacherRepositoryEvidenceTest {
                 () -> repository.assertSnapshotAccess(3L, 8L, 12L));
 
         assertEquals("RUN_FORBIDDEN", exception.code());
-        verify(jdbc).query(contains("course_experiment_assignments"), any(RowMapper.class), eq(3L), eq(8L));
+        ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).query(query.capture(), any(RowMapper.class), eq(3L), eq(8L));
+        assertTrue(query.getValue().contains("r.execution_mode = 'legacy'"));
         verifyNoMoreInteractions(jdbc);
     }
 }

@@ -31,6 +31,11 @@ public class BugController {
         return ResponseEntity.ok(service.list(user, courseId));
     }
 
+    @GetMapping("/teacher/experiments/{experimentId:\\d+}/bugs")
+    public ResponseEntity<?> listForExperiment(@PathVariable long experimentId, AuthenticatedUser user) {
+        return ResponseEntity.ok(service.listForExperiment(user, experimentId));
+    }
+
     @PostMapping("/bugs/{bugCaseId:\\d+}/approve")
     public ResponseEntity<RagModels.BugCaseView> review(@PathVariable long bugCaseId, AuthenticatedUser user,
                                                          @Valid @RequestBody RagModels.BugReviewRequest request) {

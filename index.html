@@ -27,6 +27,7 @@
       <section class="dashboard-content">
         <div class="dashboard-heading"><div><p class="dashboard-eyebrow">STUDENT SPACE</p><h1 id="studentTitle">我的课程</h1><p>加入课程后查看教师发布的学习实验。</p></div><button id="studentLibraryButton" class="secondary-action" type="button">打开实验库</button></div>
         <section class="join-course-card" aria-labelledby="joinCourseTitle"><div><p class="dashboard-eyebrow">JOIN A COURSE</p><h2 id="joinCourseTitle">使用邀请码加入课程</h2><p>向教师获取 8 位邀请码，例如 <code>SPRING01</code>。</p></div><form id="joinCourseForm" class="inline-form" novalidate><label class="visually-hidden" for="joinCode">课程邀请码</label><input id="joinCode" type="text" maxlength="16" autocomplete="off" placeholder="输入邀请码" /><button class="primary-action" type="submit">加入课程</button></form></section>
+        <section class="join-course-card student-dsh-launch-card" aria-labelledby="studentDshTitle"><div><p class="dashboard-eyebrow">YOUR DSH WORKSPACE</p><h2 id="studentDshTitle">个人编程工作区</h2><p id="studentDshState" role="status" aria-live="polite">正在读取 DSH 状态…</p></div><div class="inline-form"><button id="studentDshLaunchButton" class="primary-action" type="button">打开 DSH</button><button id="studentDshStopButton" class="secondary-action" type="button" hidden>停止工作区</button></div></section>
         <p id="studentMessage" class="form-message" role="status" aria-live="polite"></p>
         <section aria-labelledby="studentCoursesTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">ENROLLED COURSES</p><h2 id="studentCoursesTitle">已加入课程</h2></div><span id="studentCourseCount" class="section-count"></span></div><div id="studentCourses" class="course-grid"></div></section>
       </section>
@@ -42,6 +43,13 @@
           <section aria-labelledby="teacherCoursesTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">YOUR COURSES</p><h2 id="teacherCoursesTitle">我的课程</h2></div><span id="teacherCourseCount" class="section-count"></span></div><div id="teacherCourses" class="course-grid course-grid-compact"></div></section>
           <section class="publish-card" aria-labelledby="publishTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">PUBLISH EXPERIMENT</p><h2 id="publishTitle">发布实验草稿</h2></div></div><p class="publish-description">选择课程和实验草稿，发布后学生即可在对应课程中看到。</p><form id="publishForm" class="publish-form" novalidate><label for="publishCourse">发布到课程<select id="publishCourse"><option value="">请选择课程</option></select></label><label for="publishExperiment">实验草稿<select id="publishExperiment"><option value="">请选择实验</option></select></label><button class="primary-action" type="submit">发布实验</button></form><div id="teacherDrafts" class="draft-list" aria-live="polite"></div></section>
         </div>
+        <section class="teacher-dsh-card" aria-labelledby="teacherDshTitle">
+          <div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">DSH STUDENT EVIDENCE</p><h2 id="teacherDshTitle">DSH 学习记录与主动提交</h2><p class="publish-description">这里只显示学生明确提交的代码快照和学习进度，不读取实时工作区、对话或终端。</p></div><label class="monitor-course-picker" for="teacherDshExperiment">授权实验<select id="teacherDshExperiment"><option value="">正在加载…</option></select></label></div>
+          <p id="teacherDshMessage" class="form-message" role="status" aria-live="polite"></p>
+          <div class="teacher-dsh-layout"><div id="teacherDshRuns" class="teacher-dsh-runs"></div><div class="teacher-dsh-submissions"><div id="teacherDshSubmissions" class="teacher-dsh-submission-list"></div><pre id="teacherDshCode" class="teacher-evidence-code" tabindex="0" aria-label="学生主动提交的代码快照">选择一条学生记录查看已提交快照。</pre></div></div>
+          <form id="teacherDshReviewForm" class="teacher-review-form" novalidate><label for="teacherDshRating">阶段性评分（0–100）<input id="teacherDshRating" type="number" min="0" max="100" step="1" disabled /></label><label for="teacherDshFeedback">教师评价<textarea id="teacherDshFeedback" rows="3" maxlength="2000" placeholder="选择学生后填写评价" disabled></textarea></label><button id="teacherDshReviewSave" class="primary-action" type="submit" disabled>保存阶段评价</button><p id="teacherDshReviewMessage" class="form-message" role="status" aria-live="polite"></p></form>
+          <section class="teacher-dsh-bug-review" aria-labelledby="teacherDshBugsTitle"><h3 id="teacherDshBugsTitle">当前实验 Bug 记忆审核</h3><p id="teacherDshBugMessage" class="form-message" role="status" aria-live="polite"></p><div id="teacherDshBugs" class="teacher-bug-list"></div></section>
+        </section>
         <section class="teacher-monitor-card" aria-labelledby="teacherMonitorTitle">
           <div class="dashboard-section-heading teacher-monitor-heading"><div><p class="dashboard-eyebrow">LEARNING MONITOR</p><h2 id="teacherMonitorTitle">学生学习进度</h2><p class="publish-description">查看节点完成、命令运行、AI 对话和 Bug 记录，并由教师提交最终评价。</p></div><label class="monitor-course-picker" for="teacherDashboardCourse">课程<select id="teacherDashboardCourse"><option value="">请选择课程</option></select></label></div>
           <p id="teacherDashboardMessage" class="form-message" role="status" aria-live="polite"></p>
@@ -50,7 +58,7 @@
             <div class="monitor-table-wrap"><table class="progress-table"><thead><tr><th>学生</th><th>实验</th><th>节点进度</th><th>运行状态</th><th>最近打开</th><th>操作</th></tr></thead><tbody id="teacherProgressRows"></tbody></table></div>
             <aside id="teacherRunDetail" class="teacher-run-detail" hidden>
               <div class="run-detail-heading"><div><p class="dashboard-eyebrow">SELECTED RUN</p><h3 id="teacherRunTitle">学生运行详情</h3></div><span id="teacherRunStatus" class="section-count"></span></div>
-              <p id="teacherRunSummary" class="run-summary-copy"></p><p id="teacherAiSummary" class="teacher-ai-summary" hidden></p><div class="run-metrics" id="teacherRunMetrics"></div><div class="timeline-list" id="teacherTimeline"></div>
+              <p id="teacherRunSummaryState" class="form-message" role="status" aria-live="polite"></p><p id="teacherRunSummary" class="run-summary-copy"></p><p id="teacherAiSummary" class="teacher-ai-summary" hidden></p><div class="run-metrics" id="teacherRunMetrics"></div><p id="teacherTimelineState" class="form-message" role="status" aria-live="polite"></p><div class="timeline-list" id="teacherTimeline"></div>
               <section class="teacher-evidence" aria-labelledby="teacherEvidenceTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">STAGE CODE EVIDENCE</p><h4 id="teacherEvidenceTitle">阶段代码证据</h4><p class="publish-description">只读查看学生完成节点时保存的代码快照。</p></div></div><p id="teacherEvidenceMessage" class="form-message" role="status" aria-live="polite"></p><div class="teacher-evidence-layout"><div id="teacherStageEvidence" class="teacher-stage-evidence"></div><div class="teacher-evidence-preview"><div id="teacherEvidenceFiles" class="teacher-evidence-files"></div><pre id="teacherEvidenceCode" class="teacher-evidence-code" tabindex="0" aria-label="只读代码内容">选择一个阶段快照文件查看。</pre></div></div></section>
               <form id="teacherReviewForm" class="teacher-review-form" novalidate><label for="teacherRating">教师评分（0–100）<input id="teacherRating" type="number" min="0" max="100" step="1" /></label><label for="teacherFeedback">阶段性评价<textarea id="teacherFeedback" rows="3" maxlength="2000" placeholder="记录学生本阶段的表现和后续建议"></textarea></label><button class="primary-action" type="submit">保存评价</button><p id="teacherReviewMessage" class="form-message" role="status" aria-live="polite"></p></form>
             </aside>
@@ -61,6 +69,14 @@
             <div id="teacherBugList" class="teacher-bug-list"></div>
           </section>
         </section>
+      </section>
+    </main>
+
+    <main id="adminView" class="route-view dashboard-view" aria-labelledby="adminTitle">
+      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>系统管理</small></div></div><div class="dashboard-user"><span id="adminIdentity"></span><button id="adminLogoutButton" class="text-action" type="button">退出</button></div></header>
+      <section class="dashboard-content"><div class="dashboard-heading"><div><p class="dashboard-eyebrow">ADMINISTRATION</p><h1 id="adminTitle">个人实验审核教师</h1><p>为未纳入课程发布的个人实验指定唯一审核教师。</p></div></div>
+        <section class="teacher-create-card admin-reviewer-card"><label for="adminExperiment">个人实验<select id="adminExperiment"><option value="">正在加载…</option></select></label><label for="adminReviewer">审核教师<select id="adminReviewer"><option value="">请选择教师</option></select></label><button id="adminAssignReviewer" class="primary-action" type="button" disabled>保存审核教师</button></section>
+        <p id="adminReviewerMessage" class="form-message" role="status" aria-live="polite"></p>
       </section>
     </main>
 
@@ -189,13 +205,13 @@
           <button id="completeNodeButton" class="secondary-action" type="button" disabled>完成当前节点</button>
         </aside>
         <section class="code-panel editor-panel">
-          <div class="code-tabs"><div id="codeFileTabs" class="code-file-tabs" role="tablist" aria-label="工作区文件"></div><span id="codeLocation" class="code-location"></span><button id="createSnapshotButton" class="secondary-action" type="button" disabled>创建快照</button><button id="saveFileButton" class="secondary-action" type="button" disabled>保存文件</button></div>
+          <div class="code-tabs"><div id="codeFileTabs" class="code-file-tabs" role="tablist" aria-label="工作区文件"></div><span id="codeLocation" class="code-location"></span><button id="desktopNewFolderButton" class="secondary-action" type="button" hidden>新建文件夹</button><button id="desktopNewFileButton" class="secondary-action" type="button" hidden>新建文件</button><button id="createSnapshotButton" class="secondary-action" type="button" disabled>创建快照</button><button id="saveFileButton" class="secondary-action" type="button" disabled>保存文件</button></div>
           <div class="code-editor"><div id="codeLineNumbers" class="line-numbers" aria-hidden="true"></div><textarea id="codeEditor" spellcheck="false" aria-label="代码编辑器" placeholder="启动工作区后，选择文件开始编辑。" disabled></textarea></div>
         </section>
         <aside class="chat-panel editor-panel">
           <div class="panel-heading agent-panel-heading"><div><span class="agent-title">智能体</span><span class="agent-subtitle">学习搭档</span></div><div class="agent-heading-actions"><button id="softenButton" class="soften-top-button" type="button" aria-label="服软：让智能体直接给下一步">服软</button><span class="agent-online"><span class="status-dot"></span>在线</span></div></div>
           <div id="chatMessages" class="chat-messages"><div class="chat-message agent-message"><div class="message-label">学习助手</div><p>启动实验工作区后，我会读取当前项目文件和运行信息，再根据你的问题提供指导。</p></div></div>
-          <div class="chat-composer"><div class="chat-input-row"><textarea id="chatInput" rows="2" placeholder="告诉智能体你遇到的问题…" aria-label="发送给智能体"></textarea><button id="sendButton" class="send-button" type="button" aria-label="发送消息">↑</button></div></div>
+          <div class="chat-composer"><div class="chat-input-row"><textarea id="chatInput" rows="2" maxlength="6000" aria-describedby="chatComposerHint" placeholder="告诉智能体你遇到的问题…" aria-label="发送给智能体"></textarea><button id="sendButton" class="send-button" type="button" aria-label="发送消息">↑</button></div><p id="chatComposerHint" class="chat-composer-hint">最多 6000 字；无需粘贴整个项目，提问时系统会自动读取当前节点、相关代码和终端信息。</p></div>
         </aside>
       </section>
       <section class="terminal-panel editor-panel" aria-label="终端"><div class="terminal-heading"><span class="terminal-title"><span class="terminal-indicator"></span>终端</span><span class="terminal-shell">受限 Shell <span class="terminal-chevron">⌄</span></span></div><div id="terminalOutput" class="terminal-output"><div class="terminal-muted">工作区启动后才能执行命令。</div></div><div class="terminal-input-row"><span class="terminal-prompt">$</span><input id="terminalInput" type="text" placeholder="请先启动工作区" aria-label="终端命令" disabled /></div></section>

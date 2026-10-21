@@ -6,6 +6,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -39,6 +40,28 @@ class RagServiceTest {
         new RagService(repository, embedding, chroma).indexApproved(pending);
 
         org.mockito.Mockito.verifyNoInteractions(embedding, chroma);
+    }
+
+    @Test
+    void personalExperimentSearchUsesExperimentOnlyAndDatabaseAuthorization() {
+        BugRepository repository = mock(BugRepository.class);
+        EmbeddingClient embedding = mock(EmbeddingClient.class);
+        ChromaClient chroma = mock(ChromaClient.class);
+        when(embedding.embed("依赖错误")).thenReturn(List.of(0.1));
+        when(chroma.queryByExperiment(anyList(), isNull(), eq(3L), isNull(), eq(8)))
+                .thenReturn(List.of(new RagModels.ChromaHit("bug-8", 0.1)));
+        java.time.Instant now = java.time.Instant.now();
+        when(repository.findApprovedForExperiment(8L, 7L, 3L)).thenReturn(
+                new RagModels.BugCaseView(8L, 3L, 10L, null, null, 9L, "依赖", "缺少依赖", "安装后解决",
+                        "Python", "approved", "course", "indexed", "bug-8", now, now));
+
+        RagModels.RagSearchResult result = new RagService(repository, embedding, chroma)
+                .searchForExperiment(7L, 3L, null, null, "依赖错误");
+
+        assertTrue(result.available());
+        assertEquals(List.of(8L), result.references().stream().map(RagModels.RagReference::bugCaseId).toList());
+        verify(chroma).queryByExperiment(anyList(), isNull(), eq(3L), isNull(), eq(8));
+        verify(repository).findApprovedForExperiment(8L, 7L, 3L);
     }
 
     @Test

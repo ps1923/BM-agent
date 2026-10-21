@@ -317,6 +317,7 @@ CREATE TABLE IF NOT EXISTS `experiment_runs` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `experiment_id` BIGINT UNSIGNED NOT NULL,
   `student_id` BIGINT UNSIGNED NOT NULL,
+  `execution_mode` VARCHAR(20) NOT NULL DEFAULT 'legacy',
   `current_node_id` BIGINT UNSIGNED NULL,
   `status` VARCHAR(20) NOT NULL DEFAULT 'not_started',
   `started_at` DATETIME(6) NULL,
@@ -326,7 +327,7 @@ CREATE TABLE IF NOT EXISTS `experiment_runs` (
   `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_runs_id_experiment` (`id`, `experiment_id`),
-  UNIQUE KEY `uq_runs_experiment_student` (`experiment_id`, `student_id`),
+  UNIQUE KEY `uq_runs_experiment_student_mode` (`experiment_id`, `student_id`, `execution_mode`),
   KEY `idx_runs_student_recent` (`student_id`, `last_opened_at`),
   KEY `idx_runs_current_node` (`current_node_id`, `experiment_id`),
   CONSTRAINT `fk_runs_experiment`
@@ -416,6 +417,8 @@ CREATE TABLE IF NOT EXISTS `coding_workspaces` (
   `runtime_image` VARCHAR(255) NOT NULL,
   `runtime_instance_id` VARCHAR(255) NULL,
   `status` VARCHAR(20) NOT NULL DEFAULT 'provisioning',
+  `workspace_type` VARCHAR(20) NOT NULL DEFAULT 'server',
+  `local_workspace_id` CHAR(36) NULL,
   `cpu_limit` DECIMAL(6,3) NULL,
   `memory_limit_mb` INT UNSIGNED NULL,
   `expires_at` DATETIME(6) NULL,
@@ -426,12 +429,15 @@ CREATE TABLE IF NOT EXISTS `coding_workspaces` (
   UNIQUE KEY `uq_coding_workspaces_run` (`run_id`),
   UNIQUE KEY `uq_coding_workspaces_storage_path` (`storage_path`),
   UNIQUE KEY `uq_coding_workspaces_runtime_instance` (`runtime_instance_id`),
+  UNIQUE KEY `uq_coding_workspaces_local_workspace_id` (`local_workspace_id`),
   KEY `idx_coding_workspaces_status` (`status`, `last_active_at`),
   CONSTRAINT `fk_coding_workspaces_run`
     FOREIGN KEY (`run_id`) REFERENCES `experiment_runs` (`id`)
     ON UPDATE RESTRICT ON DELETE CASCADE,
   CONSTRAINT `ck_coding_workspaces_status`
     CHECK (`status` IN ('provisioning', 'starting', 'running', 'stopped', 'error', 'expired')),
+  CONSTRAINT `ck_coding_workspaces_type`
+    CHECK (`workspace_type` IN ('server', 'desktop')),
   CONSTRAINT `ck_coding_workspaces_cpu`
     CHECK (`cpu_limit` IS NULL OR `cpu_limit` > 0),
   CONSTRAINT `ck_coding_workspaces_memory`
@@ -492,6 +498,7 @@ CREATE TABLE IF NOT EXISTS `workspace_snapshots` (
 CREATE TABLE IF NOT EXISTS `terminal_sessions` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `workspace_id` BIGINT UNSIGNED NOT NULL,
+  `client_session_id` CHAR(36) NULL,
   `shell` VARCHAR(100) NOT NULL,
   `working_directory` VARCHAR(700) NOT NULL DEFAULT '.',
   `runtime_session_id` VARCHAR(255) NULL,
@@ -500,6 +507,7 @@ CREATE TABLE IF NOT EXISTS `terminal_sessions` (
   `last_active_at` DATETIME(6) NULL,
   `closed_at` DATETIME(6) NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_terminal_sessions_workspace_client_id` (`workspace_id`, `client_session_id`),
   KEY `idx_terminal_sessions_workspace_status` (`workspace_id`, `status`),
   CONSTRAINT `fk_terminal_sessions_workspace`
     FOREIGN KEY (`workspace_id`) REFERENCES `coding_workspaces` (`id`)
@@ -513,6 +521,7 @@ CREATE TABLE IF NOT EXISTS `terminal_sessions` (
 CREATE TABLE IF NOT EXISTS `command_runs` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `terminal_session_id` BIGINT UNSIGNED NOT NULL,
+  `client_command_id` CHAR(36) NULL,
   `command_text` TEXT NOT NULL,
   `working_directory` VARCHAR(700) NOT NULL DEFAULT '.',
   `status` VARCHAR(20) NOT NULL DEFAULT 'queued',
@@ -522,6 +531,7 @@ CREATE TABLE IF NOT EXISTS `command_runs` (
   `finished_at` DATETIME(6) NULL,
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_command_runs_session_client_id` (`terminal_session_id`, `client_command_id`),
   KEY `idx_command_runs_session_created` (`terminal_session_id`, `created_at`),
   CONSTRAINT `fk_command_runs_terminal`
     FOREIGN KEY (`terminal_session_id`) REFERENCES `terminal_sessions` (`id`)
@@ -619,6 +629,115 @@ CREATE TABLE IF NOT EXISTS `bug_case_reviews` (
   CONSTRAINT `ck_bug_case_reviews_decision` CHECK (`decision` IN ('approved', 'rejected'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `experiment_reviewers` (
+  `experiment_id` BIGINT UNSIGNED NOT NULL,
+  `teacher_id` BIGINT UNSIGNED NOT NULL,
+  `assigned_by_admin_id` BIGINT UNSIGNED NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`experiment_id`),
+  KEY `idx_experiment_reviewers_teacher` (`teacher_id`, `experiment_id`),
+  CONSTRAINT `fk_experiment_reviewers_experiment` FOREIGN KEY (`experiment_id`) REFERENCES `experiments` (`id`) ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_experiment_reviewers_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `fk_experiment_reviewers_admin` FOREIGN KEY (`assigned_by_admin_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `dsh_instances` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `route_key` CHAR(36) NOT NULL,
+  `container_id` VARCHAR(128) NULL,
+  `proxy_port` SMALLINT UNSIGNED NULL,
+  `storage_volume` VARCHAR(128) NOT NULL,
+  `status` VARCHAR(20) NOT NULL DEFAULT 'provisioning',
+  `cpu_limit` DECIMAL(6,3) NOT NULL DEFAULT 2.000,
+  `memory_limit_mb` INT UNSIGNED NOT NULL DEFAULT 4096,
+  `pids_limit` INT UNSIGNED NOT NULL DEFAULT 256,
+  `last_active_at` DATETIME(6) NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`), UNIQUE KEY `uq_dsh_instances_student` (`student_id`), UNIQUE KEY `uq_dsh_instances_route` (`route_key`),
+  UNIQUE KEY `uq_dsh_instances_container` (`container_id`), UNIQUE KEY `uq_dsh_instances_volume` (`storage_volume`),
+  KEY `idx_dsh_instances_status_active` (`status`, `last_active_at`),
+  CONSTRAINT `fk_dsh_instances_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `ck_dsh_instances_status` CHECK (`status` IN ('provisioning', 'running', 'stopping', 'stopped', 'error')),
+  CONSTRAINT `ck_dsh_instances_cpu` CHECK (`cpu_limit` > 0),
+  CONSTRAINT `ck_dsh_instances_memory` CHECK (`memory_limit_mb` > 0),
+  CONSTRAINT `ck_dsh_instances_pids` CHECK (`pids_limit` > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `dsh_access_tokens` (
+  `token_hash` CHAR(64) NOT NULL,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `instance_id` BIGINT UNSIGNED NOT NULL,
+  `expires_at` DATETIME(6) NOT NULL,
+  `revoked_at` DATETIME(6) NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`token_hash`),
+  KEY `idx_dsh_access_tokens_student_expiry` (`student_id`, `expires_at`),
+  CONSTRAINT `fk_dsh_access_tokens_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_dsh_access_tokens_instance` FOREIGN KEY (`instance_id`) REFERENCES `dsh_instances` (`id`) ON UPDATE RESTRICT ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `dsh_refresh_tokens` (
+  `token_hash` CHAR(64) NOT NULL,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `instance_id` BIGINT UNSIGNED NOT NULL,
+  `expires_at` DATETIME(6) NOT NULL,
+  `revoked_at` DATETIME(6) NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`token_hash`),
+  KEY `idx_dsh_refresh_tokens_instance_expiry` (`instance_id`, `expires_at`),
+  CONSTRAINT `fk_dsh_refresh_tokens_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_dsh_refresh_tokens_instance` FOREIGN KEY (`instance_id`) REFERENCES `dsh_instances` (`id`) ON UPDATE RESTRICT ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `dsh_run_bindings` (
+  `run_id` BIGINT UNSIGNED NOT NULL,
+  `experiment_id` BIGINT UNSIGNED NOT NULL,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `instance_id` BIGINT UNSIGNED NOT NULL,
+  `workspace_ref` VARCHAR(200) NOT NULL,
+  `session_ref` VARCHAR(200) NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `last_seen_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`run_id`),
+  KEY `idx_dsh_run_binding_refs` (`instance_id`, `workspace_ref`, `session_ref`),
+  KEY `idx_dsh_run_bindings_student_experiment` (`student_id`, `experiment_id`),
+  CONSTRAINT `fk_dsh_run_bindings_run` FOREIGN KEY (`run_id`, `experiment_id`) REFERENCES `experiment_runs` (`id`, `experiment_id`) ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_dsh_run_bindings_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `fk_dsh_run_bindings_instance` FOREIGN KEY (`instance_id`) REFERENCES `dsh_instances` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `code_submissions` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `run_id` BIGINT UNSIGNED NOT NULL,
+  `experiment_id` BIGINT UNSIGNED NOT NULL,
+  `student_id` BIGINT UNSIGNED NOT NULL,
+  `node_id` BIGINT UNSIGNED NULL,
+  `description` VARCHAR(500) NULL,
+  `file_count` SMALLINT UNSIGNED NOT NULL,
+  `total_bytes` BIGINT UNSIGNED NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`), KEY `idx_code_submissions_run_created` (`run_id`, `created_at`),
+  KEY `idx_code_submissions_experiment_created` (`experiment_id`, `created_at`),
+  CONSTRAINT `fk_code_submissions_run` FOREIGN KEY (`run_id`, `experiment_id`) REFERENCES `experiment_runs` (`id`, `experiment_id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `fk_code_submissions_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `fk_code_submissions_node` FOREIGN KEY (`node_id`, `experiment_id`) REFERENCES `experiment_nodes` (`id`, `experiment_id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT `ck_code_submissions_nonempty` CHECK (`file_count` > 0 AND `total_bytes` > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `code_submission_files` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `submission_id` BIGINT UNSIGNED NOT NULL,
+  `relative_path` VARCHAR(700) NOT NULL,
+  `content_text` LONGTEXT NOT NULL,
+  `content_sha256` CHAR(64) NOT NULL,
+  `size_bytes` BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (`id`), UNIQUE KEY `uq_code_submission_file_path` (`submission_id`, `relative_path`),
+  CONSTRAINT `fk_code_submission_files_submission` FOREIGN KEY (`submission_id`) REFERENCES `code_submissions` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `diagnosis_tasks` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `run_id` BIGINT UNSIGNED NOT NULL,
@@ -674,7 +793,7 @@ CREATE TABLE IF NOT EXISTS `code_patches` (
 
 CREATE TABLE IF NOT EXISTS `teacher_reviews` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `course_id` BIGINT UNSIGNED NOT NULL,
+  `course_id` BIGINT UNSIGNED NULL,
   `experiment_id` BIGINT UNSIGNED NOT NULL,
   `run_id` BIGINT UNSIGNED NOT NULL,
   `teacher_id` BIGINT UNSIGNED NOT NULL,

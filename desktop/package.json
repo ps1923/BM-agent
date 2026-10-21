@@ -1,0 +1,31 @@
+{
+  "name": "bm-hs-student-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BM-HS Windows student desktop application",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "dist:win": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "cn.bmhs.student",
+    "productName": "BM-HS 学生端",
+    "directories": { "output": "dist" },
+    "files": ["src/**/*"],
+    "extraResources": [
+      { "from": "../index.html", "to": "app/index.html" },
+      { "from": "../app.js", "to": "app/app.js" },
+      { "from": "../api-config.js", "to": "app/api-config.js" },
+      { "from": "../styles.css", "to": "app/styles.css" },
+      { "from": "runtime", "to": "runtime", "filter": ["**/*"] }
+    ],
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+  }
+}

@@ -42,14 +42,29 @@ class WorkspaceServiceTest {
         String content = "spring.datasource.password=do-not-copy\n"
                 + "service.url=https://student:do-not-copy@example.test\n"
                 + "Authorization: Bearer abc.def.ghi\n"
-                + "cloud.key=AKIA1234567890ABCDEF";
+                + "cloud.key=AKIA1234567890ABCDEF\n"
+                + "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd\n"
+                + "-----BEGIN RSA PRIVATE KEY-----\nprivate-key-payload\n-----END RSA PRIVATE KEY-----";
 
         String redacted = WorkspaceService.redactCommonSecrets(content);
 
         assertFalse(redacted.contains("do-not-copy"));
         assertFalse(redacted.contains("abc.def.ghi"));
         assertFalse(redacted.contains("AKIA1234567890ABCDEF"));
+        assertFalse(redacted.contains("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd"));
+        assertFalse(redacted.contains("private-key-payload"));
         assertTrue(redacted.contains("[REDACTED]"));
+    }
+
+    @Test
+    void sharedSensitiveFilePolicyHandlesNestedWindowsAndUnixPathsCaseInsensitively() {
+        assertTrue(WorkspaceService.isSensitiveWorkspaceFile(".env"));
+        assertTrue(WorkspaceService.isSensitiveWorkspaceFile("config/.ENV.production"));
+        assertTrue(WorkspaceService.isSensitiveWorkspaceFile("config\\Application-Secret.yml"));
+        assertTrue(WorkspaceService.isSensitiveWorkspaceFile("keys/client.private.KEY"));
+        assertTrue(WorkspaceService.isSensitiveWorkspaceFile("  "));
+        assertFalse(WorkspaceService.isSensitiveWorkspaceFile("src/Main.java"));
+        assertFalse(WorkspaceService.isSensitiveWorkspaceFile("config/application.yml"));
     }
 
     @Test

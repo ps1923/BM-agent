@@ -18,7 +18,9 @@
       && location.port === '8000'
       && LOOPBACK_HOSTS.has(host);
     const localApiHost = host === 'localhost' ? 'localhost' : location.hostname;
-    const deployedApiPath = location.pathname.startsWith('/bm-agent/') ? '/bm-agent/api' : '/api';
+    const deployedApiPath = location.pathname === '/bm-agent' || location.pathname.startsWith('/bm-agent/')
+      ? '/bm-agent/api'
+      : '/api';
     const defaultBaseUrl = localDevelopment
       ? `${location.protocol}//${localApiHost}:8080/api`
       : new URL(deployedApiPath, location.origin).href;

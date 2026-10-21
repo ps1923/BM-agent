@@ -41,6 +41,17 @@ bm-hs:
     session-duration: ${AUTH_SESSION_DURATION:PT24H}
     secure-cookie: ${AUTH_SECURE_COOKIE:false}
     same-site: ${AUTH_COOKIE_SAME_SITE:Lax}
+  dsh:
+    enabled: ${DSH_ENABLED:false}
+    docker-binary: ${DSH_DOCKER_BINARY:docker}
+    image: ${DSH_IMAGE:}
+    api-base-url: ${DSH_BMHS_API_BASE_URL:}
+    public-base-url: ${DSH_PUBLIC_BASE_URL:}
+    cpu-limit: ${DSH_CPU_LIMIT:1.0}
+    memory-limit-mb: ${DSH_MEMORY_LIMIT_MB:2048}
+    pids-limit: ${DSH_PIDS_LIMIT:256}
+    startup-timeout: ${DSH_STARTUP_TIMEOUT:PT90S}
+    cleanup-interval: ${DSH_CLEANUP_INTERVAL:PT1M}
   workspace:
     root-path: ${WORKSPACE_ROOT:/var/lib/bm-hs/workspaces}
     runtime-image: ${WORKSPACE_RUNTIME_IMAGE:bm-hs/workspace:latest}

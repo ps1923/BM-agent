@@ -27,6 +27,7 @@ import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
@@ -90,6 +91,40 @@ class DiagnosisServiceTest {
         assertEquals(Set.of("config/application.yml"), files.files().keySet());
         assertTrue(files.files().get("config/application.yml").content().contains("[REDACTED]"));
         assertEquals(false, files.files().get("config/application.yml").complete());
+    }
+
+    @Test
+    void deepDiagnosisRedactsEveryDynamicPromptFieldAndMarksChangedSourceUnpatchable() {
+        service = new DiagnosisService(mock(DiagnosisRepository.class), mock(WorkspaceRepository.class),
+                mock(WorkspaceService.class), mock(GuidanceModelClient.class), mock(GuidanceRepository.class),
+                mock(RagService.class), mock(BugRepository.class), mock(PatchRepository.class),
+                1, 1, 20000, 5000, 3);
+        GuidanceModels.ExperimentContext context = new GuidanceModels.ExperimentContext(
+                3L, 4L, "api_key=metadata-secret-value", "token=goal-secret-value", "普通说明",
+                5L, "普通节点", "普通任务");
+        String source = "class Main { String password=source-secret-value; }";
+        Map<String, DiagnosisService.FileSnapshot> files = Map.of("src/Main.java",
+                new DiagnosisService.FileSnapshot(source, "a".repeat(64), true));
+        RagModels.RagSearchResult rag = new RagModels.RagSearchResult(true, List.of(
+                new RagModels.RagReference(12L, "普通案例", "password=rag-problem-secret",
+                        "token=rag-solution-secret", 0.1)));
+        String question = "请分析 api_key=question-secret-value";
+
+        DiagnosisService.PreparedPrompt prepared = service.buildPrompt(context,
+                new DiagnosisService.FileBundle(files), rag, question);
+        JsonObject json = JsonParser.parseString(prepared.userPrompt()).getAsJsonObject();
+
+        assertFalse(prepared.userPrompt().contains("metadata-secret-value"));
+        assertFalse(prepared.userPrompt().contains("goal-secret-value"));
+        assertFalse(prepared.userPrompt().contains("source-secret-value"));
+        assertFalse(prepared.userPrompt().contains("rag-problem-secret"));
+        assertFalse(prepared.userPrompt().contains("rag-solution-secret"));
+        assertFalse(prepared.userPrompt().contains("question-secret-value"));
+        assertTrue(json.getAsJsonArray("projectFiles").get(0).getAsJsonObject()
+                .get("content").getAsString().contains("[REDACTED]"));
+        assertFalse(json.getAsJsonArray("projectFiles").get(0).getAsJsonObject()
+                .get("complete").getAsBoolean());
+        assertTrue(prepared.patchablePaths().isEmpty());
     }
 
     @Test

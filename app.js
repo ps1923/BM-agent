@@ -19,6 +19,8 @@ const codeFileTabs = document.querySelector('#codeFileTabs');
 const codeLocation = document.querySelector('#codeLocation');
 const saveFileButton = document.querySelector('#saveFileButton');
 const createSnapshotButton = document.querySelector('#createSnapshotButton');
+const desktopNewFolderButton = document.querySelector('#desktopNewFolderButton');
+const desktopNewFileButton = document.querySelector('#desktopNewFileButton');
 const completeNodeButton = document.querySelector('#completeNodeButton');
 const recordBugButton = document.querySelector('#recordBugButton');
 const deepDiagnosisButton = document.querySelector('#deepDiagnosisButton');
@@ -48,6 +50,12 @@ const loginError = document.querySelector('#loginError');
 const routeStatus = document.querySelector('#routeStatus');
 const studentView = document.querySelector('#studentView');
 const teacherView = document.querySelector('#teacherView');
+const adminView = document.querySelector('#adminView');
+const adminIdentity = document.querySelector('#adminIdentity');
+const adminExperiment = document.querySelector('#adminExperiment');
+const adminReviewer = document.querySelector('#adminReviewer');
+const adminAssignReviewer = document.querySelector('#adminAssignReviewer');
+const adminReviewerMessage = document.querySelector('#adminReviewerMessage');
 const studentIdentity = document.querySelector('#studentIdentity');
 const teacherIdentity = document.querySelector('#teacherIdentity');
 const studentLogoutButton = document.querySelector('#studentLogoutButton');
@@ -59,6 +67,9 @@ const joinCode = document.querySelector('#joinCode');
 const studentMessage = document.querySelector('#studentMessage');
 const studentCourses = document.querySelector('#studentCourses');
 const studentCourseCount = document.querySelector('#studentCourseCount');
+const studentDshState = document.querySelector('#studentDshState');
+const studentDshLaunchButton = document.querySelector('#studentDshLaunchButton');
+const studentDshStopButton = document.querySelector('#studentDshStopButton');
 const createCourseForm = document.querySelector('#createCourseForm');
 const courseName = document.querySelector('#courseName');
 const teacherMessage = document.querySelector('#teacherMessage');
@@ -76,10 +87,12 @@ const teacherProgressRows = document.querySelector('#teacherProgressRows');
 const teacherRunDetail = document.querySelector('#teacherRunDetail');
 const teacherRunTitle = document.querySelector('#teacherRunTitle');
 const teacherRunStatus = document.querySelector('#teacherRunStatus');
+const teacherRunSummaryState = document.querySelector('#teacherRunSummaryState');
 const teacherRunSummary = document.querySelector('#teacherRunSummary');
 const teacherAiSummary = document.querySelector('#teacherAiSummary');
 const teacherRunMetrics = document.querySelector('#teacherRunMetrics');
 const teacherTimeline = document.querySelector('#teacherTimeline');
+const teacherTimelineState = document.querySelector('#teacherTimelineState');
 const teacherEvidenceMessage = document.querySelector('#teacherEvidenceMessage');
 const teacherStageEvidence = document.querySelector('#teacherStageEvidence');
 const teacherEvidenceFiles = document.querySelector('#teacherEvidenceFiles');
@@ -90,6 +103,18 @@ const teacherFeedback = document.querySelector('#teacherFeedback');
 const teacherReviewMessage = document.querySelector('#teacherReviewMessage');
 const teacherBugMessage = document.querySelector('#teacherBugMessage');
 const teacherBugList = document.querySelector('#teacherBugList');
+const teacherDshExperiment = document.querySelector('#teacherDshExperiment');
+const teacherDshMessage = document.querySelector('#teacherDshMessage');
+const teacherDshRuns = document.querySelector('#teacherDshRuns');
+const teacherDshSubmissions = document.querySelector('#teacherDshSubmissions');
+const teacherDshCode = document.querySelector('#teacherDshCode');
+const teacherDshBugMessage = document.querySelector('#teacherDshBugMessage');
+const teacherDshBugs = document.querySelector('#teacherDshBugs');
+const teacherDshReviewForm = document.querySelector('#teacherDshReviewForm');
+const teacherDshRating = document.querySelector('#teacherDshRating');
+const teacherDshFeedback = document.querySelector('#teacherDshFeedback');
+const teacherDshReviewSave = document.querySelector('#teacherDshReviewSave');
+const teacherDshReviewMessage = document.querySelector('#teacherDshReviewMessage');
 const libraryDashboardButton = document.querySelector('#libraryDashboardButton');
 const libraryLogoutButton = document.querySelector('#libraryLogoutButton');
 const libraryAccountLabel = document.querySelector('#libraryAccountLabel');
@@ -124,10 +149,14 @@ const defaultLearningGoalPlaceholder = learningGoal.placeholder;
 let API_BASE_URL = '';
 let API_BASE_URL_ERROR = '';
 try {
-  if (typeof window.BMApiConfig?.resolveApiBaseUrl !== 'function') {
-    throw new Error('API 配置模块未加载。');
+  if (window.BMDesktop?.isDesktop) {
+    API_BASE_URL = 'desktop://main-process-proxy';
+  } else {
+    if (typeof window.BMApiConfig?.resolveApiBaseUrl !== 'function') {
+      throw new Error('API 配置模块未加载。');
+    }
+    API_BASE_URL = window.BMApiConfig.resolveApiBaseUrl(window.location, window.BM_API_BASE_URL);
   }
-  API_BASE_URL = window.BMApiConfig.resolveApiBaseUrl(window.location, window.BM_API_BASE_URL);
 } catch (error) {
   API_BASE_URL_ERROR = error.message || 'API 地址配置无效。';
 }
@@ -136,6 +165,8 @@ const STORAGE_KEYS = {
   teacherCourse: 'bmhs.teacherCourse',
   activeExperiment: 'bmhs.activeExperiment',
   terminalSessionPrefix: 'bmhs.terminalSession.',
+  terminalSessionRequestPrefix: 'bmhs.terminalSession.request.',
+  terminalCommandPrefix: 'bmhs.terminalCommand.',
 };
 let currentUser = null;
 let sessionReady = false;
@@ -161,6 +192,8 @@ let pendingPlan = null;
 let createBusy = false;
 let materializationKey = null;
 let createDialogEpoch = 0;
+let activeCreateRequestController = null;
+let createMaterializationInFlight = false;
 let activeTreeNodes = [];
 let selectedTreeNode = null;
 let treeEdgeLayer = null;
@@ -170,10 +203,12 @@ let activeFilePath = null;
 let activeFileHash = null;
 let activeFileSavedContent = '';
 let activeWorkspaceFiles = [];
+let lastDesktopTerminalOutput = '';
 let workspaceFileSelectionEpoch = 0;
-let terminalCommandInFlight = false;
+const terminalCommandsInFlight = new Set();
 let teacherDashboardEpoch = 0;
 let teacherCourseDashboardEpoch = 0;
+let studentDashboardEpoch = 0;
 let taskProgressRequestEpoch = 0;
 let taskProgressMutationInFlight = false;
 const taskProgressButtonEpochs = new Map();
@@ -183,10 +218,12 @@ let pendingPatchReview = null;
 let patchReviewEpoch = 0;
 let patchReviewSourceButton = null;
 let patchReviewApplied = false;
+let patchApplyInFlight = false;
 let activeNodeId = null;
 let selectedTeacherRunId = null;
 let activeRunProgress = null;
 let runProgressLoadFailed = false;
+const guidanceRequestsInFlight = new Set();
 
 const experimentData = {};
 const recentlyOpenedExperimentIds = [];
@@ -199,8 +236,15 @@ function isRunContextCurrent(runId, epoch) {
   return epoch === routeResolutionEpoch && String(activeRun?.runId) === String(runId);
 }
 
+function syncGuidanceControls() {
+  const activeRunId = activeRun ? String(activeRun.runId) : null;
+  const requestInFlight = activeRunId !== null && guidanceRequestsInFlight.has(activeRunId);
+  sendButton.disabled = requestInFlight;
+  softenButton.disabled = requestInFlight;
+}
+
 function setCurrentUser(user) {
-  const nextUser = user && ['student', 'teacher'].includes(user.role)
+  const nextUser = user && ['student', 'teacher', 'admin'].includes(user.role)
     ? { ...user, name: user.name || user.displayName || user.email }
     : null;
   if (currentUser?.id !== nextUser?.id) {
@@ -232,20 +276,55 @@ function renderPublishedExperiment(item) {
   openButton.className = 'text-action open-published-experiment';
   openButton.type = 'button';
   openButton.dataset.experimentId = item.experimentId;
-  openButton.textContent = '打开';
+  openButton.textContent = '在 DSH 中打开';
   actions.append(status, openButton);
   row.append(title, actions);
   return row;
 }
 
+function describeDshStatus(status) {
+  return ({
+    stopped: '工作区已停止；再次打开时会恢复你的持久工作区。',
+    provisioning: '正在为你启动独立 DSH 工作区…',
+    running: 'DSH 工作区运行中。',
+    stopping: '工作区正在安全停止，文件会保留。',
+    error: '工作区启动或停止失败，可重试；你的持久文件不会被删除。',
+  })[status] || 'DSH 状态暂时不可用。';
+}
+
+async function loadStudentDshStatus(isCurrentRequest = () => getCurrentUser()?.role === 'student') {
+  if (!studentDshState) return;
+  try {
+    const status = await apiRequest('/student/dsh/status', { method: 'GET' });
+    if (!isCurrentRequest()) return;
+    studentDshState.textContent = describeDshStatus(status.status);
+    studentDshLaunchButton.textContent = status.status === 'running' ? '重新连接 DSH' : '打开 DSH';
+    studentDshStopButton.hidden = status.status !== 'running';
+  } catch {
+    if (!isCurrentRequest()) return;
+    studentDshState.textContent = '暂时无法读取 DSH 状态；可以重试打开工作区。';
+    studentDshStopButton.hidden = true;
+  }
+}
+
 async function renderStudentDashboard() {
   const user = getCurrentUser();
-  if (!user || user.role !== 'student') return;
+  if (!user || user.role !== 'student') {
+    clearStudentDashboard();
+    return;
+  }
+  const requestEpoch = ++studentDashboardEpoch;
+  const userId = String(user.id);
+  const isCurrentRequest = () => requestEpoch === studentDashboardEpoch
+    && String(getCurrentUser()?.id) === userId
+    && getCurrentUser()?.role === 'student';
   studentIdentity.textContent = `${user.name} · ${user.email}`;
+  void loadStudentDshStatus(isCurrentRequest);
   studentCourseCount.textContent = '加载中…';
   studentCourses.replaceChildren();
   try {
     const enrolled = await apiRequest('/courses', { method: 'GET' });
+    if (!isCurrentRequest()) return;
     if (!Array.isArray(enrolled)) throw new Error('课程数据格式无效，请刷新后重试。');
     studentCourseCount.textContent = `${enrolled.length} 门课程`;
     if (!enrolled.length) {
@@ -287,12 +366,113 @@ async function renderStudentDashboard() {
       studentCourses.append(card);
     });
   } catch (error) {
+    if (!isCurrentRequest()) return;
     studentCourseCount.textContent = '加载失败';
     const message = document.createElement('p');
     message.className = 'course-empty';
     message.textContent = error.message || '课程加载失败，请刷新后重试。';
     studentCourses.append(message);
   }
+}
+
+function validateDshLaunchUrl(value) {
+  let url;
+  try { url = new URL(value); } catch { throw new Error('DSH 返回的访问地址无效。'); }
+  const isLoopbackHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname);
+  if (url.protocol !== 'https:' && !isLoopbackHttp) throw new Error('DSH 访问地址必须使用 HTTPS。');
+  if (url.username || url.password) throw new Error('DSH 访问地址包含不允许的凭据。');
+  return url.href;
+}
+
+async function openStudentDsh(triggerButton) {
+  const userId = getCurrentUser()?.id;
+  if (!userId || getCurrentUser()?.role !== 'student') return;
+  const blankTab = window.open('about:blank', '_blank');
+  if (blankTab) blankTab.opener = null;
+  const previousText = triggerButton.textContent;
+  triggerButton.disabled = true;
+  studentDshState.textContent = '正在启动或连接你的 DSH 工作区…';
+  try {
+    let result = await apiRequest('/student/dsh/launch', { method: 'POST' });
+    const deadline = Date.now() + 90_000;
+    while (result.status === 'provisioning' && Date.now() < deadline) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      result = await apiRequest('/student/dsh/status', { method: 'GET' });
+      if (getCurrentUser()?.id !== userId || getCurrentUser()?.role !== 'student') return;
+    }
+    if (result.status !== 'running' || !result.launchUrl) throw new Error(describeDshStatus(result.status));
+    const launchUrl = validateDshLaunchUrl(result.launchUrl);
+    studentDshState.textContent = '工作区已就绪，正在打开 DSH…';
+    if (blankTab && !blankTab.closed) blankTab.location.replace(launchUrl);
+    else window.location.assign(launchUrl);
+  } catch (error) {
+    if (blankTab && !blankTab.closed) blankTab.close();
+    if (getCurrentUser()?.id === userId) {
+      studentDshState.textContent = error.message || 'DSH 启动失败，请稍后重试。';
+      setMessage(studentMessage, error.message || 'DSH 启动失败，请稍后重试。', true);
+    }
+  } finally {
+    if (getCurrentUser()?.id === userId) {
+      triggerButton.disabled = false;
+      triggerButton.textContent = previousText;
+      void loadStudentDshStatus(() => getCurrentUser()?.id === userId && getCurrentUser()?.role === 'student');
+    }
+  }
+}
+
+async function renderAdminDashboard() {
+  const user = getCurrentUser();
+  if (!user || user.role !== 'admin') return;
+  adminIdentity.textContent = `${user.name} · ${user.email}`;
+  adminExperiment.replaceChildren();
+  adminReviewer.replaceChildren();
+  adminAssignReviewer.disabled = true;
+  setMessage(adminReviewerMessage, '正在加载个人实验和教师列表…');
+  try {
+    const [experiments, teachers] = await Promise.all([
+      apiRequest('/admin/reviewable-experiments', { method: 'GET' }),
+      apiRequest('/admin/teachers', { method: 'GET' }),
+    ]);
+    if (getCurrentUser()?.id !== user.id || getCurrentUser()?.role !== 'admin') return;
+    const experimentPlaceholder = document.createElement('option');
+    experimentPlaceholder.value = '';
+    experimentPlaceholder.textContent = experiments.length ? '请选择个人实验' : '暂无可绑定的个人实验';
+    adminExperiment.append(experimentPlaceholder);
+    experiments.forEach((experiment) => {
+      const option = document.createElement('option');
+      option.value = String(experiment.experimentId);
+      option.dataset.teacherId = experiment.teacherId == null ? '' : String(experiment.teacherId);
+      option.textContent = `${experiment.name} · ${experiment.teacherName || '未绑定'}`;
+      adminExperiment.append(option);
+    });
+    const teacherPlaceholder = document.createElement('option');
+    teacherPlaceholder.value = '';
+    teacherPlaceholder.textContent = teachers.length ? '请选择审核教师' : '暂无可用教师';
+    adminReviewer.append(teacherPlaceholder);
+    teachers.forEach((teacher) => {
+      const option = document.createElement('option');
+      option.value = String(teacher.teacherId);
+      option.textContent = `${teacher.displayName} · ${teacher.email}`;
+      adminReviewer.append(option);
+    });
+    adminAssignReviewer.disabled = !experiments.length || !teachers.length;
+    setMessage(adminReviewerMessage, '选择实验后可查看或更换其审核教师；课程已发布实验由课程教师负责审核。');
+  } catch (error) {
+    setMessage(adminReviewerMessage, error.message || '管理数据加载失败。', true);
+  }
+}
+
+function syncAdminReviewerSelection() {
+  const option = adminExperiment.selectedOptions?.[0];
+  if (option?.dataset?.teacherId) adminReviewer.value = option.dataset.teacherId;
+  else adminReviewer.value = '';
+}
+
+function clearStudentDashboard() {
+  studentDashboardEpoch += 1;
+  studentCourses.replaceChildren();
+  studentIdentity.textContent = '';
+  studentCourseCount.textContent = '';
 }
 
 function formatTeacherDate(value) {
@@ -309,17 +489,24 @@ function resetTeacherRunDetail() {
   teacherRunDetail.hidden = true;
   teacherRunTitle.textContent = '学生运行详情';
   teacherRunStatus.textContent = '';
+  teacherRunSummaryState.replaceChildren();
+  teacherRunSummaryState.classList.remove('is-error');
   teacherRunSummary.textContent = '';
   teacherAiSummary.textContent = '';
   teacherAiSummary.hidden = true;
   teacherRunMetrics.replaceChildren();
   teacherTimeline.replaceChildren();
+  teacherTimelineState.replaceChildren();
+  teacherTimelineState.classList.remove('is-error');
   teacherStageEvidence.replaceChildren();
   teacherEvidenceFiles.replaceChildren();
   teacherEvidenceCode.textContent = '选择一个阶段快照文件查看。';
   setMessage(teacherEvidenceMessage, '');
   teacherRating.value = '';
+  teacherRating.disabled = true;
   teacherFeedback.value = '';
+  teacherFeedback.disabled = true;
+  teacherReviewForm.querySelector('button[type="submit"]').disabled = true;
   setMessage(teacherReviewMessage, '');
 }
 
@@ -422,6 +609,243 @@ let teacherBugRequestEpoch = 0;
 let teacherEvidenceRequestEpoch = 0;
 let teacherEvidenceSelectionEpoch = 0;
 let teacherRunDetailRequestEpoch = 0;
+let teacherRunSummaryRequestEpoch = 0;
+let teacherRunTimelineRequestEpoch = 0;
+let teacherDshRequestEpoch = 0;
+let teacherDshRunsRequestEpoch = 0;
+let teacherDshSubmissionsRequestEpoch = 0;
+let selectedTeacherDshRunId = null;
+
+async function loadTeacherDshExperiments() {
+  const requestEpoch = ++teacherDshRequestEpoch;
+  ++teacherDshBugRequestEpoch;
+  teacherDshExperiment.replaceChildren();
+  teacherDshRuns.replaceChildren();
+  teacherDshSubmissions.replaceChildren();
+  teacherDshBugs.replaceChildren();
+  selectedTeacherDshRunId = null;
+  teacherDshRating.disabled = true;
+  teacherDshFeedback.disabled = true;
+  teacherDshReviewSave.disabled = true;
+  teacherDshRating.value = '';
+  teacherDshFeedback.value = '';
+  setMessage(teacherDshReviewMessage, '选择学生查看或填写阶段评价。');
+  teacherDshCode.textContent = '选择一条学生记录查看已提交快照。';
+  setMessage(teacherDshMessage, '正在加载授权实验…');
+  try {
+    const experiments = await apiRequest('/teacher/experiments', { method: 'GET' });
+    if (requestEpoch !== teacherDshRequestEpoch || getCurrentUser()?.role !== 'teacher') return;
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = experiments.length ? '请选择实验' : '暂无 DSH 实验权限';
+    teacherDshExperiment.append(placeholder);
+    experiments.forEach((experiment) => {
+      const option = document.createElement('option');
+      option.value = String(experiment.experimentId ?? experiment.id);
+      option.textContent = `${experiment.name}${experiment.courseName ? ` · ${experiment.courseName}` : ' · 个人实验'}`;
+      teacherDshExperiment.append(option);
+    });
+    setMessage(teacherDshMessage, experiments.length
+      ? '学生只主动提交的快照对教师可见。'
+      : '目前没有已授权的 DSH 实验。');
+    if (experiments.length) {
+      teacherDshExperiment.value = String(experiments[0].experimentId ?? experiments[0].id);
+      void loadTeacherDshRuns(teacherDshExperiment.value);
+    }
+  } catch (error) {
+    if (requestEpoch !== teacherDshRequestEpoch) return;
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'DSH 记录暂不可用';
+    teacherDshExperiment.append(placeholder);
+    setMessage(teacherDshMessage, error.message || 'DSH 学习记录加载失败。', true);
+  }
+}
+
+async function loadTeacherDshRuns(experimentId) {
+  const requestEpoch = ++teacherDshRunsRequestEpoch;
+  ++teacherDshSubmissionsRequestEpoch;
+  teacherDshRuns.replaceChildren();
+  teacherDshSubmissions.replaceChildren();
+  selectedTeacherDshRunId = null;
+  teacherDshRating.disabled = true;
+  teacherDshFeedback.disabled = true;
+  teacherDshReviewSave.disabled = true;
+  teacherDshRating.value = '';
+  teacherDshFeedback.value = '';
+  teacherDshCode.textContent = '选择一条学生记录查看已提交快照。';
+  if (!/^\d+$/.test(String(experimentId))) {
+    ++teacherDshBugRequestEpoch;
+    teacherDshBugs.replaceChildren();
+    setMessage(teacherDshBugMessage, '请选择实验查看 Bug 案例。');
+    return;
+  }
+  void loadTeacherDshBugs(experimentId);
+  setMessage(teacherDshMessage, '正在加载学生学习进度…');
+  try {
+    const runs = await apiRequest(`/teacher/experiments/${encodeURIComponent(experimentId)}/runs`, { method: 'GET' });
+    if (requestEpoch !== teacherDshRunsRequestEpoch || teacherDshExperiment.value !== String(experimentId)) return;
+    if (!Array.isArray(runs) || !runs.length) {
+      setMessage(teacherDshMessage, '该实验还没有 DSH 学习记录。');
+      return;
+    }
+    setMessage(teacherDshMessage, `${runs.length} 条学生运行记录；仅展示学习进度与学生主动提交的代码。`);
+    runs.forEach((run) => {
+      const card = document.createElement('article');
+      card.className = 'teacher-dsh-run';
+      const identity = document.createElement('strong');
+      identity.textContent = run.studentName || run.studentEmail || `学生 ${run.studentId}`;
+      const progress = document.createElement('small');
+      progress.textContent = `${run.completedNodes}/${run.totalNodes} 节点 · ${run.completedTasks}/${run.totalTasks} 任务 · ${run.status}`;
+      const button = document.createElement('button');
+      button.className = 'secondary-action';
+      button.type = 'button';
+      button.textContent = '查看主动提交';
+      button.addEventListener('click', () => void loadTeacherDshSubmissions(run.runId));
+      card.append(identity, progress, button);
+      teacherDshRuns.append(card);
+    });
+  } catch (error) {
+    if (requestEpoch !== teacherDshRunsRequestEpoch) return;
+    setMessage(teacherDshMessage, error.message || '学生学习进度加载失败。', true);
+  }
+}
+
+let teacherDshBugRequestEpoch = 0;
+async function loadTeacherDshBugs(experimentId) {
+  const requestEpoch = ++teacherDshBugRequestEpoch;
+  teacherDshBugs.replaceChildren();
+  setMessage(teacherDshBugMessage, '正在加载实验 Bug 案例…');
+  try {
+    const bugs = await apiRequest(`/teacher/experiments/${encodeURIComponent(experimentId)}/bugs`, { method: 'GET' });
+    if (requestEpoch !== teacherDshBugRequestEpoch || teacherDshExperiment.value !== String(experimentId)) return;
+    if (!Array.isArray(bugs) || !bugs.length) {
+      setMessage(teacherDshBugMessage, '当前实验还没有学生手动提交的 Bug 案例。');
+      return;
+    }
+    setMessage(teacherDshBugMessage, '审核通过的案例只会进入当前实验的记忆池。');
+    bugs.forEach((bug) => {
+      const card = document.createElement('article');
+      card.className = 'teacher-bug-item';
+      const heading = document.createElement('div');
+      heading.className = 'teacher-bug-item-heading';
+      const title = document.createElement('strong');
+      title.textContent = bug.title || '未命名案例';
+      const status = document.createElement('span');
+      status.className = `bug-status bug-status-${bug.status || 'pending'}`;
+      status.textContent = bug.status === 'approved' ? '已通过' : bug.status === 'rejected' ? '已拒绝' : '待审核';
+      heading.append(title, status);
+      const problem = document.createElement('p');
+      problem.textContent = bug.problem || '未填写问题现象。';
+      card.append(heading, problem);
+      if (bug.solution) {
+        const solution = document.createElement('p');
+        solution.className = 'teacher-bug-solution';
+        solution.textContent = `解决方法：${bug.solution}`;
+        card.append(solution);
+      }
+      if (bug.status === 'pending') {
+        const actions = document.createElement('div');
+        actions.className = 'teacher-bug-actions';
+        const feedback = document.createElement('input');
+        feedback.type = 'text';
+        feedback.maxLength = 1000;
+        feedback.placeholder = '审核意见（可选）';
+        for (const decision of ['approved', 'rejected']) {
+          const button = document.createElement('button');
+          button.className = decision === 'approved' ? 'primary-action' : 'secondary-action';
+          button.type = 'button';
+          button.textContent = decision === 'approved' ? '通过并入记忆池' : '拒绝';
+          button.addEventListener('click', async () => {
+            button.disabled = true;
+            try {
+              await apiRequest(`/bugs/${bug.id}/approve`, {
+                method: 'POST', body: JSON.stringify({ decision, feedback: feedback.value.trim() }),
+              });
+              if (teacherDshExperiment.value === String(experimentId)) await loadTeacherDshBugs(experimentId);
+            } catch (error) {
+              button.disabled = false;
+              if (teacherDshExperiment.value === String(experimentId)) {
+                setMessage(teacherDshBugMessage, error.message || 'Bug 审核失败，请重试。', true);
+              }
+            }
+          });
+          actions.append(button);
+        }
+        actions.prepend(feedback);
+        card.append(actions);
+      }
+      teacherDshBugs.append(card);
+    });
+  } catch (error) {
+    if (requestEpoch !== teacherDshBugRequestEpoch) return;
+    setMessage(teacherDshBugMessage, error.message || '实验 Bug 案例加载失败。', true);
+  }
+}
+
+async function loadTeacherDshSubmissions(runId) {
+  const requestEpoch = ++teacherDshSubmissionsRequestEpoch;
+  selectedTeacherDshRunId = Number(runId);
+  teacherDshRating.disabled = true;
+  teacherDshFeedback.disabled = true;
+  teacherDshReviewSave.disabled = true;
+  teacherDshRating.value = '';
+  teacherDshFeedback.value = '';
+  setMessage(teacherDshReviewMessage, '正在读取已有评价…');
+  void loadTeacherDshReview(runId, requestEpoch);
+  teacherDshSubmissions.replaceChildren();
+  teacherDshCode.textContent = '正在加载学生主动提交的快照…';
+  try {
+    const submissions = await apiRequest(`/teacher/runs/${encodeURIComponent(runId)}/submissions`, { method: 'GET' });
+    if (requestEpoch !== teacherDshSubmissionsRequestEpoch) return;
+    if (!Array.isArray(submissions) || !submissions.length) {
+      teacherDshCode.textContent = '该学生尚未主动提交代码快照。';
+      return;
+    }
+    submissions.forEach((submission) => {
+      const button = document.createElement('button');
+      button.className = 'teacher-dsh-submission';
+      button.type = 'button';
+      button.textContent = `提交 #${submission.submissionId} · ${submission.fileCount} 个文件 · ${formatTeacherDate(submission.createdAt)}`;
+      button.addEventListener('click', () => void loadTeacherDshSubmission(runId, submission.submissionId, requestEpoch));
+      teacherDshSubmissions.append(button);
+    });
+    teacherDshCode.textContent = '选择一个提交版本查看所选文件及 SHA-256。';
+  } catch (error) {
+    if (requestEpoch !== teacherDshSubmissionsRequestEpoch) return;
+    teacherDshCode.textContent = error.message || '代码提交列表读取失败。';
+  }
+}
+
+async function loadTeacherDshReview(runId, requestEpoch) {
+  try {
+    const review = await apiRequest(`/teacher/dsh/runs/${encodeURIComponent(runId)}/review`, { method: 'GET' });
+    if (requestEpoch !== teacherDshSubmissionsRequestEpoch || selectedTeacherDshRunId !== Number(runId)) return;
+    if (review && typeof review === 'object') {
+      teacherDshRating.value = review.rating == null ? '' : String(review.rating);
+      teacherDshFeedback.value = review.feedback || '';
+    }
+    teacherDshRating.disabled = false;
+    teacherDshFeedback.disabled = false;
+    teacherDshReviewSave.disabled = false;
+    setMessage(teacherDshReviewMessage, review ? '可修改已有阶段评价。' : '尚无阶段评价，可填写后保存。');
+  } catch (error) {
+    if (requestEpoch !== teacherDshSubmissionsRequestEpoch || selectedTeacherDshRunId !== Number(runId)) return;
+    setMessage(teacherDshReviewMessage, error.message || '阶段评价读取失败。', true);
+  }
+}
+
+async function loadTeacherDshSubmission(runId, submissionId, requestEpoch) {
+  try {
+    const detail = await apiRequest(`/teacher/runs/${encodeURIComponent(runId)}/submissions/${encodeURIComponent(submissionId)}`, { method: 'GET' });
+    if (requestEpoch !== teacherDshSubmissionsRequestEpoch) return;
+    const files = Array.isArray(detail.files) ? detail.files : [];
+    teacherDshCode.textContent = files.map((file) => `// ${file.path} · SHA-256 ${file.sha256}\n${file.content}`).join('\n\n');
+  } catch (error) {
+    if (requestEpoch !== teacherDshSubmissionsRequestEpoch) return;
+    teacherDshCode.textContent = error.message || '代码快照读取失败。';
+  }
+}
 
 async function loadTeacherBugCases(courseId) {
   if (!/^\d+$/.test(String(courseId))) {
@@ -511,35 +935,59 @@ async function loadTeacherBugCases(courseId) {
   }
 }
 
-async function loadTeacherRunDetail(runId, studentName) {
-  if (!/^\d+$/.test(String(runId)) || Number(runId) <= 0) {
-    resetTeacherRunDetail();
-    setMessage(teacherDashboardMessage, '该学生尚未创建实验运行实例。');
-    return;
-  }
-  resetTeacherRunDetail();
-  const requestEpoch = ++teacherRunDetailRequestEpoch;
-  teacherRunDetail.hidden = false;
-  selectedTeacherRunId = Number(runId);
-  teacherRunTitle.textContent = `${studentName || '学生'} 的学习详情`;
-  teacherRunStatus.textContent = '加载中…';
+function isCurrentTeacherRunDetail(runId, requestEpoch) {
+  return requestEpoch === teacherRunDetailRequestEpoch && selectedTeacherRunId === Number(runId);
+}
+
+function renderTeacherRunPanelError(container, error, retryLabel, onRetry) {
+  container.classList.add('is-error');
+  const message = document.createElement('span');
+  message.textContent = error || '加载失败，请重试。';
+  const retry = document.createElement('button');
+  retry.className = 'text-action';
+  retry.type = 'button';
+  retry.textContent = retryLabel;
+  retry.addEventListener('click', onRetry);
+  container.replaceChildren(message, retry);
+}
+
+async function loadTeacherRunSummary(runId, studentName, requestEpoch) {
+  const panelEpoch = ++teacherRunSummaryRequestEpoch;
+  teacherRunSummaryState.classList.remove('is-error');
+  teacherRunSummaryState.textContent = '正在加载学习概况…';
+  setMessage(teacherReviewMessage, '正在读取已保存评价…');
   try {
-    const [summary, timeline] = await Promise.all([
-      apiRequest(`/teacher/runs/${runId}/summary`, { method: 'GET' }),
-      apiRequest(`/teacher/runs/${runId}/timeline`, { method: 'GET' }),
-    ]);
-    if (requestEpoch !== teacherRunDetailRequestEpoch || selectedTeacherRunId !== Number(runId)) return;
+    const summary = await apiRequest(`/teacher/runs/${runId}/summary`, { method: 'GET' });
+    if (!isCurrentTeacherRunDetail(runId, requestEpoch) || panelEpoch !== teacherRunSummaryRequestEpoch) return;
+    const metrics = ['completedNodes', 'totalNodes', 'completedTasks', 'totalTasks', 'commandCount', 'messageCount', 'bugCount'];
+    if (!summary || typeof summary !== 'object' || Number(summary.runId) !== Number(runId)
+        || metrics.some((key) => !Number.isSafeInteger(summary[key]) || summary[key] < 0)
+        || summary.completedNodes > summary.totalNodes || summary.completedTasks > summary.totalTasks
+        || typeof summary.runStatus !== 'string' || !summary.runStatus.trim()
+        || typeof summary.experimentName !== 'string' || !summary.experimentName.trim()
+        || typeof summary.aiSummaryAvailable !== 'boolean'
+        || (summary.aiSummaryAvailable && typeof summary.aiSummary !== 'string')
+        || (summary.review != null && (typeof summary.review !== 'object' || Array.isArray(summary.review)
+          || (summary.review.rating != null && (!Number.isInteger(summary.review.rating)
+            || summary.review.rating < 0 || summary.review.rating > 100))
+          || (summary.review.feedback != null && typeof summary.review.feedback !== 'string')))) {
+      throw new Error('学习概况数据格式无效，请重试。');
+    }
     teacherRunStatus.textContent = summary.runStatus || '未知状态';
-    teacherRunSummary.textContent = `${summary.experimentName || '实验'} · 节点完成 ${summary.completedNodes}/${summary.totalNodes} · 任务完成 ${summary.completedTasks || 0}/${summary.totalTasks || 0}`;
+    teacherRunSummary.textContent = `${summary.experimentName || '实验'} · 节点完成 ${summary.completedNodes}/${summary.totalNodes} · 任务完成 ${summary.completedTasks}/${summary.totalTasks}`;
+    teacherRunMetrics.replaceChildren();
     if (summary.aiSummaryAvailable && summary.aiSummary) {
       teacherAiSummary.textContent = `AI 过程摘要：${summary.aiSummary}`;
       teacherAiSummary.hidden = false;
+    } else {
+      teacherAiSummary.textContent = '';
+      teacherAiSummary.hidden = true;
     }
     [[summary.completedNodes, '已完成节点'], [summary.completedTasks, '已完成任务'], [summary.commandCount, '终端命令'], [summary.messageCount, 'AI 对话'], [summary.bugCount, 'Bug 记录']].forEach(([value, label]) => {
       const metric = document.createElement('div');
       metric.className = 'run-metric';
       const number = document.createElement('strong');
-      number.textContent = String(value ?? 0);
+      number.textContent = String(value);
       const caption = document.createElement('span');
       caption.textContent = label;
       metric.append(number, caption);
@@ -549,8 +997,36 @@ async function loadTeacherRunDetail(runId, studentName) {
       teacherRating.value = summary.review.rating ?? '';
       teacherFeedback.value = summary.review.feedback || '';
     }
-    void loadTeacherStageEvidence(runId);
-    if (!Array.isArray(timeline) || !timeline.length) {
+    teacherRating.disabled = false;
+    teacherFeedback.disabled = false;
+    teacherReviewForm.querySelector('button[type="submit"]').disabled = false;
+    setMessage(teacherReviewMessage, '');
+    teacherRunSummaryState.replaceChildren();
+    teacherRunSummaryState.classList.remove('is-error');
+  } catch (error) {
+    if (!isCurrentTeacherRunDetail(runId, requestEpoch) || panelEpoch !== teacherRunSummaryRequestEpoch) return;
+    teacherRunStatus.textContent = '概况不可用';
+    setMessage(teacherReviewMessage,
+      '未能读取已保存评价。为避免覆盖，评价暂不可编辑；请重试加载学习概况。', true);
+    renderTeacherRunPanelError(teacherRunSummaryState, error.message, '重试概况',
+      () => void loadTeacherRunSummary(runId, studentName, requestEpoch));
+  }
+}
+
+async function loadTeacherRunTimeline(runId, requestEpoch) {
+  const panelEpoch = ++teacherRunTimelineRequestEpoch;
+  teacherTimelineState.classList.remove('is-error');
+  teacherTimelineState.textContent = '正在加载过程记录…';
+  try {
+    const timeline = await apiRequest(`/teacher/runs/${runId}/timeline`, { method: 'GET' });
+    if (!isCurrentTeacherRunDetail(runId, requestEpoch) || panelEpoch !== teacherRunTimelineRequestEpoch) return;
+    if (!Array.isArray(timeline) || timeline.some((event) => !event || typeof event !== 'object' || Array.isArray(event)
+      || ['source', 'title', 'detail'].some((key) => event[key] != null && typeof event[key] !== 'string')
+      || (event.createdAt != null && (typeof event.createdAt !== 'string' || !Number.isFinite(Date.parse(event.createdAt)))))) {
+      throw new Error('过程记录数据格式无效，请重试。');
+    }
+    teacherTimeline.replaceChildren();
+    if (!timeline.length) {
       const empty = document.createElement('p');
       empty.className = 'monitor-empty';
       empty.textContent = '暂时没有过程记录。';
@@ -569,11 +1045,30 @@ async function loadTeacherRunDetail(runId, studentName) {
         teacherTimeline.append(item);
       });
     }
+    teacherTimelineState.replaceChildren();
+    teacherTimelineState.classList.remove('is-error');
   } catch (error) {
-    if (requestEpoch !== teacherRunDetailRequestEpoch || selectedTeacherRunId !== Number(runId)) return;
-    resetTeacherRunDetail();
-    setMessage(teacherDashboardMessage, error.message || '学生详情加载失败，请稍后重试。', true);
+    if (!isCurrentTeacherRunDetail(runId, requestEpoch) || panelEpoch !== teacherRunTimelineRequestEpoch) return;
+    renderTeacherRunPanelError(teacherTimelineState, error.message, '重试过程记录',
+      () => void loadTeacherRunTimeline(runId, requestEpoch));
   }
+}
+
+async function loadTeacherRunDetail(runId, studentName) {
+  if (!/^\d+$/.test(String(runId)) || Number(runId) <= 0) {
+    resetTeacherRunDetail();
+    setMessage(teacherDashboardMessage, '该学生尚未创建实验运行实例。');
+    return;
+  }
+  resetTeacherRunDetail();
+  const requestEpoch = ++teacherRunDetailRequestEpoch;
+  teacherRunDetail.hidden = false;
+  selectedTeacherRunId = Number(runId);
+  teacherRunTitle.textContent = `${studentName || '学生'} 的学习详情`;
+  teacherRunStatus.textContent = '加载中…';
+  void loadTeacherRunSummary(runId, studentName, requestEpoch);
+  void loadTeacherRunTimeline(runId, requestEpoch);
+  void loadTeacherStageEvidence(runId);
 }
 
 async function loadTeacherCourseDashboard(courseId) {
@@ -673,6 +1168,7 @@ async function renderTeacherDashboard() {
   teacherDashboardEmpty.hidden = false;
   resetTeacherRunDetail();
   clearTeacherBugReview();
+  void loadTeacherDshExperiments();
   try {
     const [owned, drafts] = await Promise.all([
       apiRequest('/courses', { method: 'GET' }),
@@ -715,7 +1211,7 @@ async function renderTeacherDashboard() {
       empty.textContent = '还没有课程，请先创建一个课程。';
       teacherCourses.append(empty);
     } else {
-      const savedCourseId = window.localStorage.getItem(STORAGE_KEYS.teacherCourse);
+      const savedCourseId = readLocalStorageValue(STORAGE_KEYS.teacherCourse);
       const selectedCourseId = owned.some((course) => String(course.id) === savedCourseId)
         ? savedCourseId : String(owned[0].id);
       teacherDashboardCourse.value = selectedCourseId;
@@ -773,7 +1269,7 @@ function setRouteStatus(message = '', isError = false) {
 function parseHashRoute(hash = window.location.hash) {
   const path = hash.replace(/^#\/?/, '').replace(/\/$/, '');
   if (!path) return { type: 'default' };
-  if (['login', 'student', 'teacher', 'library'].includes(path)) return { type: path };
+  if (['login', 'student', 'teacher', 'admin', 'library'].includes(path)) return { type: path };
   const canvasMatch = path.match(/^experiments\/([^/]+)\/canvas$/);
   if (canvasMatch && /^[a-zA-Z0-9_-]+$/.test(canvasMatch[1])) {
     return { type: 'canvas', experimentId: decodeURIComponent(canvasMatch[1]) };
@@ -792,6 +1288,14 @@ function routeHash(route) {
 function readSessionValue(key) {
   try {
     return window.sessionStorage.getItem(key);
+  } catch (error) {
+    return null;
+  }
+}
+
+function readLocalStorageValue(key) {
+  try {
+    return window.localStorage.getItem(key);
   } catch (error) {
     return null;
   }
@@ -817,15 +1321,161 @@ function terminalSessionStorageKey(runId) {
   return `${STORAGE_KEYS.terminalSessionPrefix}${runId}`;
 }
 
+function terminalCommandStorageKey(runId, userId = getCurrentUser()?.id) {
+  return `${STORAGE_KEYS.terminalCommandPrefix}${String(userId || '')}:${String(runId)}`;
+}
+
+function isValidPendingTerminalCommand(pending, runId, userId = getCurrentUser()?.id) {
+  return pending && typeof pending === 'object'
+    && String(pending.runId) === String(runId)
+    && String(pending.userId) === String(userId)
+    && isValidDatabaseId(pending.workspaceId)
+    && isValidDatabaseId(pending.sessionId)
+    && typeof pending.clientCommandId === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pending.clientCommandId);
+}
+
+function readPendingTerminalCommand(runId, userId = getCurrentUser()?.id) {
+  const serialized = readSessionValue(terminalCommandStorageKey(runId, userId));
+  if (!serialized) return null;
+  try {
+    const pending = JSON.parse(serialized);
+    return isValidPendingTerminalCommand(pending, runId, userId) ? pending : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function inspectPendingTerminalCommand(runId, workspaceId, userId = getCurrentUser()?.id) {
+  const serialized = readSessionValue(terminalCommandStorageKey(runId, userId));
+  if (!serialized) return { status: 'none', command: null };
+  try {
+    const pending = JSON.parse(serialized);
+    if (!isValidPendingTerminalCommand(pending, runId, userId)
+        || String(pending.workspaceId) !== String(workspaceId)) {
+      return { status: 'invalid', command: null };
+    }
+    return { status: 'pending', command: pending };
+  } catch (error) {
+    return { status: 'invalid', command: null };
+  }
+}
+
+function persistPendingTerminalCommand(pending) {
+  const key = terminalCommandStorageKey(pending.runId, pending.userId);
+  const serialized = JSON.stringify(pending);
+  writeSessionValue(key, serialized);
+  if (readSessionValue(key) !== serialized) {
+    throw new Error('浏览器无法保留待确认的终端命令，已阻止提交。');
+  }
+}
+
+async function reconcileTerminalCommand(pending, { runId, epoch, attempts = 4 } = {}) {
+  let result = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (!isRunContextCurrent(runId, epoch)) return { stale: true, result: null };
+    try {
+      const candidate = await apiRequest(
+        `/terminal-sessions/${encodeURIComponent(pending.sessionId)}/commands/${encodeURIComponent(pending.clientCommandId)}`,
+        { method: 'GET', timeoutMs: 10000 },
+      );
+      if (candidate && ['succeeded', 'failed', 'cancelled', 'queued', 'running'].includes(candidate.status)
+          && typeof candidate.output === 'string') result = candidate;
+    } catch (error) {
+      // A missing row or failed status read never authorizes another command POST.
+    }
+    if (result && ['succeeded', 'failed', 'cancelled'].includes(result.status)) {
+      return { stale: false, result };
+    }
+    if (attempt + 1 < attempts) {
+      await new Promise((resolve) => window.setTimeout(resolve, [750, 1500, 3000][attempt] || 3000));
+    }
+  }
+  return { stale: false, result };
+}
+
+async function presentTerminalCommandReconciliation(pending, runId, workspaceId, epoch, container = null) {
+  const lockKey = terminalCommandLockKey(runId);
+  terminalCommandsInFlight.add(lockKey);
+  terminalInput.disabled = true;
+  codeEditor.disabled = true;
+  saveFileButton.disabled = true;
+  renderWorkspaceFileTabs();
+  const status = container || document.createElement('div');
+  status.className = 'terminal-error';
+  status.textContent = '正在查询原命令状态；不会重新提交命令。';
+  if (!container) terminalOutput.appendChild(status);
+  const reconciliation = await reconcileTerminalCommand(pending, { runId, epoch });
+  if (reconciliation.stale || !isRunContextCurrent(runId, epoch)
+      || String(activeRun?.workspaceId) !== String(workspaceId)) return null;
+  const result = reconciliation.result;
+  if (result && ['succeeded', 'failed', 'cancelled'].includes(result.status)) {
+    removeSessionValue(terminalCommandStorageKey(runId, pending.userId));
+    terminalCommandsInFlight.delete(lockKey);
+    const output = document.createElement('div');
+    output.className = result.status === 'succeeded' ? 'terminal-result' : 'terminal-error';
+    output.textContent = result.output || `原命令已结束，状态：${result.status}`;
+    status.replaceWith(output);
+    try {
+      await refreshWorkspaceFilesAfterTerminal(runId, String(workspaceId), epoch);
+    } catch (error) {
+      if (isRunContextCurrent(runId, epoch)) {
+        appendChatMessage('agent', '系统', error.message || '同步终端结果后的工作区文件失败。');
+      }
+    }
+    if (isRunContextCurrent(runId, epoch)) {
+      codeEditor.disabled = !activeFilePath;
+      saveFileButton.disabled = !activeFilePath;
+      renderWorkspaceFileTabs();
+      terminalInput.disabled = !activeTerminalSession;
+      terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    }
+    return true;
+  }
+  status.replaceChildren();
+  const explanation = document.createElement('span');
+  explanation.textContent = '执行结果仍无法确认。请检查工作区状态；在确认前不要重新运行这条命令。';
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'text-action terminal-reconnect-button';
+  retry.textContent = '只查询命令状态';
+  retry.addEventListener('click', async () => {
+    retry.disabled = true;
+    await presentTerminalCommandReconciliation(pending, runId, workspaceId, epoch, status);
+  });
+  status.append(explanation, retry);
+  terminalInput.disabled = true;
+  codeEditor.disabled = true;
+  saveFileButton.disabled = true;
+  renderWorkspaceFileTabs();
+  return false;
+}
+
+function isValidDatabaseId(value) {
+  if (typeof value === 'number' && !Number.isSafeInteger(value)) return false;
+  const id = String(value);
+  return /^[1-9]\d{0,18}$/.test(id)
+    && (id.length < 19 || id <= '9223372036854775807');
+}
+
+function isValidOpenTerminalSession(session, workspaceId, previousSessionId = null) {
+  return session?.status === 'open'
+    && isValidDatabaseId(session.id)
+    && String(session.workspaceId) === String(workspaceId)
+    && (previousSessionId === null || String(session.id) !== String(previousSessionId));
+}
+
+function terminalCommandLockKey(runId, userId = getCurrentUser()?.id) {
+  return `${String(userId || '')}:${String(runId)}`;
+}
+
 function readTerminalSession(run) {
   const key = terminalSessionStorageKey(run.runId);
   const serialized = readSessionValue(key);
   if (!serialized) return null;
   try {
     const session = JSON.parse(serialized);
-    if (String(session.workspaceId) === String(run.workspaceId)
-      && /^\d+$/.test(String(session.id))
-      && session.status === 'open') {
+    if (isValidOpenTerminalSession(session, run.workspaceId)) {
       return session;
     }
   } catch (error) {
@@ -836,9 +1486,140 @@ function readTerminalSession(run) {
 }
 
 function persistTerminalSession(run, session) {
-  if (session?.status !== 'open' || !/^\d+$/.test(String(session.id))
-    || String(session.workspaceId) !== String(run.workspaceId)) return;
+  if (!isValidOpenTerminalSession(session, run.workspaceId)) return;
   writeSessionValue(terminalSessionStorageKey(run.runId), JSON.stringify(session));
+}
+
+function terminalSessionRequestStorageKey(run) {
+  return `${STORAGE_KEYS.terminalSessionRequestPrefix}${String(getCurrentUser()?.id || '')}:${run.runId}:${run.workspaceId}`;
+}
+
+function createTerminalSessionRequestId() {
+  if (!window.crypto?.getRandomValues) throw new Error('浏览器无法安全生成终端连接标识，请升级浏览器后重试。');
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function terminalSessionRequestId(run, storageKey = terminalSessionRequestStorageKey(run)) {
+  const saved = readSessionValue(storageKey);
+  if (saved && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved)) {
+    return saved.toLowerCase();
+  }
+  const requestId = createTerminalSessionRequestId();
+  writeSessionValue(storageKey, requestId);
+  if (readSessionValue(storageKey) !== requestId) {
+    throw new Error('浏览器无法保存终端重连状态，为避免创建重复会话，本次未发送请求。');
+  }
+  return requestId;
+}
+
+async function createTerminalSessionRequest(run, { timeoutMs = 15000 } = {}) {
+  const storageKey = terminalSessionRequestStorageKey(run);
+  const requestId = terminalSessionRequestId(run, storageKey);
+  try {
+    const session = await apiRequest(`/workspaces/${run.workspaceId}/terminal-sessions`, {
+      method: 'POST', timeoutMs, headers: { 'Idempotency-Key': requestId },
+    });
+    if (!isValidOpenTerminalSession(session, run.workspaceId)) {
+      throw new Error('服务器返回的终端会话信息无效，重试时将继续使用同一请求标识。');
+    }
+    return session;
+  } catch (error) {
+    if (isTerminalSessionClosedError(error)) removeSessionValue(storageKey);
+    throw error;
+  }
+}
+
+function acceptTerminalSessionRequest(run, session) {
+  persistTerminalSession(run, session);
+  if (String(readTerminalSession(run)?.id) !== String(session.id)) {
+    throw new Error('终端会话已创建，但浏览器未能保存恢复信息；请重试以安全恢复。');
+  }
+  removeSessionValue(terminalSessionRequestStorageKey(run));
+}
+
+async function recoverClosedTerminalSession(runId, workspaceId, terminalSessionId, epoch) {
+  if (!isRunContextCurrent(runId, epoch)
+    || String(activeRun?.workspaceId) !== String(workspaceId)
+    || String(activeTerminalSession?.id) !== String(terminalSessionId)) return false;
+  const replacement = await createTerminalSessionRequest({ runId, workspaceId });
+  if (!isRunContextCurrent(runId, epoch)
+    || String(activeRun?.workspaceId) !== String(workspaceId)
+    || String(activeTerminalSession?.id) !== String(terminalSessionId)) return false;
+  if (!isValidOpenTerminalSession(replacement, workspaceId, terminalSessionId)) {
+    throw new Error('服务器返回的终端会话信息无效，未替换当前会话。');
+  }
+  activeTerminalSession = replacement;
+  acceptTerminalSessionRequest(activeRun, replacement);
+  return true;
+}
+
+function isTerminalSessionClosedError(error) {
+  return error?.status === 409 && error.code === 'TERMINAL_SESSION_CLOSED';
+}
+
+function invalidateClosedTerminalSession(runId, workspaceId, terminalSessionId, epoch) {
+  if (!isRunContextCurrent(runId, epoch)
+    || String(activeRun?.workspaceId) !== String(workspaceId)
+    || String(activeTerminalSession?.id) !== String(terminalSessionId)) return false;
+  removeSessionValue(terminalSessionStorageKey(runId));
+  activeTerminalSession = null;
+  return true;
+}
+
+function createTerminalReconnectButton(runId, workspaceId, closedSessionId, epoch, messageElement) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'text-action terminal-reconnect-button';
+  button.textContent = '重新连接终端';
+  button.addEventListener('click', async () => {
+    if (!isRunContextCurrent(runId, epoch) || String(activeRun?.workspaceId) !== String(workspaceId)) return;
+    const finishIfConnected = () => {
+      if (!isValidOpenTerminalSession(activeTerminalSession, workspaceId)) return false;
+      terminalInput.disabled = false;
+      terminalInput.placeholder = '输入受限终端命令…';
+      messageElement.textContent = '终端已重新连接。刚才的命令未执行，请核对后手动重试。';
+      button.remove();
+      return true;
+    };
+    if (finishIfConnected()) return;
+    if (activeTerminalSession) {
+      invalidateClosedTerminalSession(runId, workspaceId, String(activeTerminalSession.id), epoch);
+    }
+    button.disabled = true;
+    button.textContent = '正在重新连接…';
+    try {
+      const replacement = await createTerminalSessionRequest(activeRun);
+      if (!isRunContextCurrent(runId, epoch) || String(activeRun?.workspaceId) !== String(workspaceId)) return;
+      if (finishIfConnected()) return;
+      if (activeTerminalSession) {
+        invalidateClosedTerminalSession(runId, workspaceId, String(activeTerminalSession.id), epoch);
+      }
+      if (!isValidOpenTerminalSession(replacement, workspaceId, closedSessionId)) {
+        throw new Error('服务器返回的终端会话信息无效。');
+      }
+      activeTerminalSession = replacement;
+      acceptTerminalSessionRequest(activeRun, replacement);
+      terminalInput.disabled = false;
+      terminalInput.placeholder = '输入受限终端命令…';
+      messageElement.textContent = '终端已重新连接。刚才的命令未执行，请核对后手动重试。';
+      button.remove();
+    } catch (error) {
+      if (!isRunContextCurrent(runId, epoch) || String(activeRun?.workspaceId) !== String(workspaceId)) return;
+      if (finishIfConnected()) return;
+      if (activeTerminalSession) {
+        invalidateClosedTerminalSession(runId, workspaceId, String(activeTerminalSession.id), epoch);
+      }
+      button.disabled = false;
+      button.textContent = '重试连接终端';
+      messageElement.textContent = `终端重连失败：${error.message || '请稍后重试。'}`;
+    }
+  });
+  return button;
 }
 
 function clearCachedTerminalSessions() {
@@ -892,9 +1673,11 @@ function showRoute(route) {
 
 function renderSimpleRoute(route) {
   const user = getCurrentUser();
+  if (route !== 'student' || user?.role !== 'student') clearStudentDashboard();
   loginView.classList.remove('is-visible');
   studentView.classList.remove('is-visible');
   teacherView.classList.remove('is-visible');
+  adminView.classList.remove('is-visible');
   hideProtectedViews();
   if (route === 'login') {
     loginView.classList.add('is-visible');
@@ -910,6 +1693,11 @@ function renderSimpleRoute(route) {
     renderTeacherDashboard();
     return;
   }
+  if (route === 'admin' && user.role === 'admin') {
+    adminView.classList.add('is-visible');
+    renderAdminDashboard();
+    return;
+  }
   if (route === 'library') {
     libraryView.classList.remove('auth-hidden');
     libraryView.style.display = 'block';
@@ -920,7 +1708,7 @@ function renderSimpleRoute(route) {
 
 function redirectToRoleHome(message = '') {
   const role = getCurrentUser()?.role;
-  const fallback = role === 'teacher' ? 'teacher' : role === 'student' ? 'student' : 'login';
+  const fallback = role === 'teacher' ? 'teacher' : role === 'admin' ? 'admin' : role === 'student' ? 'student' : 'login';
   if (message) setRouteStatus(message, true);
   navigateTo({ type: fallback }, { replace: true });
 }
@@ -951,6 +1739,7 @@ async function resolveCurrentRoute() {
     return;
   }
   const requiredRole = route.type === 'teacher' ? 'teacher'
+    : route.type === 'admin' ? 'admin'
     : ['student', 'canvas', 'editor'].includes(route.type) ? 'student' : null;
   if (requiredRole && user.role !== requiredRole) {
     redirectToRoleHome('当前账号无权访问此页面，已返回本角色工作台。');
@@ -1309,6 +2098,7 @@ function renderExperimentCanvas(experimentId) {
   activeExperimentId = String(experimentId);
   writeSessionValue(STORAGE_KEYS.activeExperiment, activeExperimentId);
   activeRun = null;
+  syncGuidanceControls();
   activeRunProgress = null;
   runProgressLoadFailed = false;
   activeFilePath = null;
@@ -1316,7 +2106,6 @@ function renderExperimentCanvas(experimentId) {
   activeFileSavedContent = '';
   activeWorkspaceFiles = [];
   workspaceFileSelectionEpoch += 1;
-  terminalCommandInFlight = false;
   activeTerminalSession = null;
   activeNodeId = null;
   workspaceStatus.textContent = '未启动工作区';
@@ -1356,8 +2145,17 @@ async function startWorkspaceRun() {
   workspaceStatus.textContent = '正在启动工作区…';
   const epoch = routeResolutionEpoch;
   try {
-    const run = await apiRequest(`/experiments/${activeExperimentId}/runs`, { method: 'POST', timeoutMs: 45000 });
+    const runPath = window.BMDesktop?.isDesktop
+      ? `/desktop/experiments/${activeExperimentId}/runs`
+      : `/experiments/${activeExperimentId}/runs`;
+    const run = await apiRequest(runPath, { method: 'POST', timeoutMs: 45000 });
     if (epoch !== routeResolutionEpoch) return false;
+    if (run.workspaceType === 'desktop') {
+      const local = await window.BMDesktop.workspace.create(String(run.runId), run.localWorkspaceId);
+      if (String(local.workspaceId) !== String(run.localWorkspaceId) || String(local.runId) !== String(run.runId)) {
+        throw new Error('本地工作区与运行实例绑定校验失败。');
+      }
+    }
     const connected = await connectWorkspace(run, { createTerminalSession: true, epoch });
     if (!connected || epoch !== routeResolutionEpoch) return false;
     appendChatMessage('agent', '系统', '独立工作区已就绪，可以开始修改代码。');
@@ -1367,7 +2165,7 @@ async function startWorkspaceRun() {
     appendChatMessage('agent', '系统', error.message || '工作区启动失败，请稍后重试。');
     return false;
   } finally {
-    if (!activeTerminalSession) terminalInput.disabled = true;
+    if (!activeTerminalSession && activeRun?.workspaceType !== 'desktop') terminalInput.disabled = true;
     startNodeButton.disabled = false;
   }
 }
@@ -1385,7 +2183,13 @@ async function connectWorkspace(run, { createTerminalSession = false, epoch = nu
     }
     throw new Error('该运行实例的工作区当前不可用。');
   }
-  const files = await apiRequest(`/workspaces/${run.workspaceId}/files`, { method: 'GET' });
+  if (run.workspaceType === 'desktop') {
+    const local = await window.BMDesktop.workspace.create(String(run.runId), run.localWorkspaceId);
+    if (String(local.workspaceId) !== String(run.localWorkspaceId)) throw new Error('本地工作区绑定不匹配。');
+  }
+  const files = run.workspaceType === 'desktop'
+    ? await listDesktopWorkspaceFiles(run)
+    : await apiRequest(`/workspaces/${run.workspaceId}/files`, { method: 'GET' });
   if (!isCurrentRoute()) return false;
   if (!Array.isArray(files)) throw new Error('工作区文件列表格式无效。');
   let nextFilePath = null;
@@ -1393,30 +2197,30 @@ async function connectWorkspace(run, { createTerminalSession = false, epoch = nu
   let nextFileContent = '';
   if (files.length) {
     nextFilePath = files[0].path;
-    const response = await apiRequest(`/workspaces/${run.workspaceId}/files/${workspaceFileUrl(nextFilePath)}`, { method: 'GET' });
+    const response = run.workspaceType === 'desktop'
+      ? await readDesktopWorkspaceFile(run, nextFilePath)
+      : await apiRequest(`/workspaces/${run.workspaceId}/files/${workspaceFileUrl(nextFilePath)}`, { method: 'GET' });
     if (!isCurrentRoute()) return false;
     const file = await verifyWorkspaceFileResponse(response, run.workspaceId, files[0]);
     if (!isCurrentRoute()) return false;
     nextFileContent = file.content;
     nextFileHash = file.file.contentHash || null;
   }
-  let nextTerminalSession = activeTerminalSession;
-  const needsTerminalSession = createTerminalSession
+  let nextTerminalSession = run.workspaceType === 'desktop' ? null : activeTerminalSession;
+  const needsTerminalSession = run.workspaceType !== 'desktop' && (createTerminalSession
     || activeTerminalRunId !== String(run.runId)
-    || !activeTerminalSession;
+    || !activeTerminalSession);
   if (createTerminalSession) nextTerminalSession = null;
   if (needsTerminalSession && !createTerminalSession) {
     nextTerminalSession = readTerminalSession(run);
   }
   if (needsTerminalSession && !nextTerminalSession) {
-    nextTerminalSession = await apiRequest(`/workspaces/${run.workspaceId}/terminal-sessions`, {
-      method: 'POST',
-      timeoutMs: 15000,
-    });
+    nextTerminalSession = await createTerminalSessionRequest(run);
     if (!isCurrentRoute()) return false;
-    persistTerminalSession(run, nextTerminalSession);
+    acceptTerminalSessionRequest(run, nextTerminalSession);
   }
   activeRun = run;
+  syncGuidanceControls();
   activeRunProgress = null;
   runProgressLoadFailed = false;
   activeExperimentId = String(run.experimentId);
@@ -1428,21 +2232,42 @@ async function connectWorkspace(run, { createTerminalSession = false, epoch = nu
   activeWorkspaceFiles = files;
   codeEditor.value = nextFileContent;
   renderCodeLineNumbers();
-  codeEditor.disabled = !nextFilePath;
-  saveFileButton.disabled = !nextFilePath;
-  renderWorkspaceFileTabs();
   activeTerminalSession = nextTerminalSession;
   activeTerminalRunId = String(run.runId);
-  terminalInput.disabled = false;
+  const pendingCommandState = run.workspaceType === 'desktop'
+    ? { status: 'none', command: null }
+    : inspectPendingTerminalCommand(run.runId, run.workspaceId);
+  const pendingTerminalCommand = pendingCommandState.command;
+  const terminalCommandBlocked = pendingCommandState.status === 'invalid';
+  if (pendingTerminalCommand || terminalCommandBlocked) {
+    terminalCommandsInFlight.add(terminalCommandLockKey(run.runId));
+  }
+  codeEditor.disabled = !nextFilePath || Boolean(pendingTerminalCommand) || terminalCommandBlocked;
+  saveFileButton.disabled = !nextFilePath || Boolean(pendingTerminalCommand) || terminalCommandBlocked;
+  terminalInput.disabled = run.workspaceType !== 'desktop' && (Boolean(pendingTerminalCommand) || terminalCommandBlocked);
+  renderWorkspaceFileTabs();
   terminalInput.placeholder = '输入受限终端命令…';
   terminalOutput.replaceChildren();
   const terminalReady = document.createElement('div');
   terminalReady.className = 'terminal-muted';
-  terminalReady.textContent = '终端已连接。命令会在隔离工作区内执行。';
+  terminalReady.textContent = run.workspaceType === 'desktop'
+    ? '本地终端已连接。命令会在此实验目录中运行。'
+    : '终端已连接。命令会在隔离工作区内执行。';
   terminalOutput.append(terminalReady);
-  createSnapshotButton.disabled = false;
+  if (pendingTerminalCommand) {
+    void presentTerminalCommandReconciliation(pendingTerminalCommand, String(run.runId),
+      String(run.workspaceId), routeResolutionEpoch);
+  } else if (terminalCommandBlocked) {
+    const warning = document.createElement('div');
+    warning.className = 'terminal-error';
+    warning.textContent = '待确认命令标识无法读取。为防止重复执行，终端和文件编辑已锁定；请先核对工作区状态并联系教师处理。';
+    terminalOutput.appendChild(warning);
+  }
+  createSnapshotButton.disabled = run.workspaceType === 'desktop';
+  desktopNewFolderButton.hidden = run.workspaceType !== 'desktop';
+  desktopNewFileButton.hidden = run.workspaceType !== 'desktop';
   recordBugButton.disabled = false;
-  deepDiagnosisButton.disabled = false;
+  deepDiagnosisButton.disabled = run.workspaceType === 'desktop';
   const currentNode = activeTreeNodes.find((node) => Number(node.nodeId) === Number(run.currentNodeId));
   if (currentNode) {
     const nodeElement = canvasView.querySelector(`[data-tree-node-key="${CSS.escape(currentNode.key)}"]`);
@@ -1477,7 +2302,7 @@ function renderWorkspaceFileTabs() {
     button.textContent = dirty ? `${label} •` : label;
     if (dirty) button.setAttribute('aria-label', `${label}，有未保存修改`);
     button.title = file.path;
-    button.disabled = terminalCommandInFlight;
+    button.disabled = terminalCommandsInFlight.has(terminalCommandLockKey(activeTerminalRunId));
     button.addEventListener('click', () => void selectWorkspaceFile(file.path));
     codeFileTabs.append(button);
   });
@@ -1538,7 +2363,10 @@ async function selectWorkspaceFile(path) {
 
 async function refreshWorkspaceFilesAfterTerminal(runId, workspaceId, epoch) {
   try {
-    const files = await apiRequest(`/workspaces/${encodeURIComponent(workspaceId)}/files`, { method: 'GET' });
+    const isDesktop = activeRun?.workspaceType === 'desktop';
+    const files = isDesktop
+      ? await listDesktopWorkspaceFiles(activeRun)
+      : await apiRequest(`/workspaces/${encodeURIComponent(workspaceId)}/files`, { method: 'GET' });
     if (!isRunContextCurrent(runId, epoch) || String(activeRun?.workspaceId) !== workspaceId) return;
     if (!Array.isArray(files)) throw new Error('工作区文件列表格式无效。');
     const selected = files.find((file) => file.path === activeFilePath) || files[0] || null;
@@ -1555,7 +2383,9 @@ async function refreshWorkspaceFilesAfterTerminal(runId, workspaceId, epoch) {
       appendChatMessage('agent', '系统', '终端命令后工作区没有可显示的源码文件。');
       return;
     }
-    const response = await apiRequest(`/workspaces/${encodeURIComponent(workspaceId)}/files/${workspaceFileUrl(selected.path)}`, { method: 'GET' });
+    const response = isDesktop
+      ? await readDesktopWorkspaceFile(activeRun, selected.path)
+      : await apiRequest(`/workspaces/${encodeURIComponent(workspaceId)}/files/${workspaceFileUrl(selected.path)}`, { method: 'GET' });
     const file = await verifyWorkspaceFileResponse(response, workspaceId, selected);
     if (!isRunContextCurrent(runId, epoch) || String(activeRun?.workspaceId) !== workspaceId) return;
     const changedSelection = selected.path !== activeFilePath;
@@ -1998,6 +2828,34 @@ startNodeButton.addEventListener('click', async () => {
 
 saveFileButton.addEventListener('click', saveWorkspaceFile);
 createSnapshotButton.addEventListener('click', createWorkspaceSnapshot);
+desktopNewFolderButton.addEventListener('click', async () => {
+  if (activeRun?.workspaceType !== 'desktop') return;
+  const relativePath = window.prompt('输入新文件夹的相对路径（例如 src）：');
+  if (relativePath === null) return;
+  try {
+    await window.BMDesktop.workspace.createDirectory(String(activeRun.runId), relativePath.trim());
+    await refreshWorkspaceFilesAfterTerminal(String(activeRun.runId), String(activeRun.workspaceId), routeResolutionEpoch);
+  } catch (error) {
+    appendChatMessage('agent', '系统', error.message || '创建文件夹失败。');
+  }
+});
+desktopNewFileButton.addEventListener('click', async () => {
+  if (activeRun?.workspaceType !== 'desktop') return;
+  const relativePath = window.prompt('输入新文件的相对路径（例如 manage.py）：');
+  if (relativePath === null) return;
+  try {
+    const run = activeRun;
+    const runId = String(run.runId);
+    const path = relativePath.trim();
+    await window.BMDesktop.workspace.write(runId, path, '', null);
+    const files = await listDesktopWorkspaceFiles(run);
+    activeWorkspaceFiles = files;
+    renderWorkspaceFileTabs();
+    await selectWorkspaceFile(path);
+  } catch (error) {
+    appendChatMessage('agent', '系统', error.message || '创建文件失败。');
+  }
+});
 completeNodeButton.addEventListener('click', completeCurrentNode);
 
 backToCanvas.addEventListener('click', () => {
@@ -2018,17 +2876,54 @@ function appendChatMessage(kind, label, text) {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-async function requestGuidance(question) {
+async function requestGuidance(question, draftToRestore = null) {
   if (!activeRun) {
     appendChatMessage('agent', '系统', '请先启动工作区，再请求代码指导。');
+    if (draftToRestore !== null && chatInput.value === '') chatInput.value = draftToRestore;
     return;
   }
   const runId = String(activeRun.runId);
+  if (guidanceRequestsInFlight.has(runId)) return;
+  guidanceRequestsInFlight.add(runId);
   const epoch = routeResolutionEpoch;
   appendChatMessage('user', '你', question);
-  sendButton.disabled = true;
-  softenButton.disabled = true;
+  syncGuidanceControls();
   try {
+    if (activeRun.workspaceType === 'desktop') {
+      const relevantFiles = activeWorkspaceFiles
+        .filter((file) => /\.(py|html|css|js|json|toml|txt|sql|yml|yaml)$/i.test(file.path))
+        .slice(0, 12);
+      const includedNames = relevantFiles.map((file) => file.path);
+      const omittedCount = Math.max(0, activeWorkspaceFiles.length - relevantFiles.length);
+      const consentText = [
+        '发送以下工作区文件和最近终端输出给 DeepSeek？',
+        ...(includedNames.length ? includedNames : ['（当前没有可读取的源码文件）']),
+        ...(omittedCount ? [`另有 ${omittedCount} 个文件未纳入本次上下文。`] : []),
+        '常见密钥文件会被排除，代码只在你主动确认后发送。',
+      ].join('\n');
+      if (!window.confirm(consentText)) throw new Error('你取消了代码共享，本次未发送源码。');
+      const keyAvailable = await window.BMDesktop.secrets.hasDeepSeekKey();
+      if (!keyAvailable) {
+        const key = window.prompt('请输入个人 DeepSeek API 密钥。该密钥将加密保存在本机，不会上传到 BM-HS。');
+        if (!key) throw new Error('尚未设置个人 DeepSeek 密钥，本次未发送代码。');
+        await window.BMDesktop.secrets.setDeepSeekKey(key);
+      }
+      const files = await Promise.all(relevantFiles.map(async (file) => {
+        const result = await window.BMDesktop.workspace.read(runId, file.path);
+        return { path: result.path, content: result.content };
+      }));
+      const localResult = await window.BMDesktop.guidance({
+        confirmed: true,
+        question,
+        files,
+        terminalOutput: lastDesktopTerminalOutput,
+        currentNode: activeTreeNodes.find((node) => Number(node.nodeId) === Number(activeNodeId)) || null,
+      });
+      if (!isRunContextCurrent(runId, epoch)) return;
+      appendChatMessage('agent', '导师', localResult.answer || '模型未返回有效指导。');
+      appendChatMessage('agent', '系统', '本次由本机助手调用 DeepSeek，未使用课程 RAG。');
+      return;
+    }
     const result = await apiRequest(`/runs/${runId}/guidance`, {
       method: 'POST',
       body: JSON.stringify({ question }),
@@ -2051,11 +2946,10 @@ async function requestGuidance(question) {
   } catch (error) {
     if (!isRunContextCurrent(runId, epoch)) return;
     appendChatMessage('agent', '系统', error.message || '代码指导暂时不可用，请稍后重试。');
+    if (draftToRestore !== null && chatInput.value === '') chatInput.value = draftToRestore;
   } finally {
-    if (isRunContextCurrent(runId, epoch)) {
-      sendButton.disabled = false;
-      softenButton.disabled = false;
-    }
+    guidanceRequestsInFlight.delete(runId);
+    syncGuidanceControls();
   }
 }
 
@@ -2122,6 +3016,18 @@ function renderPatchFileDiff(file, current) {
 
 async function openPatchReview(patch, sourceButton) {
   if (!activeRun || !patch || !patch.id) return;
+  if (patchApplyInFlight) {
+    if (!patchDialog.classList.contains('is-open')) {
+      patchDialogDescription.textContent = '之前确认的补丁正在应用，请等待完成后重新选择要查看的补丁。';
+      patchDialog.classList.add('is-open');
+      patchDialog.setAttribute('aria-hidden', 'false');
+    }
+    setMessage(patchDialogMessage, '补丁正在应用，请等待完成后再查看其他补丁。');
+    return;
+  }
+  if (patchReviewSourceButton && patchReviewSourceButton !== sourceButton && !patchReviewApplied) {
+    patchReviewSourceButton.disabled = false;
+  }
   const requestEpoch = ++patchReviewEpoch;
   const runId = activeRun.runId;
   const workspaceId = activeRun.workspaceId;
@@ -2158,22 +3064,63 @@ async function openPatchReview(patch, sourceButton) {
   }
 }
 
+function isPatchApplyResponseValid(result, patchId, expectedPaths) {
+  if (!result || typeof result !== 'object'
+      || String(result.patchId) !== String(patchId)
+      || result.status !== 'applied'
+      || !Number.isSafeInteger(result.snapshotId) || result.snapshotId <= 0
+      || !Array.isArray(result.appliedFiles)
+      || result.appliedFiles.some((path) => typeof path !== 'string' || !path.trim())) return false;
+  const actualPaths = [...result.appliedFiles].sort();
+  const expected = [...expectedPaths].sort();
+  return actualPaths.length === expected.length && actualPaths.every((path, index) => path === expected[index]);
+}
+
+function recoverPatchApplyResponse(result, patchId, expectedPaths) {
+  if (!result || typeof result !== 'object'
+      || String(result.id) !== String(patchId)
+      || result.status !== 'applied'
+      || !Number.isSafeInteger(result.snapshotId) || result.snapshotId <= 0
+      || !Array.isArray(result.files)
+      || result.files.some((file) => !file || typeof file.path !== 'string' || !file.path.trim())) return null;
+  const appliedFiles = result.files.map((file) => file.path).sort();
+  const expected = [...expectedPaths].sort();
+  if (appliedFiles.length !== expected.length || !appliedFiles.every((path, index) => path === expected[index])) return null;
+  return { patchId: result.id, status: result.status, snapshotId: result.snapshotId, appliedFiles };
+}
+
 async function confirmPatchReview() {
-  if (!pendingPatchReview || !activeRun) return;
+  if (!pendingPatchReview || !activeRun || patchApplyInFlight) return;
   const { detail, sourceButton } = pendingPatchReview;
   const runId = String(activeRun.runId);
   const workspaceId = String(activeRun.workspaceId);
   const epoch = routeResolutionEpoch;
   const requestedPatchReviewEpoch = patchReviewEpoch;
+  patchApplyInFlight = true;
+  let applySucceeded = false;
+  let applyResponseInvalid = false;
+  let applyCompletionMessage = '';
+  let applyCompletionIsError = false;
   confirmPatchButton.disabled = true;
   setMessage(patchDialogMessage, '正在再次校验并应用补丁…');
   try {
-    const result = await apiRequest(`/runs/${runId}/patches/${detail.id}/apply`, { method: 'POST', timeoutMs: 30000 });
-    if (!isRunContextCurrent(runId, epoch) || requestedPatchReviewEpoch !== patchReviewEpoch) return;
+    let result = await apiRequest(`/runs/${runId}/patches/${detail.id}/apply`, { method: 'POST', timeoutMs: 30000 });
+    const expectedPaths = detail.files.map((file) => file.path);
+    if (!isPatchApplyResponseValid(result, detail.id, expectedPaths)) {
+      applyResponseInvalid = true;
+      const current = await apiRequest(`/runs/${runId}/patches/${detail.id}`, { method: 'GET', timeoutMs: 15000 });
+      result = recoverPatchApplyResponse(current, detail.id, expectedPaths);
+      if (!result) throw new Error('补丁当前状态仍无法确认。');
+      applyResponseInvalid = false;
+    }
+    applySucceeded = true;
+    applyCompletionMessage = '补丁已应用，请重新打开要查看的补丁。';
     sourceButton.disabled = true;
     sourceButton.textContent = '已应用并生成快照';
+    if (requestedPatchReviewEpoch !== patchReviewEpoch) return;
     patchReviewApplied = true;
     closePatchReview();
+    if (!isRunContextCurrent(runId, epoch)) return;
     appendChatMessage('agent', '系统', `补丁已应用：${(result.appliedFiles || []).join('、')}。应用前快照编号 ${result.snapshotId}，请重新运行验证。`);
     if (activeFilePath) {
       const currentPath = activeFilePath;
@@ -2188,9 +3135,38 @@ async function confirmPatchReview() {
         ? { ...item, contentHash: activeFileHash } : item);
     }
   } catch (error) {
-    if (!isRunContextCurrent(runId, epoch) || requestedPatchReviewEpoch !== patchReviewEpoch) return;
+    if (applyResponseInvalid) {
+      applyCompletionMessage = '补丁应用结果无法确认：服务端返回了无效响应，且状态查询未能确认结果。为避免重复修改，已锁定该补丁；请重新打开文件核对工作区。';
+      applyCompletionIsError = true;
+      sourceButton.disabled = true;
+      sourceButton.textContent = '应用结果待核实';
+      patchReviewApplied = true;
+      if (requestedPatchReviewEpoch === patchReviewEpoch) {
+        closePatchReview();
+      }
+      if (isRunContextCurrent(runId, epoch)) appendChatMessage('agent', '系统', applyCompletionMessage);
+      return;
+    }
+    if (applySucceeded) {
+      applyCompletionMessage = `补丁已应用，但当前文件自动刷新失败：${error.message || '请重新打开文件确认。'}`;
+      applyCompletionIsError = true;
+      if (isRunContextCurrent(runId, epoch)) appendChatMessage('agent', '系统', applyCompletionMessage);
+      return;
+    }
+    applyCompletionMessage = error.message || '补丁未应用，请重新检查后重试。';
+    applyCompletionIsError = true;
+    if (requestedPatchReviewEpoch !== patchReviewEpoch) return;
+    if (!isRunContextCurrent(runId, epoch)) {
+      closePatchReview();
+      return;
+    }
     confirmPatchButton.disabled = false;
     setMessage(patchDialogMessage, error.message || '补丁未应用，文件可能已经发生变化。', true);
+  } finally {
+    patchApplyInFlight = false;
+    if (!pendingPatchReview && patchDialog.classList.contains('is-open') && applyCompletionMessage) {
+      setMessage(patchDialogMessage, applyCompletionMessage, applyCompletionIsError);
+    }
   }
 }
 
@@ -2244,10 +3220,12 @@ async function requestDeepDiagnosis() {
 }
 
 function sendChatMessage() {
-  const text = chatInput.value.trim();
+  const draft = chatInput.value;
+  const text = draft.trim();
   if (!text) return;
+  if (activeRun && guidanceRequestsInFlight.has(String(activeRun.runId))) return;
   chatInput.value = '';
-  void requestGuidance(text);
+  void requestGuidance(text, draft);
 }
 
 sendButton.addEventListener('click', sendChatMessage);
@@ -2270,27 +3248,105 @@ bugCaseForm.addEventListener('submit', saveBugCase);
 
 terminalInput.addEventListener('keydown', async (event) => {
   if (event.key !== 'Enter') return;
-  if (terminalCommandInFlight) return;
-  const command = terminalInput.value.trim();
-  if (!command) return;
-  if (!activeTerminalSession) {
+  event.preventDefault?.();
+  const command = terminalInput.value;
+  if (!command.trim()) return;
+  const runId = String(activeTerminalRunId || '');
+  if (!isValidDatabaseId(runId)) {
+    appendChatMessage('agent', '系统', '实验运行信息无效，已阻止执行命令。');
+    return;
+  }
+  const commandLockKey = terminalCommandLockKey(runId);
+  if (terminalCommandsInFlight.has(commandLockKey)) return;
+  if (!activeTerminalSession && activeRun?.workspaceType !== 'desktop') {
     appendChatMessage('agent', '系统', '终端尚未连接，请先启动工作区。');
+    return;
+  }
+  if (activeRun?.workspaceType !== 'desktop' && (!activeRun || String(activeRun.runId) !== runId
+    || !isValidOpenTerminalSession(activeTerminalSession, activeRun.workspaceId))) {
+    if (activeRun && String(activeRun.runId) === runId
+      && isValidDatabaseId(activeRun.workspaceId)) {
+      invalidateClosedTerminalSession(runId, String(activeRun.workspaceId), String(activeTerminalSession.id), routeResolutionEpoch);
+    }
+    terminalInput.disabled = true;
+    appendChatMessage('agent', '系统', '终端会话信息与当前工作区不匹配，请重新连接工作区。');
     return;
   }
   if (activeFilePath && codeEditor.value !== activeFileSavedContent) {
     appendChatMessage('agent', '系统', '请先保存当前代码再运行终端命令，避免终端执行旧版本文件。');
     return;
   }
-  if (!/^\d+$/.test(String(activeRun?.workspaceId || ''))) {
+  if (!isValidDatabaseId(activeRun?.workspaceId)) {
     appendChatMessage('agent', '系统', '工作区信息无效，已阻止执行命令。');
     return;
   }
-  terminalInput.value = '';
+  if (activeRun?.workspaceType === 'desktop') {
+    const epoch = routeResolutionEpoch;
+    terminalInput.value = '';
+    terminalInput.disabled = true;
+    codeEditor.disabled = true;
+    saveFileButton.disabled = true;
+    terminalCommandsInFlight.add(commandLockKey);
+    const line = document.createElement('div');
+    const prompt = document.createElement('span');
+    prompt.className = 'terminal-prompt';
+    prompt.textContent = '$';
+    const commandText = document.createElement('span');
+    commandText.textContent = ` ${command}`;
+    line.append(prompt, commandText);
+    terminalOutput.appendChild(line);
+    try {
+      const result = await window.BMDesktop.workspace.runCommand(runId, command);
+      if (!isRunContextCurrent(runId, epoch)) return;
+      lastDesktopTerminalOutput = result.output || '';
+      const output = document.createElement('div');
+      output.className = result.exitCode === 0 ? 'terminal-result' : 'terminal-error';
+      output.textContent = result.output || `命令结束，退出码：${result.exitCode ?? '未知'}`;
+      terminalOutput.appendChild(output);
+      await refreshWorkspaceFilesAfterTerminal(runId, String(activeRun.workspaceId), epoch);
+    } catch (error) {
+      if (isRunContextCurrent(runId, epoch)) {
+        const failure = document.createElement('div');
+        failure.className = 'terminal-error';
+        failure.textContent = error.message || '本地命令执行失败。';
+        terminalOutput.appendChild(failure);
+      }
+    } finally {
+      terminalCommandsInFlight.delete(commandLockKey);
+      if (isRunContextCurrent(runId, epoch)) {
+        codeEditor.disabled = !activeFilePath;
+        saveFileButton.disabled = !activeFilePath;
+        terminalInput.disabled = false;
+        renderWorkspaceFileTabs();
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+      }
+    }
+    return;
+  }
   const terminalSessionId = String(activeTerminalSession.id);
-  const runId = String(activeTerminalRunId);
   const workspaceId = String(activeRun.workspaceId);
   const epoch = routeResolutionEpoch;
-  terminalCommandInFlight = true;
+  const userId = String(getCurrentUser()?.id || '');
+  const clientCommandId = window.crypto?.randomUUID?.();
+  if (!clientCommandId) {
+    appendChatMessage('agent', '系统', '当前浏览器无法生成安全的命令标识，已阻止执行。');
+    return;
+  }
+  const pendingCommand = {
+    runId,
+    workspaceId,
+    userId,
+    sessionId: terminalSessionId,
+    clientCommandId,
+  };
+  try {
+    persistPendingTerminalCommand(pendingCommand);
+  } catch (error) {
+    appendChatMessage('agent', '系统', error.message || '无法安全保留命令状态，已阻止执行。');
+    return;
+  }
+  terminalInput.value = '';
+  terminalCommandsInFlight.add(commandLockKey);
   terminalInput.disabled = true;
   codeEditor.disabled = true;
   saveFileButton.disabled = true;
@@ -2303,12 +3359,19 @@ terminalInput.addEventListener('keydown', async (event) => {
   commandText.textContent = ` ${command}`;
   line.append(prompt, commandText);
   terminalOutput.appendChild(line);
+  let unresolved = false;
   try {
     const result = await apiRequest(`/terminal-sessions/${terminalSessionId}/commands`, {
       method: 'POST',
+      headers: { 'Idempotency-Key': clientCommandId },
       body: JSON.stringify({ commandText: command, workingDirectory: '.' }),
       timeoutMs: 45000,
     });
+    if (!result || !['succeeded', 'failed', 'cancelled'].includes(result.status)
+      || typeof result.output !== 'string') {
+      throw new Error('终端命令响应格式无效，命令结果无法确认。');
+    }
+    removeSessionValue(terminalCommandStorageKey(runId, userId));
     if (!isRunContextCurrent(runId, epoch) || String(activeTerminalSession?.id) !== terminalSessionId) return;
     const output = document.createElement('div');
     output.className = result.status === 'succeeded' ? 'terminal-result' : 'terminal-error';
@@ -2318,19 +3381,53 @@ terminalInput.addEventListener('keydown', async (event) => {
     if (!isRunContextCurrent(runId, epoch) || String(activeTerminalSession?.id) !== terminalSessionId) return;
     const failure = document.createElement('div');
     failure.className = 'terminal-error';
-    failure.textContent = error.message || '命令执行失败。';
-    terminalOutput.appendChild(failure);
-  } finally {
-    if (isRunContextCurrent(runId, epoch) && String(activeTerminalSession?.id) === terminalSessionId) {
-      await refreshWorkspaceFilesAfterTerminal(runId, workspaceId, epoch);
-      terminalCommandInFlight = false;
-      codeEditor.disabled = !activeFilePath;
-      saveFileButton.disabled = !activeFilePath;
-      renderWorkspaceFileTabs();
-      terminalInput.disabled = false;
-      terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    if (isTerminalSessionClosedError(error)) {
+      removeSessionValue(terminalCommandStorageKey(runId, userId));
+      try {
+        const recovered = await recoverClosedTerminalSession(runId, workspaceId, terminalSessionId, epoch);
+        if (!recovered || !isRunContextCurrent(runId, epoch)) return;
+        failure.textContent = '旧终端会话已关闭，已重新连接。刚才的命令未执行；确认代码状态后请手动重新运行。';
+      } catch (recoveryError) {
+        if (!isRunContextCurrent(runId, epoch)
+          || String(activeTerminalSession?.id) !== terminalSessionId) return;
+        invalidateClosedTerminalSession(runId, workspaceId, terminalSessionId, epoch);
+        failure.textContent = `终端会话已关闭，刚才的命令未执行。自动重连失败：${recoveryError.message || '请重新启动工作区。'}`;
+        failure.appendChild(createTerminalReconnectButton(runId, workspaceId, terminalSessionId, epoch, failure));
+      }
+      terminalOutput.appendChild(failure);
+    } else if (!Number.isInteger(error.status) || error.status === 408 || error.status >= 500
+        || error.code === 'IDEMPOTENCY_KEY_REUSED') {
+      failure.textContent = `${error.message || '命令执行失败。'} 执行结果尚未确认，请先检查工作区状态后再决定是否重试。`;
+      terminalOutput.appendChild(failure);
+      const resolved = await presentTerminalCommandReconciliation(
+        pendingCommand, runId, workspaceId, epoch, failure,
+      );
+      unresolved = resolved !== true;
     } else {
-      terminalCommandInFlight = false;
+      removeSessionValue(terminalCommandStorageKey(runId, userId));
+      failure.textContent = error.message || '命令执行失败。';
+      terminalOutput.appendChild(failure);
+    }
+  } finally {
+    try {
+      if (isRunContextCurrent(runId, epoch) && String(activeRun?.workspaceId) === workspaceId) {
+        try {
+          await refreshWorkspaceFilesAfterTerminal(runId, workspaceId, epoch);
+        } catch (error) {
+          if (isRunContextCurrent(runId, epoch) && String(activeRun?.workspaceId) === workspaceId) {
+            appendChatMessage('agent', '系统', error.message || '终端运行后同步工作区文件失败，请重新打开文件列表。');
+          }
+        }
+      }
+    } finally {
+      if (!unresolved) terminalCommandsInFlight.delete(commandLockKey);
+      if (!unresolved && isRunContextCurrent(runId, epoch) && String(activeRun?.workspaceId) === workspaceId) {
+        codeEditor.disabled = !activeFilePath;
+        saveFileButton.disabled = !activeFilePath;
+        renderWorkspaceFileTabs();
+        terminalInput.disabled = !activeTerminalSession;
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+      }
     }
   }
 });
@@ -2359,13 +3456,37 @@ function updateDurationPreview() {
 
 async function apiRequest(path, options = {}) {
   if (API_BASE_URL_ERROR) throw new Error(`API 地址配置错误：${API_BASE_URL_ERROR}`);
-  const { timeoutMs: requestedTimeoutMs = 60000, ...fetchOptions } = options;
+  const { timeoutMs: requestedTimeoutMs = 60000, signal: requestSignal, ...fetchOptions } = options;
   const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0
     ? requestedTimeoutMs
     : 60000;
   const timeoutController = new AbortController();
   const timeout = window.setTimeout(() => timeoutController.abort(), timeoutMs);
+  const abortForRequest = () => timeoutController.abort();
+  if (requestSignal?.aborted) abortForRequest();
+  else requestSignal?.addEventListener('abort', abortForRequest, { once: true });
   try {
+    if (window.BMDesktop?.isDesktop && activeRun?.workspaceType === 'desktop') {
+      const localResult = await desktopWorkspaceApiRequest(path, fetchOptions);
+      if (localResult.handled) return localResult.value;
+    }
+    if (window.BMDesktop?.isDesktop) {
+      if (requestSignal?.aborted) throw Object.assign(new Error('请求已取消。'), { name: 'AbortError' });
+      const result = await window.BMDesktop.apiRequest({
+        path,
+        method: fetchOptions.method || 'GET',
+        body: fetchOptions.body,
+        headers: fetchOptions.headers || {},
+        timeoutMs,
+      });
+      if (!result?.ok) {
+        const requestError = new Error(result?.payload?.message || `请求失败（${result?.status || 0}）`);
+        requestError.status = result?.status;
+        requestError.code = typeof result?.payload?.code === 'string' ? result.payload.code : undefined;
+        throw requestError;
+      }
+      return result.payload;
+    }
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...fetchOptions,
       credentials: 'include',
@@ -2376,10 +3497,16 @@ async function apiRequest(path, options = {}) {
     if (!response.ok) {
       const requestError = new Error(payload.message || `请求失败（${response.status}）`);
       requestError.status = response.status;
+      requestError.code = typeof payload.code === 'string' ? payload.code : undefined;
       throw requestError;
     }
     return payload;
   } catch (error) {
+    if (requestSignal?.aborted) {
+      const abortError = new Error('请求已取消。');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
     if (error.name === 'AbortError') throw new Error('请求超时，请检查后端和 Harness 状态后重试。');
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
       throw new Error('无法连接服务器，请检查后端服务是否已启动。');
@@ -2387,7 +3514,82 @@ async function apiRequest(path, options = {}) {
     throw error;
   } finally {
     window.clearTimeout(timeout);
+    requestSignal?.removeEventListener('abort', abortForRequest);
   }
+}
+
+async function listDesktopWorkspaceFiles(run) {
+  const files = await window.BMDesktop.workspace.list(String(run.runId));
+  if (!Array.isArray(files)) throw new Error('本地工作区文件列表格式无效。');
+  return files.map((file) => ({
+    workspaceId: Number(run.workspaceId),
+    path: file.path,
+    displayName: file.displayName || file.path.split('/').pop(),
+    language: file.path.includes('.') ? file.path.split('.').pop().toLowerCase() : null,
+    sizeBytes: file.sizeBytes,
+    contentHash: file.contentHash,
+    entry: false,
+    updatedAt: new Date().toISOString(),
+  }));
+}
+
+async function readDesktopWorkspaceFile(run, relativePath) {
+  const result = await window.BMDesktop.workspace.read(String(run.runId), relativePath);
+  return {
+    file: {
+      workspaceId: Number(run.workspaceId),
+      path: result.path,
+      displayName: result.path.split('/').pop(),
+      language: result.path.includes('.') ? result.path.split('.').pop().toLowerCase() : null,
+      sizeBytes: new TextEncoder().encode(result.content).length,
+      contentHash: result.contentHash,
+      entry: false,
+      updatedAt: new Date().toISOString(),
+    },
+    content: result.content,
+  };
+}
+
+async function desktopWorkspaceApiRequest(path, options) {
+  const match = /^\/workspaces\/(\d+)\/files(?:\/(.+))?$/.exec(path);
+  if (!match || String(activeRun.workspaceId) !== match[1]) return { handled: false };
+  const runId = String(activeRun.runId);
+  const relativePath = match[2] ? decodeURIComponent(match[2]) : null;
+  const method = String(options.method || 'GET').toUpperCase();
+  if (method === 'GET' && relativePath === null) {
+    return { handled: true, value: await listDesktopWorkspaceFiles(activeRun) };
+  }
+  if (method === 'GET' && relativePath !== null) {
+    return { handled: true, value: await readDesktopWorkspaceFile(activeRun, relativePath) };
+  }
+  if (method === 'PUT' && relativePath !== null) {
+    let body;
+    try { body = JSON.parse(options.body || '{}'); } catch { throw new Error('文件保存请求格式无效。'); }
+    return { handled: true, value: await window.BMDesktop.workspace.write(runId, relativePath, body.content, body.expectedHash) };
+  }
+  return { handled: false };
+}
+
+function beginCreateRequest() {
+  cancelCreateRequest();
+  const controller = new AbortController();
+  activeCreateRequestController = controller;
+  return controller;
+}
+
+function finishCreateRequest(controller) {
+  if (activeCreateRequestController === controller) activeCreateRequestController = null;
+}
+
+function cancelCreateRequest() {
+  const controller = activeCreateRequestController;
+  activeCreateRequestController = null;
+  controller?.abort();
+}
+
+function createApiRequest(path, options = {}) {
+  const signal = activeCreateRequestController?.signal;
+  return apiRequest(path, signal ? { ...options, signal } : options);
 }
 
 function difficultyCode(label) {
@@ -2445,10 +3647,38 @@ function renderPlanPreview(plan) {
     branch.className = 'plan-tree-branch';
     const node = document.createElement('div');
     node.className = 'plan-node';
-    node.innerHTML = '<span class="plan-node-sequence"></span><div><strong></strong><p></p></div>';
+    node.innerHTML = '<span class="plan-node-sequence"></span><div class="plan-node-content"><div class="plan-node-heading"><strong></strong><span class="plan-node-minutes"></span></div><p class="plan-node-description"></p><ol class="plan-task-list"></ol></div>';
     node.querySelector('.plan-node-sequence').textContent = nodeNumbers.get(planNode.key) || planNode.key;
     node.querySelector('strong').textContent = `${planNode.stage} · ${planNode.title}`;
-    node.querySelector('p').textContent = planNode.tasks.map((task, taskIndex) => `${taskIndex + 1}. ${task.title}`).join('　');
+    const estimatedMinutes = Number.isInteger(planNode.estimatedMinutes) && planNode.estimatedMinutes > 0
+      ? `约 ${planNode.estimatedMinutes} 分钟`
+      : '时长待确认';
+    node.querySelector('.plan-node-minutes').textContent = estimatedMinutes;
+    node.querySelector('.plan-node-description').textContent = planNode.description;
+    const validationLabels = {
+      manual: '人工 / 自检',
+      command: '运行命令',
+      test: '自动测试',
+      agent: '助手辅助检查',
+    };
+    const taskList = node.querySelector('.plan-task-list');
+    planNode.tasks.forEach((planTask) => {
+      const item = document.createElement('li');
+      item.className = 'plan-task-item';
+      const heading = document.createElement('div');
+      heading.className = 'plan-task-heading';
+      const title = document.createElement('strong');
+      title.textContent = planTask.title;
+      const validation = document.createElement('span');
+      validation.className = 'plan-task-validation';
+      validation.textContent = validationLabels[planTask.validationType] || '人工 / 自检';
+      const description = document.createElement('p');
+      description.className = 'plan-task-description';
+      description.textContent = planTask.description;
+      heading.append(title, validation);
+      item.append(heading, description);
+      taskList.append(item);
+    });
     branch.append(node);
     const descendants = children.get(planNode.key) || [];
     if (descendants.length) {
@@ -2463,7 +3693,9 @@ function renderPlanPreview(plan) {
 }
 
 async function openCreateDialog() {
+  if (createMaterializationInFlight) return;
   const epoch = ++createDialogEpoch;
+  const requestController = beginCreateRequest();
   createStep = 1;
   createPlanReady = false;
   directionReady = false;
@@ -2490,13 +3722,16 @@ async function openCreateDialog() {
   updateCreateStep();
   setCreateLoading(true, '正在建立独立的 Harness 会话…');
   try {
-    const session = await apiRequest('/experiment-creation/sessions', { method: 'POST', body: '{}' });
+    const session = await createApiRequest('/experiment-creation/sessions', { method: 'POST', body: '{}' });
     if (epoch !== createDialogEpoch || !createDialog.classList.contains('is-open')) return;
     creationSessionId = session.sessionId;
     learningGoal.focus();
   } catch (error) {
-    showCreationMessage(error.message, true);
+    if (epoch === createDialogEpoch && createDialog.classList.contains('is-open') && !requestController.signal.aborted) {
+      showCreationMessage(error.message, true);
+    }
   } finally {
+    finishCreateRequest(requestController);
     if (epoch === createDialogEpoch && createDialog.classList.contains('is-open')) {
       createBusy = false;
       setCreateLoading(false);
@@ -2506,7 +3741,12 @@ async function openCreateDialog() {
 }
 
 function closeCreateDialogPanel() {
+  if (createMaterializationInFlight) {
+    setCreateLoading(true, '实验正在提交创建，完成后会自动返回，请勿重复提交。');
+    return;
+  }
   createDialogEpoch += 1;
+  cancelCreateRequest();
   createDialog.classList.remove('is-open');
   createBusy = false;
   setCreateLoading(false);
@@ -2535,6 +3775,7 @@ function updateCreateStep() {
       : createStep === 2 ? '保存周期并继续' : '生成实验方案';
   createStepButton.innerHTML = `${label} <span>→</span>`;
   createStepButton.disabled = createBusy;
+  closeCreateDialog.disabled = createMaterializationInFlight;
   learningGoal.disabled = createBusy;
   durationHoursInput.disabled = createBusy;
   document.querySelectorAll('.choice-item').forEach((choice) => { choice.disabled = createBusy; });
@@ -2568,10 +3809,15 @@ createStepButton.addEventListener('click', async () => {
   }
   createBusy = true;
   const requestEpoch = createDialogEpoch;
+  const requestController = createPlanReady ? null : beginCreateRequest();
+  let ownsMaterialization = false;
   updateCreateStep();
   setCreateLoading(true);
   try {
     if (createPlanReady) {
+      createMaterializationInFlight = true;
+      ownsMaterialization = true;
+      updateCreateStep();
       setCreateLoading(true, '正在创建实验节点和连线…');
       materializationKey ||= crypto.randomUUID ? crypto.randomUUID() : `create-${creationSessionId}-${Date.now()}`;
       const created = await apiRequest(`/experiment-creation/sessions/${creationSessionId}/confirm`, {
@@ -2580,6 +3826,8 @@ createStepButton.addEventListener('click', async () => {
       const id = String(created.experimentId);
       experimentData[id] = { ...created, description: created.description, nodes: created.nodes };
       await loadPersonalExperiments(routeResolutionEpoch);
+      createMaterializationInFlight = false;
+      ownsMaterialization = false;
       createBusy = false;
       closeCreateDialogPanel();
       learningGoal.value = '';
@@ -2599,7 +3847,7 @@ createStepButton.addEventListener('click', async () => {
         learningGoal.focus();
         return;
       }
-      const envelope = await apiRequest(`/experiment-creation/sessions/${creationSessionId}/messages`, {
+      const envelope = await createApiRequest(`/experiment-creation/sessions/${creationSessionId}/messages`, {
         method: 'POST', body: JSON.stringify({ message }),
       });
       appendCreationMessage('user', message);
@@ -2619,7 +3867,7 @@ createStepButton.addEventListener('click', async () => {
 
     if (createStep === 1 && directionReady) {
       setCreateLoading(true, '正在确认实验方向…');
-      await apiRequest(`/experiment-creation/sessions/${creationSessionId}/direction/confirm`, { method: 'POST', body: '{}' });
+      await createApiRequest(`/experiment-creation/sessions/${creationSessionId}/direction/confirm`, { method: 'POST', body: '{}' });
       createStep = 2;
       updateCreateStep();
       return;
@@ -2638,7 +3886,7 @@ createStepButton.addEventListener('click', async () => {
     }
 
     setCreateLoading(true, 'Harness 正在生成树状实验方案，请稍候…');
-    await apiRequest(`/experiment-creation/sessions/${creationSessionId}/configuration`, {
+    await createApiRequest(`/experiment-creation/sessions/${creationSessionId}/configuration`, {
       method: 'PATCH',
       body: JSON.stringify({
         durationDays: Math.floor(durationTotalHours / 24),
@@ -2646,7 +3894,7 @@ createStepButton.addEventListener('click', async () => {
         difficulty: difficultyCode(selectedDifficulty),
       }),
     });
-    const plan = await apiRequest(`/experiment-creation/sessions/${creationSessionId}/plan`, {
+    const plan = await createApiRequest(`/experiment-creation/sessions/${creationSessionId}/plan`, {
       method: 'POST',
       body: '{}',
       timeoutMs: 150000,
@@ -2656,8 +3904,12 @@ createStepButton.addEventListener('click', async () => {
     document.querySelectorAll('.create-step').forEach((step) => step.classList.remove('is-active'));
     createPlan.classList.add('is-active');
   } catch (error) {
-    showCreationMessage(error.message, true);
+    if (requestEpoch === createDialogEpoch && createDialog.classList.contains('is-open') && !requestController?.signal.aborted) {
+      showCreationMessage(error.message, true);
+    }
   } finally {
+    if (requestController) finishCreateRequest(requestController);
+    if (ownsMaterialization) createMaterializationInFlight = false;
     if (requestEpoch === createDialogEpoch && createDialog.classList.contains('is-open')) {
       createBusy = false;
       setCreateLoading(false);
@@ -2688,6 +3940,14 @@ loginForm.addEventListener('submit', async (event) => {
   submitButton.disabled = true;
   setMessage(loginError, '正在验证账号…');
   try {
+    if (window.BMDesktop?.isDesktop) {
+      const configuration = await window.BMDesktop.getApiConfiguration();
+      if (!configuration.configured) {
+        const configuredUrl = window.prompt('请输入 BM-HS 平台 HTTPS API 地址（例如 https://example.edu/api）：');
+        if (!configuredUrl) throw new Error('尚未配置平台地址，未发送登录信息。');
+        await window.BMDesktop.setApiBaseUrl(configuredUrl.trim());
+      }
+    }
     const session = await apiRequest('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
@@ -2798,29 +4058,79 @@ publishForm.addEventListener('submit', async (event) => {
 studentCourses.addEventListener('click', async (event) => {
   const button = event.target.closest('.open-published-experiment');
   if (!button) return;
-  const routeEpoch = routeResolutionEpoch;
+  void openStudentDsh(button);
+});
+
+studentDshLaunchButton.addEventListener('click', () => void openStudentDsh(studentDshLaunchButton));
+studentDshStopButton.addEventListener('click', async () => {
   const userId = getCurrentUser()?.id;
-  const experimentIdValue = String(button.dataset.experimentId);
-  button.disabled = true;
-  setMessage(studentMessage, '正在读取实验节点…');
+  if (!userId || getCurrentUser()?.role !== 'student') return;
+  studentDshStopButton.disabled = true;
+  studentDshState.textContent = '正在停止工作区并保留文件…';
   try {
-    const experimentId = encodeURIComponent(experimentIdValue);
-    const experiment = await apiRequest(`/experiments/${experimentId}`, { method: 'GET' });
-    if (routeEpoch !== routeResolutionEpoch || getCurrentUser()?.id !== userId) return;
-    experimentData[experimentIdValue] = experiment;
-    setMessage(studentMessage, '');
-    openExperiment(experimentIdValue);
+    await apiRequest('/student/dsh/stop', { method: 'POST' });
+    studentDshState.textContent = describeDshStatus('stopped');
+    studentDshStopButton.hidden = true;
   } catch (error) {
-    if (routeEpoch !== routeResolutionEpoch || getCurrentUser()?.id !== userId) return;
-    setMessage(studentMessage, error.message || '实验加载失败，请稍后重试。', true);
+    studentDshState.textContent = error.message || '停止失败，请稍后重试。';
   } finally {
-    if (routeEpoch === routeResolutionEpoch && getCurrentUser()?.id === userId) button.disabled = false;
+    studentDshStopButton.disabled = false;
   }
 });
 
 document.querySelector('#studentLibraryButton').addEventListener('click', () => showRoute('library'));
 document.querySelector('#teacherLibraryButton').addEventListener('click', () => showRoute('library'));
 teacherDashboardCourse.addEventListener('change', () => void loadTeacherCourseDashboard(teacherDashboardCourse.value));
+teacherDshExperiment.addEventListener('change', () => void loadTeacherDshRuns(teacherDshExperiment.value));
+teacherDshReviewForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const runId = selectedTeacherDshRunId;
+  if (!Number.isSafeInteger(runId) || runId <= 0) {
+    setMessage(teacherDshReviewMessage, '请先选择一名学生。', true);
+    return;
+  }
+  const rating = teacherDshRating.value.trim();
+  if (rating && (!/^\d{1,3}$/.test(rating) || Number(rating) > 100)) {
+    setMessage(teacherDshReviewMessage, '评分需为 0 到 100 的整数。', true);
+    return;
+  }
+  teacherDshReviewSave.disabled = true;
+  setMessage(teacherDshReviewMessage, '正在保存阶段评价…');
+  try {
+    await apiRequest(`/teacher/dsh/runs/${encodeURIComponent(runId)}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ rating: rating ? Number(rating) : null, feedback: teacherDshFeedback.value.trim() || null }),
+    });
+    if (selectedTeacherDshRunId === runId) setMessage(teacherDshReviewMessage, '阶段评价已保存。');
+  } catch (error) {
+    if (selectedTeacherDshRunId === runId) setMessage(teacherDshReviewMessage, error.message || '阶段评价保存失败。', true);
+  } finally {
+    if (selectedTeacherDshRunId === runId) teacherDshReviewSave.disabled = false;
+  }
+});
+adminExperiment.addEventListener('change', syncAdminReviewerSelection);
+adminAssignReviewer.addEventListener('click', async () => {
+  const experimentId = adminExperiment.value;
+  const teacherId = adminReviewer.value;
+  if (!/^\d+$/.test(experimentId) || !/^\d+$/.test(teacherId)) {
+    setMessage(adminReviewerMessage, '请选择个人实验和审核教师。', true);
+    return;
+  }
+  adminAssignReviewer.disabled = true;
+  setMessage(adminReviewerMessage, '正在保存审核教师…');
+  try {
+    await apiRequest(`/admin/experiments/${encodeURIComponent(experimentId)}/reviewer`, {
+      method: 'PUT', body: JSON.stringify({ teacherId: Number(teacherId) }),
+    });
+    setMessage(adminReviewerMessage, '审核教师已保存。');
+    await renderAdminDashboard();
+    adminExperiment.value = experimentId;
+    syncAdminReviewerSelection();
+  } catch (error) {
+    setMessage(adminReviewerMessage, error.message || '审核教师保存失败。', true);
+    adminAssignReviewer.disabled = false;
+  }
+});
 teacherReviewForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!selectedTeacherRunId) {
@@ -2858,7 +4168,8 @@ async function logout() {
   try {
     await apiRequest('/auth/logout', { method: 'POST', timeoutMs: 10000 });
   } catch (error) {
-    const messageTarget = getCurrentUser()?.role === 'teacher' ? teacherMessage : studentMessage;
+    const role = getCurrentUser()?.role;
+    const messageTarget = role === 'teacher' ? teacherMessage : role === 'admin' ? adminReviewerMessage : studentMessage;
     if (messageTarget) setMessage(messageTarget, '退出请求失败，会话仍保持有效，请重试。', true);
     else setMessage(loginError, '退出请求失败，请重试。', true);
     return;
@@ -2869,6 +4180,7 @@ async function logout() {
   removeSessionValue(STORAGE_KEYS.activeExperiment);
   clearCachedTerminalSessions();
   activeRun = null;
+  syncGuidanceControls();
   activeRunProgress = null;
   runProgressLoadFailed = false;
   activeTerminalSession = null;
@@ -2880,7 +4192,7 @@ async function logout() {
   showRoute('login');
 }
 
-document.querySelectorAll('#studentLogoutButton, #teacherLogoutButton, #libraryLogoutButton').forEach((button) => button.addEventListener('click', logout));
+document.querySelectorAll('#studentLogoutButton, #teacherLogoutButton, #adminLogoutButton, #libraryLogoutButton').forEach((button) => button.addEventListener('click', logout));
 
 async function restoreSession() {
   renderCanvas();

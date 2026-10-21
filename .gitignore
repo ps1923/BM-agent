@@ -4,3 +4,7 @@ backend/target/
 __pycache__/
 .pytest_cache/
 *.pyc
+desktop/node_modules/
+desktop/dist/
+desktop/runtime/**
+!desktop/runtime/.gitkeep

@@ -22,7 +22,7 @@ public class RagService {
     }
 
     public void indexApproved(RagModels.BugCaseView bug) {
-        if (!"approved".equals(bug.status()) || bug.courseId() == null) return;
+        if (!"approved".equals(bug.status())) return;
         String documentId = "bug-" + bug.id();
         String document = bug.title() + "\n问题：" + bug.problem() + "\n解决：" + nullToEmpty(bug.solution());
         try {
@@ -46,7 +46,10 @@ public class RagService {
 
     public RagModels.RagSearchResult searchForStudent(long studentId, Long courseId, Long experimentId,
                                                        Long nodeId, String technologyStack, String query) {
-        if (courseId == null || experimentId == null) return new RagModels.RagSearchResult(false, List.of());
+        if (experimentId == null) return new RagModels.RagSearchResult(false, List.of());
+        if (courseId == null) {
+            return searchForExperiment(studentId, experimentId, nodeId, technologyStack, query);
+        }
         try {
             List<RagModels.ChromaHit> hits = chromaClient.query(embeddingClient.embed(query), courseId, experimentId,
                     technologyStack, 8);
@@ -68,6 +71,39 @@ public class RagService {
                 }
             }
             return new RagModels.RagSearchResult(true, List.copyOf(references.stream().limit(3).toList()));
+        } catch (ApiException exception) {
+            return new RagModels.RagSearchResult(false, List.of());
+        }
+    }
+
+    public RagModels.RagSearchResult searchForExperiment(long studentId, long experimentId, Long nodeId,
+                                                          String technologyStack, String query) {
+        return searchForExperiment(studentId, experimentId, nodeId, technologyStack, query, 3);
+    }
+
+    public RagModels.RagSearchResult searchForExperiment(long studentId, long experimentId, Long nodeId,
+                                                          String technologyStack, String query, int limit) {
+        int resultLimit = Math.max(1, Math.min(limit, 10));
+        try {
+            List<RagModels.ChromaHit> hits = chromaClient.queryByExperiment(embeddingClient.embed(query), null,
+                    experimentId, technologyStack, Math.max(8, resultLimit));
+            List<RagModels.RagReference> references = new ArrayList<>();
+            for (RagModels.ChromaHit hit : hits) {
+                if (!hit.id().startsWith("bug-")) continue;
+                try {
+                    long bugId = Long.parseLong(hit.id().substring(4));
+                    RagModels.BugCaseView bug = bugRepository.findApprovedForExperiment(bugId, studentId, experimentId);
+                    boolean nodeCompatible = nodeId == null || bug.nodeId() == null || nodeId.equals(bug.nodeId());
+                    boolean stackCompatible = technologyStack == null || technologyStack.isBlank()
+                            || bug.technologyStack() == null || technologyStack.equalsIgnoreCase(bug.technologyStack());
+                    if (nodeCompatible && stackCompatible) {
+                        references.add(new RagModels.RagReference(bug.id(), bug.title(), bug.problem(), bug.solution(), hit.distance()));
+                    }
+                } catch (NumberFormatException | ApiException ignored) {
+                    // The vector index is only a candidate source; MySQL validates visibility and scope.
+                }
+            }
+            return new RagModels.RagSearchResult(true, List.copyOf(references.stream().limit(resultLimit).toList()));
         } catch (ApiException exception) {
             return new RagModels.RagSearchResult(false, List.of());
         }
