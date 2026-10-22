@@ -128,6 +128,25 @@ test('DSH baseline migration defines tables once and matches fresh opaque bindin
   assert.doesNotMatch(migration, /DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM/i);
 });
 
+test('Git commit acceptance migration is additive, experiment-scoped, and preserves legacy progress', async () => {
+  const [migration, schema, verifier] = await Promise.all([
+    read('../database/migrations/20261022_add_git_commit_acceptance.sql'),
+    read('../database/schema.sql'),
+    read('../database/verify.sql'),
+  ]);
+  for (const table of ['git_repositories', 'git_submissions', 'git_submission_nodes', 'git_acceptance_results']) {
+    const marker = `CREATE TABLE IF NOT EXISTS \`${table}\``;
+    assert.equal(migration.split(marker).length - 1, 1, `${table} is defined once in the migration`);
+    assert.ok(schema.includes(marker), `${table} is present in the fresh schema`);
+    assert.ok(verifier.includes(`'${table}'`), `${table} is checked by the verifier`);
+  }
+  assert.match(migration, /UNIQUE KEY `uq_git_submissions_run_sha` \(`run_id`, `commit_sha`\)/);
+  assert.match(migration, /FOREIGN KEY \(`node_id`, `experiment_id`\)\s+REFERENCES `experiment_nodes`/);
+  assert.match(migration, /CHECK \(`decision` IN \('meets', 'partially_meets', 'does_not_meet', 'unable_to_verify'\)\)/);
+  assert.match(migration, /r\.execution_mode = 'git'/);
+  assert.doesNotMatch(migration, /execution_mode IN \('dsh', 'git'\)|DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM/i);
+});
+
 test('check-clause normalization removes MySQL formatting but preserves logical grouping', () => {
   const normalize = (clause) => {
     const source = clause;

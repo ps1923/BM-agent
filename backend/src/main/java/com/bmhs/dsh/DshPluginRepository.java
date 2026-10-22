@@ -81,8 +81,7 @@ public class DshPluginRepository {
             runId = requiredKey(keys);
             jdbc.update("""
                     INSERT INTO node_progress (experiment_id, run_id, node_id, status, progress_percent)
-                    SELECT experiment_id, ?, id,
-                           CASE WHEN parent_node_id IS NULL THEN 'pending' ELSE 'locked' END, 0
+                    SELECT experiment_id, ?, id, 'pending', 0
                     FROM experiment_nodes WHERE experiment_id = ?
                     """, runId, experimentId);
             jdbc.update("""
@@ -145,7 +144,6 @@ public class DshPluginRepository {
                 SELECT status FROM node_progress WHERE run_id = ? AND experiment_id = ? AND node_id = ? FOR UPDATE
                 """, (rs, rowNum) -> rs.getString(1), runId, run.experimentId(), nodeId);
         if (statuses.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "NODE_NOT_FOUND", "节点不存在或不属于当前实验");
-        if ("locked".equals(statuses.get(0))) throw new ApiException(HttpStatus.CONFLICT, "NODE_LOCKED", "当前节点尚未解锁");
         if ("completed".equals(statuses.get(0)) && !"completed".equals(status)) {
             throw new ApiException(HttpStatus.CONFLICT, "NODE_ALREADY_COMPLETED", "已完成节点不能回退");
         }
@@ -163,13 +161,6 @@ public class DshPluginRepository {
                   completed_at = CASE WHEN ? = 'completed' THEN CURRENT_TIMESTAMP(6) ELSE NULL END
                 WHERE run_id = ? AND experiment_id = ? AND node_id = ?
                 """, status, status, status, runId, run.experimentId(), nodeId);
-        if ("completed".equals(status)) {
-            jdbc.update("""
-                    UPDATE node_progress child JOIN experiment_nodes n ON n.id = child.node_id AND n.experiment_id = child.experiment_id
-                    SET child.status = 'pending' WHERE child.run_id = ? AND child.experiment_id = ?
-                      AND n.parent_node_id = ? AND child.status = 'locked'
-                    """, runId, run.experimentId(), nodeId);
-        }
         Integer remaining = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM node_progress WHERE run_id = ? AND experiment_id = ? AND status <> 'completed'
                 """, Integer.class, runId, run.experimentId());
@@ -194,7 +185,7 @@ public class DshPluginRepository {
                 SELECT np.status FROM node_tasks nt JOIN node_progress np
                   ON np.node_id = nt.node_id AND np.experiment_id = nt.experiment_id AND np.run_id = ?
                 WHERE nt.id = ? AND nt.experiment_id = ? FOR UPDATE
-                """, rs -> rs.next() && !"locked".equals(rs.getString(1)) && !"completed".equals(rs.getString(1)) ? 1 : null,
+                """, rs -> rs.next() && !"completed".equals(rs.getString(1)) ? 1 : null,
                 runId, taskId, run.experimentId());
         if (updated == null) throw new ApiException(HttpStatus.CONFLICT, "TASK_UNAVAILABLE", "任务不存在、尚未解锁或节点已完成");
         jdbc.update("""
@@ -271,6 +262,7 @@ public class DshPluginRepository {
         assertTeacherExperiment(teacherId, experimentId);
         return jdbc.query("""
                 SELECT r.id AS run_id, r.experiment_id, u.id AS student_id, u.display_name, u.email,
+                       r.execution_mode,
                        r.status, COALESCE(SUM(CASE WHEN np.status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_nodes,
                        COUNT(np.id) AS total_nodes,
                        COALESCE((SELECT COUNT(*) FROM task_progress tp WHERE tp.run_id = r.id AND tp.status = 'completed'), 0) AS completed_tasks,
@@ -278,7 +270,7 @@ public class DshPluginRepository {
                        r.last_opened_at
                 FROM experiment_runs r JOIN users u ON u.id = r.student_id
                 LEFT JOIN node_progress np ON np.run_id = r.id AND np.experiment_id = r.experiment_id
-                WHERE r.experiment_id = ? AND r.execution_mode = 'dsh' AND (
+                WHERE r.experiment_id = ? AND r.execution_mode IN ('dsh', 'git') AND (
                   EXISTS (SELECT 1 FROM course_experiment_assignments a JOIN courses c ON c.id = a.course_id
                           JOIN course_members m ON m.course_id = c.id AND m.student_id = r.student_id AND m.status = 'active'
                           WHERE a.experiment_id = r.experiment_id AND a.status = 'published'
@@ -288,13 +280,14 @@ public class DshPluginRepository {
                    EXISTS (SELECT 1 FROM experiment_reviewers er
                            WHERE er.experiment_id = r.experiment_id AND er.teacher_id = ?))
                 )
-                GROUP BY r.id, r.experiment_id, u.id, u.display_name, u.email, r.status, r.last_opened_at
+                GROUP BY r.id, r.experiment_id, u.id, u.display_name, u.email, r.execution_mode, r.status, r.last_opened_at
                 ORDER BY r.last_opened_at DESC, r.id DESC
                 """, (rs, rowNum) -> new DshPluginModels.TeacherRunView(rs.getLong("run_id"),
                 rs.getLong("experiment_id"), rs.getLong("student_id"), rs.getString("display_name"),
                 rs.getString("email"), rs.getString("status"), rs.getInt("completed_nodes"),
                 rs.getInt("total_nodes"), rs.getInt("completed_tasks"), rs.getInt("total_tasks"),
-                rs.getTimestamp("last_opened_at") == null ? null : rs.getTimestamp("last_opened_at").toInstant()),
+                rs.getTimestamp("last_opened_at") == null ? null : rs.getTimestamp("last_opened_at").toInstant(),
+                rs.getString("execution_mode")),
                 experimentId, teacherId, teacherId);
     }
 

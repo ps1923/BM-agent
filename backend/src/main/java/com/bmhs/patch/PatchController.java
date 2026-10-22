@@ -1,6 +1,7 @@
 package com.bmhs.patch;
 
 import com.bmhs.auth.AuthModels.AuthenticatedUser;
+import com.bmhs.experimentcreation.LegacyWriteDisabled;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,7 +22,7 @@ public class PatchController {
     public ResponseEntity<PatchModels.PatchApplyView> apply(@PathVariable long runId,
                                                              @PathVariable long patchId,
                                                              AuthenticatedUser user) {
-        return ResponseEntity.ok(service.apply(user, runId, patchId));
+        throw LegacyWriteDisabled.exception();
     }
 
     @GetMapping("/runs/{runId:\\d+}/patches/{patchId:\\d+}")

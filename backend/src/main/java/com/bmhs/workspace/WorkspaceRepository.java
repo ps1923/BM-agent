@@ -61,8 +61,7 @@ public class WorkspaceRepository {
         long runId = requiredKey(keys);
         jdbc.update("""
                 INSERT INTO node_progress (experiment_id, run_id, node_id, status, progress_percent)
-                SELECT experiment_id, ?, id,
-                       CASE WHEN parent_node_id IS NULL THEN 'pending' ELSE 'locked' END, 0
+                    SELECT experiment_id, ?, id, 'pending', 0
                 FROM experiment_nodes WHERE experiment_id = ?
                 """, runId, experimentId);
         ensureTaskProgress(runId, experimentId);
@@ -102,8 +101,7 @@ public class WorkspaceRepository {
         long runId = requiredKey(keys);
         jdbc.update("""
                 INSERT INTO node_progress (experiment_id, run_id, node_id, status, progress_percent)
-                SELECT experiment_id, ?, id,
-                       CASE WHEN parent_node_id IS NULL THEN 'pending' ELSE 'locked' END, 0
+                    SELECT experiment_id, ?, id, 'pending', 0
                 FROM experiment_nodes WHERE experiment_id = ?
                 """, runId, experimentId);
         ensureTaskProgress(runId, experimentId);
@@ -135,6 +133,31 @@ public class WorkspaceRepository {
                 runId, studentId);
         if (records.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", "运行实例不存在");
         return records.get(0);
+    }
+
+    /** Generic run/progress reads may include Git-only runs, which intentionally have no workspace row. */
+    public RunRecord findProgressRun(long runId, long studentId) {
+        List<RunRecord> gitRuns = jdbc.query("""
+                SELECT id, experiment_id, student_id, status, current_node_id
+                FROM experiment_runs WHERE id = ? AND student_id = ? AND execution_mode = 'git'
+                """, (rs, rowNum) -> new RunRecord(rs.getLong("id"), rs.getLong("experiment_id"),
+                rs.getLong("student_id"), rs.getString("status"), rs.getObject("current_node_id", Long.class),
+                new WorkspaceRecord(0, rs.getLong("id"), rs.getLong("experiment_id"), rs.getLong("student_id"),
+                        "", "", null, "not_applicable", null, 0, "git", null)), runId, studentId);
+        if (!gitRuns.isEmpty()) return gitRuns.get(0);
+        return findRun(runId, studentId);
+    }
+
+    public RunView findRunView(long runId, long studentId) {
+        List<RunRecord> gitRuns = jdbc.query("""
+                SELECT id, experiment_id, student_id, status, current_node_id
+                FROM experiment_runs WHERE id = ? AND student_id = ? AND execution_mode = 'git'
+                """, (rs, rowNum) -> new RunRecord(rs.getLong("id"), rs.getLong("experiment_id"),
+                rs.getLong("student_id"), rs.getString("status"), rs.getObject("current_node_id", Long.class),
+                new WorkspaceRecord(0, rs.getLong("id"), rs.getLong("experiment_id"), rs.getLong("student_id"),
+                        "", "", null, "not_applicable", null, 0, "git", null)), runId, studentId);
+        if (!gitRuns.isEmpty()) return toView(gitRuns.get(0));
+        return toView(findRun(runId, studentId));
     }
 
     public WorkspaceRecord findWorkspace(long workspaceId, long studentId) {
@@ -187,7 +210,7 @@ public class WorkspaceRepository {
 
     @Transactional
     public RunProgressView findProgress(long runId, long studentId) {
-        RunRecord run = findRun(runId, studentId);
+        RunRecord run = findProgressRun(runId, studentId);
         ensureTaskProgress(runId, run.experimentId());
         List<NodeProgressView> nodes = jdbc.query("""
                 SELECT node_id, status, progress_percent, started_at, completed_at
@@ -211,7 +234,7 @@ public class WorkspaceRepository {
     @Transactional
     public RunProgressView updateNodeProgress(long runId, long studentId, long nodeId,
                                               String status, BigDecimal progressPercent) {
-        RunRecord run = findRun(runId, studentId);
+        RunRecord run = findProgressRun(runId, studentId);
         ensureTaskProgress(runId, run.experimentId());
         List<NodeProgressView> current = jdbc.query("""
                 SELECT node_id, status, progress_percent, started_at, completed_at
@@ -223,9 +246,6 @@ public class WorkspaceRepository {
                 nullableInstant(rs.getTimestamp("completed_at"))), runId, run.experimentId(), nodeId);
         if (current.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "NODE_PROGRESS_NOT_FOUND", "节点进度不存在");
         NodeProgressView before = current.get(0);
-        if ("locked".equals(before.status())) {
-            throw new ApiException(HttpStatus.CONFLICT, "NODE_LOCKED", "当前节点尚未解锁");
-        }
         if ("completed".equals(before.status())) {
             if ("completed".equals(status) && progressPercent.compareTo(BigDecimal.valueOf(100)) == 0) {
                 return findProgress(runId, studentId);
@@ -235,7 +255,7 @@ public class WorkspaceRepository {
         if ("completed".equals(status) && progressPercent.compareTo(BigDecimal.valueOf(100)) < 0) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "NODE_COMPLETION_REQUIRES_100", "完成节点时进度必须为 100");
         }
-        List<String> taskStatuses = jdbc.query("""
+        List<String> taskStatuses = "git".equals(run.workspace().workspaceType()) ? List.of() : jdbc.query("""
                     SELECT COALESCE(tp.status, 'missing')
                     FROM node_tasks nt
                     LEFT JOIN task_progress tp ON tp.task_id = nt.id AND tp.experiment_id = nt.experiment_id
@@ -243,7 +263,8 @@ public class WorkspaceRepository {
                     WHERE nt.experiment_id = ? AND nt.node_id = ?
                     FOR UPDATE
                     """, (rs, rowNum) -> rs.getString(1), runId, run.experimentId(), nodeId);
-        if ("completed".equals(status) && taskStatuses.stream().anyMatch(taskStatus -> !"completed".equals(taskStatus))) {
+        if (!"git".equals(run.workspace().workspaceType()) && "completed".equals(status)
+                && taskStatuses.stream().anyMatch(taskStatus -> !"completed".equals(taskStatus))) {
                 throw new ApiException(HttpStatus.CONFLICT, "NODE_TASKS_INCOMPLETE", "请先完成当前节点的所有任务");
         }
         BigDecimal effectiveProgressPercent = progressPercent;
@@ -272,12 +293,6 @@ public class WorkspaceRepository {
                         started_at = COALESCE(started_at, CURRENT_TIMESTAMP(6)), completed_at = CURRENT_TIMESTAMP(6)
                     WHERE run_id = ? AND experiment_id = ? AND node_id = ?
                     """, runId, run.experimentId(), nodeId);
-            jdbc.update("""
-                    UPDATE node_progress child
-                    JOIN experiment_nodes node ON node.id = child.node_id AND node.experiment_id = child.experiment_id
-                    SET child.status = 'pending'
-                    WHERE child.run_id = ? AND child.experiment_id = ? AND node.parent_node_id = ? AND child.status = 'locked'
-                    """, runId, run.experimentId(), nodeId);
             Integer remaining = jdbc.query("""
                     SELECT COUNT(*) FROM node_progress
                     WHERE run_id = ? AND experiment_id = ? AND status <> 'completed'
@@ -304,7 +319,7 @@ public class WorkspaceRepository {
 
     @Transactional
     public RunProgressView updateTaskProgress(long runId, long studentId, long taskId, String status) {
-        RunRecord run = findRun(runId, studentId);
+        RunRecord run = findProgressRun(runId, studentId);
         ensureTaskProgress(runId, run.experimentId());
         List<NodeProgressView> nodeRows = jdbc.query("""
                 SELECT np.node_id, np.status, np.progress_percent, np.started_at, np.completed_at
@@ -320,9 +335,6 @@ public class WorkspaceRepository {
             throw new ApiException(HttpStatus.NOT_FOUND, "TASK_PROGRESS_NOT_FOUND", "任务不存在或当前运行实例无权访问");
         }
         NodeProgressView node = nodeRows.get(0);
-        if ("locked".equals(node.status())) {
-            throw new ApiException(HttpStatus.CONFLICT, "NODE_LOCKED", "当前节点尚未解锁");
-        }
         if ("completed".equals(node.status())) {
             throw new ApiException(HttpStatus.CONFLICT, "NODE_ALREADY_COMPLETED", "节点已经完成，任务进度不可修改");
         }

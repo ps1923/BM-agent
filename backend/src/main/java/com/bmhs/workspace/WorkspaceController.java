@@ -1,6 +1,7 @@
 package com.bmhs.workspace;
 
 import com.bmhs.auth.AuthModels.AuthenticatedUser;
+import com.bmhs.experimentcreation.LegacyWriteDisabled;
 import com.bmhs.workspace.WorkspaceModels.RunView;
 import com.bmhs.workspace.WorkspaceModels.RunProgressView;
 import com.bmhs.workspace.WorkspaceModels.UpdateTaskRequest;
@@ -30,12 +31,12 @@ public class WorkspaceController {
 
     @PostMapping("/experiments/{experimentId:\\d+}/runs")
     public ResponseEntity<RunView> createRun(@PathVariable long experimentId, AuthenticatedUser user) {
-        return ResponseEntity.ok(service.createRun(user, experimentId));
+        throw LegacyWriteDisabled.exception();
     }
 
     @PostMapping("/desktop/experiments/{experimentId:\\d+}/runs")
     public ResponseEntity<RunView> createDesktopRun(@PathVariable long experimentId, AuthenticatedUser user) {
-        return ResponseEntity.ok(service.createDesktopRun(user, experimentId));
+        throw LegacyWriteDisabled.exception();
     }
 
     @GetMapping("/runs/{runId:\\d+}")
@@ -52,6 +53,7 @@ public class WorkspaceController {
     public ResponseEntity<RunProgressView> updateNode(@PathVariable long runId, @PathVariable long nodeId,
                                                        AuthenticatedUser user,
                                                        @Valid @RequestBody UpdateNodeRequest request) {
+        service.assertGitProgressWrite(user, runId);
         return ResponseEntity.ok(service.updateNode(user, runId, nodeId, request));
     }
 
@@ -59,6 +61,7 @@ public class WorkspaceController {
     public ResponseEntity<RunProgressView> updateTask(@PathVariable long runId, @PathVariable long taskId,
                                                        AuthenticatedUser user,
                                                        @Valid @RequestBody UpdateTaskRequest request) {
+        service.assertGitProgressWrite(user, runId);
         return ResponseEntity.ok(service.updateTask(user, runId, taskId, request));
     }
 
@@ -76,14 +79,13 @@ public class WorkspaceController {
     @PutMapping("/workspaces/{workspaceId:\\d+}/files/{*path}")
     public ResponseEntity<?> writeFile(@PathVariable long workspaceId, @PathVariable String path,
                                        AuthenticatedUser user, @Valid @RequestBody WriteFileRequest request) {
-        return ResponseEntity.ok(service.writeFile(user, workspaceId, requestPath(path), request));
+        throw LegacyWriteDisabled.exception();
     }
 
     @PostMapping("/workspaces/{workspaceId:\\d+}/snapshots")
     public ResponseEntity<SnapshotView> createSnapshot(@PathVariable long workspaceId, AuthenticatedUser user,
                                                         @Valid @RequestBody(required = false) SnapshotRequest request) {
-        return ResponseEntity.ok(service.createSnapshot(user, workspaceId,
-                request == null ? new SnapshotRequest(null) : request));
+        throw LegacyWriteDisabled.exception();
     }
 
     private String requestPath(String path) {

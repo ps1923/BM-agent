@@ -48,5 +48,12 @@ public final class DshPluginModels {
 
     public record TeacherRunView(long runId, long experimentId, long studentId, String studentName,
                                  String studentEmail, String status, int completedNodes, int totalNodes,
-                                 int completedTasks, int totalTasks, Instant lastOpenedAt) {}
+                                 int completedTasks, int totalTasks, Instant lastOpenedAt, String executionMode) {
+        public TeacherRunView(long runId, long experimentId, long studentId, String studentName,
+                              String studentEmail, String status, int completedNodes, int totalNodes,
+                              int completedTasks, int totalTasks, Instant lastOpenedAt) {
+            this(runId, experimentId, studentId, studentName, studentEmail, status, completedNodes,
+                    totalNodes, completedTasks, totalTasks, lastOpenedAt, "dsh");
+        }
+    }
 }

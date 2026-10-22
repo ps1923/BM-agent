@@ -60,23 +60,23 @@ class TerminalControllerWebTest {
     }
 
     @Test
-    void missingIdempotencyKeyFailsBeforeAnyCommandLookupOrExecution() throws Exception {
+    void legacyCommandExecutionIsDisabledBeforeAnyCommandLookupOrExecution() throws Exception {
         mvc.perform(post("/api/terminal-sessions/22/commands")
                         .cookie(new Cookie("BM_SESSION", "student-session"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"commandText\":\"pwd\",\"workingDirectory\":\".\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_IDEMPOTENCY_KEY"));
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.code").value("LEGACY_WRITE_DISABLED"));
 
         verifyNoInteractions(repository, workspaceRepository, runtime);
     }
 
     @Test
-    void terminalSessionCreationRequiresAnIdempotencyKey() throws Exception {
+    void legacyTerminalSessionCreationIsDisabled() throws Exception {
         mvc.perform(post("/api/workspaces/73/terminal-sessions")
                         .cookie(new Cookie("BM_SESSION", "student-session")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_IDEMPOTENCY_KEY"));
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.code").value("LEGACY_WRITE_DISABLED"));
 
         verifyNoInteractions(repository, workspaceRepository, runtime);
     }

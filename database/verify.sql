@@ -64,6 +64,14 @@ FROM (
   UNION ALL SELECT 'dsh_run_bindings'
   UNION ALL SELECT 'code_submissions'
   UNION ALL SELECT 'code_submission_files'
+  UNION ALL SELECT 'git_repositories'
+  UNION ALL SELECT 'git_submissions'
+  UNION ALL SELECT 'git_submission_nodes'
+  UNION ALL SELECT 'git_acceptance_results'
+  UNION ALL SELECT 'git_repositories'
+  UNION ALL SELECT 'git_submissions'
+  UNION ALL SELECT 'git_submission_nodes'
+  UNION ALL SELECT 'git_acceptance_results'
 ) AS expected
 LEFT JOIN `information_schema`.`TABLES` AS actual
   ON actual.`TABLE_SCHEMA` = 'BM-sql'
@@ -126,6 +134,13 @@ FROM (
   UNION ALL SELECT 'fk_bug_cases_student', 'bug_cases', 'users', 'RESTRICT'
   UNION ALL SELECT 'fk_bug_case_reviews_case', 'bug_case_reviews', 'bug_cases', 'CASCADE'
   UNION ALL SELECT 'fk_bug_case_reviews_teacher', 'bug_case_reviews', 'users', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_repositories_run', 'git_repositories', 'experiment_runs', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_repositories_student', 'git_repositories', 'users', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_submissions_run', 'git_submissions', 'experiment_runs', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_submissions_student', 'git_submissions', 'users', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_submission_nodes_submission', 'git_submission_nodes', 'git_submissions', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_submission_nodes_node', 'git_submission_nodes', 'experiment_nodes', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_acceptance_results_node', 'git_acceptance_results', 'git_submission_nodes', 'RESTRICT'
   UNION ALL SELECT 'fk_diagnosis_tasks_run', 'diagnosis_tasks', 'experiment_runs', 'CASCADE'
   UNION ALL SELECT 'fk_diagnosis_tasks_workspace', 'diagnosis_tasks', 'coding_workspaces', 'CASCADE'
   UNION ALL SELECT 'fk_diagnosis_tasks_student', 'diagnosis_tasks', 'users', 'RESTRICT'
@@ -364,6 +379,13 @@ FROM (
   UNION ALL SELECT 'fk_teacher_reviews_teacher', 'teacher_reviews', 'teacher_id', 'users', 'id', 'RESTRICT'
   UNION ALL SELECT 'fk_teacher_reviews_student', 'teacher_reviews', 'student_id', 'users', 'id', 'RESTRICT'
   UNION ALL SELECT 'fk_workspace_snapshots_node', 'workspace_snapshots', 'node_id', 'experiment_nodes', 'id', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_repositories_run', 'git_repositories', 'run_id,experiment_id', 'experiment_runs', 'id,experiment_id', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_repositories_student', 'git_repositories', 'student_id', 'users', 'id', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_submissions_run', 'git_submissions', 'run_id,experiment_id', 'experiment_runs', 'id,experiment_id', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_submissions_student', 'git_submissions', 'student_id', 'users', 'id', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_submission_nodes_submission', 'git_submission_nodes', 'submission_id', 'git_submissions', 'id', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_submission_nodes_node', 'git_submission_nodes', 'node_id,experiment_id', 'experiment_nodes', 'id,experiment_id', 'RESTRICT'
+  UNION ALL SELECT 'fk_git_acceptance_results_node', 'git_acceptance_results', 'submission_id,node_id', 'git_submission_nodes', 'submission_id,node_id', 'RESTRICT'
 ) AS expected
 LEFT JOIN (
   SELECT rc.`CONSTRAINT_NAME` AS `constraint_name`, rc.`TABLE_NAME`,
@@ -408,6 +430,10 @@ FROM (
   UNION ALL SELECT 'code_patches', 'ck_code_patches_status'
   UNION ALL SELECT 'code_patches', 'ck_code_patches_applied_at'
   UNION ALL SELECT 'teacher_reviews', 'ck_teacher_reviews_rating'
+  UNION ALL SELECT 'git_repositories', 'ck_git_repositories_status'
+  UNION ALL SELECT 'git_submissions', 'ck_git_submissions_status'
+  UNION ALL SELECT 'git_acceptance_results', 'ck_git_acceptance_decision'
+  UNION ALL SELECT 'git_acceptance_results', 'ck_git_acceptance_execution'
 ) AS expected
 LEFT JOIN `information_schema`.`TABLE_CONSTRAINTS` AS actual
   ON actual.`CONSTRAINT_SCHEMA` = 'BM-sql'
@@ -446,6 +472,10 @@ FROM (
   UNION ALL SELECT 'code_patches', 'ck_code_patches_status', '(statusin(''pending'',''applied'',''rejected''))', '.*''pending''.*''applied''.*''rejected''.*'
   UNION ALL SELECT 'code_patches', 'ck_code_patches_applied_at', '((status<>''applied'')or(applied_atisnotnull))', '.*''applied''.*'
   UNION ALL SELECT 'teacher_reviews', 'ck_teacher_reviews_rating', '((ratingisnull)or((rating>=0)and(rating<=100)))', '.*'
+  UNION ALL SELECT 'git_repositories', 'ck_git_repositories_status', '(statusin(''provisioning'',''ready'',''error''))', '.*''provisioning''.*''ready''.*''error''.*'
+  UNION ALL SELECT 'git_submissions', 'ck_git_submissions_status', '(statusin(''queued'',''running'',''completed'',''failed''))', '.*''queued''.*''running''.*''completed''.*''failed''.*'
+  UNION ALL SELECT 'git_acceptance_results', 'ck_git_acceptance_decision', '(decisionin(''meets'',''partially_meets'',''does_not_meet'',''unable_to_verify''))', '.*''meets''.*''partially_meets''.*''does_not_meet''.*''unable_to_verify''.*'
+  UNION ALL SELECT 'git_acceptance_results', 'ck_git_acceptance_execution', '(execution_checkin(''not_run'',''not_safe'',''not_configured''))', '.*''not_run''.*''not_safe''.*''not_configured''.*'
 ) AS expected
 LEFT JOIN `information_schema`.`CHECK_CONSTRAINTS` AS actual
   ON actual.`CONSTRAINT_SCHEMA` = 'BM-sql'
@@ -600,7 +630,8 @@ SET @task_progress_check_sql = IF(
      ON `tp`.`run_id` = `er`.`id` AND `tp`.`experiment_id` = `er`.`experiment_id` AND `tp`.`task_id` = `nt`.`id`
    LEFT JOIN `BM-sql`.`node_progress` AS `np`
      ON `np`.`run_id` = `er`.`id` AND `np`.`experiment_id` = `er`.`experiment_id` AND `np`.`node_id` = `nt`.`node_id`
-   WHERE `tp`.`id` IS NULL OR (`np`.`status` = ''completed'' AND `tp`.`status` <> ''completed'')',
+   WHERE `tp`.`id` IS NULL OR (`er`.`execution_mode` <> ''git''
+     AND `np`.`status` = ''completed'' AND `tp`.`status` <> ''completed'')',
   'SELECT ''SKIPPED_MISSING_SCHEMA_OR_TABLE'' AS `task_progress_status`,
           NULL AS `inconsistent_task_progress_rows`'
 );

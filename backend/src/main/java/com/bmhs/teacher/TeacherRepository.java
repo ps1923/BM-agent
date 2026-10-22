@@ -33,7 +33,9 @@ public class TeacherRepository {
                 LEFT JOIN course_experiment_assignments a ON a.course_id = m.course_id AND a.status = 'published'
                 LEFT JOIN experiments e ON e.id = a.experiment_id
                 LEFT JOIN experiment_runs r ON r.experiment_id = a.experiment_id AND r.student_id = m.student_id
-                    AND r.execution_mode = 'legacy'
+                    AND (r.execution_mode = 'git' OR (r.execution_mode = 'legacy' AND NOT EXISTS (
+                        SELECT 1 FROM experiment_runs git_run WHERE git_run.experiment_id = r.experiment_id
+                          AND git_run.student_id = r.student_id AND git_run.execution_mode = 'git')))
                 LEFT JOIN node_progress np ON np.run_id = r.id AND np.experiment_id = r.experiment_id
                 WHERE m.course_id = ? AND m.status = 'active'
                 GROUP BY u.id, u.display_name, u.email, r.id, r.experiment_id, e.id, e.name, r.status, r.last_opened_at
@@ -160,6 +162,11 @@ public class TeacherRepository {
         return findReview(teacherId, runId);
     }
 
+    public TeacherModels.ReviewView review(long teacherId, long runId) {
+        assertRunAccess(teacherId, runId);
+        return findReview(teacherId, runId);
+    }
+
     private TeacherModels.ReviewView findReview(long teacherId, long runId) {
         List<TeacherModels.ReviewView> rows = jdbc.query("SELECT id, rating, feedback, updated_at FROM teacher_reviews WHERE run_id = ? AND teacher_id = ?",
                 (rs, rowNum) -> new TeacherModels.ReviewView(rs.getLong("id"), rs.getObject("rating", Integer.class), rs.getString("feedback"), rs.getTimestamp("updated_at").toInstant()), runId, teacherId);
@@ -175,15 +182,24 @@ public class TeacherRepository {
 
     private RunAccess assertRunAccess(long teacherId, long runId) {
         List<RunAccess> rows = jdbc.query("""
-                SELECT r.experiment_id, r.student_id, a.course_id
+                SELECT r.experiment_id, r.student_id,
+                       (SELECT a.course_id FROM course_experiment_assignments a
+                        JOIN courses c ON c.id = a.course_id AND c.status = 'active'
+                        JOIN course_members m ON m.course_id = c.id AND m.student_id = r.student_id AND m.status = 'active'
+                        WHERE a.experiment_id = r.experiment_id AND a.status = 'published' AND c.teacher_id = ?
+                        ORDER BY a.course_id LIMIT 1) AS course_id
                 FROM experiment_runs r
-                JOIN course_experiment_assignments a ON a.experiment_id = r.experiment_id AND a.status = 'published'
-                JOIN experiments e ON e.id = r.experiment_id AND e.status = 'published'
-                JOIN courses c ON c.id = a.course_id AND c.teacher_id = ? AND c.status = 'active'
-                JOIN course_members m ON m.course_id = a.course_id AND m.student_id = r.student_id AND m.status = 'active'
-                WHERE r.id = ? AND r.execution_mode = 'legacy' LIMIT 1
-                """, (rs, rowNum) -> new RunAccess(rs.getLong("experiment_id"), rs.getLong("student_id"), rs.getLong("course_id")),
-                teacherId, runId);
+                JOIN experiments e ON e.id = r.experiment_id
+                WHERE r.id = ? AND r.execution_mode IN ('legacy', 'git') AND (
+                  EXISTS (SELECT 1 FROM course_experiment_assignments a
+                          JOIN courses c ON c.id = a.course_id AND c.status = 'active' AND c.teacher_id = ?
+                          JOIN course_members m ON m.course_id = c.id AND m.student_id = r.student_id AND m.status = 'active'
+                          WHERE a.experiment_id = r.experiment_id AND a.status = 'published')
+                  OR EXISTS (SELECT 1 FROM experiment_reviewers er
+                             WHERE er.experiment_id = r.experiment_id AND er.teacher_id = ?)
+                ) LIMIT 1
+                """, (rs, rowNum) -> new RunAccess(rs.getLong("experiment_id"), rs.getLong("student_id"), rs.getObject("course_id", Long.class)),
+                teacherId, runId, teacherId, teacherId);
         if (rows.isEmpty()) throw new ApiException(HttpStatus.FORBIDDEN, "RUN_FORBIDDEN", "无权查看该学生运行实例");
         return rows.get(0);
     }
@@ -193,6 +209,6 @@ public class TeacherRepository {
     }
 
     private record CourseRow(long id, String name) {}
-    private record RunAccess(long experimentId, long studentId, long courseId) {}
+    private record RunAccess(long experimentId, long studentId, Long courseId) {}
     record SnapshotRecord(long id, long nodeId, String storagePath, String storageKey) {}
 }

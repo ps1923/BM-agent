@@ -1,6 +1,7 @@
 package com.bmhs.rag;
 
 import com.bmhs.auth.AuthModels.AuthenticatedUser;
+import com.bmhs.experimentcreation.LegacyWriteDisabled;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,7 +24,7 @@ public class BugController {
     @PostMapping("/runs/{runId:\\d+}/bugs")
     public ResponseEntity<RagModels.BugCaseView> create(@PathVariable long runId, AuthenticatedUser user,
                                                          @Valid @RequestBody RagModels.BugRequest request) {
-        return ResponseEntity.ok(service.create(user, runId, request));
+        throw LegacyWriteDisabled.exception();
     }
 
     @GetMapping("/bugs")

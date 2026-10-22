@@ -36,6 +36,24 @@ const bugSolution = document.querySelector('#bugSolution');
 const bugMessage = document.querySelector('#bugMessage');
 const saveBugButton = document.querySelector('#saveBugButton');
 const workspaceStatus = document.querySelector('#workspaceStatus');
+const gitSubmissionPanel = document.querySelector('#gitSubmissionPanel');
+const gitSubmissionExperimentName = document.querySelector('#gitSubmissionExperimentName');
+const gitRepositoryState = document.querySelector('#gitRepositoryState');
+const gitCloneCommand = document.querySelector('#gitCloneCommand');
+const gitRepositoryHelp = document.querySelector('#gitRepositoryHelp');
+const gitCopyCloneCommand = document.querySelector('#gitCopyCloneCommand');
+const showGitCredentials = document.querySelector('#showGitCredentials');
+const gitCredentials = document.querySelector('#gitCredentials');
+const gitCredentialNotice = document.querySelector('#gitCredentialNotice');
+const gitSubmissionForm = document.querySelector('#gitSubmissionForm');
+const gitReviewNodeList = document.querySelector('#gitReviewNodeList');
+const selectAllReviewNodes = document.querySelector('#selectAllReviewNodes');
+const gitCommitSha = document.querySelector('#gitCommitSha');
+const gitSubmissionDescription = document.querySelector('#gitSubmissionDescription');
+const gitSubmissionMessage = document.querySelector('#gitSubmissionMessage');
+const submitGitCommit = document.querySelector('#submitGitCommit');
+const gitSubmissionHistory = document.querySelector('#gitSubmissionHistory');
+const refreshGitSubmissions = document.querySelector('#refreshGitSubmissions');
 const patchDialog = document.querySelector('#patchDialog');
 const closePatchDialog = document.querySelector('#closePatchDialog');
 const cancelPatchButton = document.querySelector('#cancelPatchButton');
@@ -68,9 +86,8 @@ const joinCode = document.querySelector('#joinCode');
 const studentMessage = document.querySelector('#studentMessage');
 const studentCourses = document.querySelector('#studentCourses');
 const studentCourseCount = document.querySelector('#studentCourseCount');
-const studentDshState = document.querySelector('#studentDshState');
-const studentDshLaunchButton = document.querySelector('#studentDshLaunchButton');
-const studentDshStopButton = document.querySelector('#studentDshStopButton');
+const studentLocalCodingState = document.querySelector('#studentLocalCodingState');
+const studentLocalCodingButton = document.querySelector('#studentLocalCodingButton');
 const createCourseForm = document.querySelector('#createCourseForm');
 const courseName = document.querySelector('#courseName');
 const teacherMessage = document.querySelector('#teacherMessage');
@@ -203,6 +220,9 @@ let selectedTreeNode = null;
 let treeEdgeLayer = null;
 let activeExperimentId = null;
 let activeRun = null;
+let currentGitBugDraftContext = null;
+let activeGitRepository = null;
+let gitSubmissionRequestEpoch = 0;
 let activeFilePath = null;
 let activeFileHash = null;
 let activeFileSavedContent = '';
@@ -283,35 +303,10 @@ function renderPublishedExperiment(item) {
   openButton.className = 'text-action open-published-experiment';
   openButton.type = 'button';
   openButton.dataset.experimentId = item.experimentId;
-  openButton.textContent = '在 DSH 中打开';
+  openButton.textContent = '查看学习路径';
   actions.append(status, openButton);
   row.append(title, actions);
   return row;
-}
-
-function describeDshStatus(status) {
-  return ({
-    stopped: '工作区已停止；再次打开时会恢复你的持久工作区。',
-    provisioning: '正在为你启动独立 DSH 工作区…',
-    running: 'DSH 工作区运行中。',
-    stopping: '工作区正在安全停止，文件会保留。',
-    error: '工作区启动或停止失败，可重试；你的持久文件不会被删除。',
-  })[status] || 'DSH 状态暂时不可用。';
-}
-
-async function loadStudentDshStatus(isCurrentRequest = () => getCurrentUser()?.role === 'student') {
-  if (!studentDshState) return;
-  try {
-    const status = await apiRequest('/student/dsh/status', { method: 'GET' });
-    if (!isCurrentRequest()) return;
-    studentDshState.textContent = describeDshStatus(status.status);
-    studentDshLaunchButton.textContent = status.status === 'running' ? '重新连接 DSH' : '打开 DSH';
-    studentDshStopButton.hidden = status.status !== 'running';
-  } catch {
-    if (!isCurrentRequest()) return;
-    studentDshState.textContent = '暂时无法读取 DSH 状态；可以重试打开工作区。';
-    studentDshStopButton.hidden = true;
-  }
 }
 
 async function renderStudentDashboard() {
@@ -326,7 +321,7 @@ async function renderStudentDashboard() {
     && String(getCurrentUser()?.id) === userId
     && getCurrentUser()?.role === 'student';
   studentIdentity.textContent = `${user.name} · ${user.email}`;
-  void loadStudentDshStatus(isCurrentRequest);
+  if (studentLocalCodingState) studentLocalCodingState.textContent = '在本地 IDE 编码；push 到实验仓库后可选择节点进行 AI 验收。';
   studentCourseCount.textContent = '加载中…';
   studentCourses.replaceChildren();
   try {
@@ -379,77 +374,6 @@ async function renderStudentDashboard() {
     message.className = 'course-empty';
     message.textContent = error.message || '课程加载失败，请刷新后重试。';
     studentCourses.append(message);
-  }
-}
-
-function validateDshLaunchUrl(value) {
-  let url;
-  try { url = new URL(value); } catch { throw new Error('DSH 返回的访问地址无效。'); }
-  if (url.username || url.password) throw new Error('DSH 访问地址包含不允许的凭据。');
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('DSH 访问地址仅支持 HTTP 或 HTTPS。');
-  const authorizedOrigins = new Set([window.location.origin.toLowerCase()]);
-  try {
-    const apiUrl = new URL(API_BASE_URL, window.location.href);
-    if (['http:', 'https:'].includes(apiUrl.protocol)) authorizedOrigins.add(apiUrl.origin.toLowerCase());
-  } catch { /* The current platform origin remains the only authorized origin. */ }
-  if (!authorizedOrigins.has(url.origin.toLowerCase())
-      || !/(?:^|\/)dsh\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\/?$/i.test(url.pathname)) {
-    throw new Error('DSH 访问地址与当前平台的专属工作区路由不匹配，已阻止打开。');
-  }
-  return url.href;
-}
-
-async function openStudentDsh(triggerButton, { experiment = null, statusElement = studentDshState } = {}) {
-  const userId = getCurrentUser()?.id;
-  if (!userId || getCurrentUser()?.role !== 'student') return;
-  const blankTab = window.open('about:blank', '_blank');
-  if (blankTab) blankTab.opener = null;
-  const labelElement = triggerButton.querySelector('span:last-child') || triggerButton;
-  const previousText = labelElement.textContent;
-  triggerButton.disabled = true;
-  const publishStatus = (message, state = 'loading') => {
-    studentDshState.textContent = message;
-    if (statusElement !== studentDshState) {
-      statusElement.textContent = message;
-      statusElement.hidden = !message;
-      statusElement.classList.toggle('is-error', state === 'error' && Boolean(message));
-    }
-    labelElement.textContent = state === 'loading' ? '正在连接 DSH…' : previousText;
-    if (triggerButton === startNodeButton) triggerButton.setAttribute('aria-label', labelElement.textContent);
-  };
-  publishStatus('正在启动或连接你的 DSH 工作区…');
-  try {
-    let result = await apiRequest('/student/dsh/launch', { method: 'POST' });
-    const deadline = Date.now() + 90_000;
-    while (result.status === 'provisioning' && Date.now() < deadline) {
-      await new Promise((resolve) => window.setTimeout(resolve, 1000));
-      result = await apiRequest('/student/dsh/status', { method: 'GET' });
-      if (getCurrentUser()?.id !== userId || getCurrentUser()?.role !== 'student') return;
-    }
-    if (result.status !== 'running' || !result.launchUrl) throw new Error(describeDshStatus(result.status));
-    const launchUrl = validateDshLaunchUrl(result.launchUrl);
-    const readyMessage = experiment
-      ? `DSH 已就绪。请在 DSH 对话中输入：请连接实验“${experiment.name}”（编号 ${experiment.id}），并读取当前学习节点和任务。DSH 插件会在绑定前请求你确认。`
-      : '工作区已就绪，正在打开 DSH…';
-    publishStatus(readyMessage, 'success');
-    if (blankTab && !blankTab.closed) blankTab.location.replace(launchUrl);
-    else window.location.assign(launchUrl);
-    return true;
-  } catch (error) {
-    if (blankTab && !blankTab.closed) blankTab.close();
-    if (getCurrentUser()?.id === userId) {
-      const errorMessage = error.message || 'DSH 启动失败，请稍后重试。';
-      publishStatus(errorMessage, 'error');
-      if (!experiment) setMessage(studentMessage, errorMessage, true);
-    }
-    return false;
-  } finally {
-    if (getCurrentUser()?.id === userId) {
-      triggerButton.disabled = false;
-      labelElement.textContent = previousText;
-      if (triggerButton === startNodeButton) triggerButton.setAttribute('aria-label', previousText);
-      void loadStudentDshStatus(() => getCurrentUser()?.id === userId && getCurrentUser()?.role === 'student');
-    }
   }
 }
 
@@ -663,7 +587,7 @@ async function loadTeacherDshExperiments() {
   teacherDshRating.value = '';
   teacherDshFeedback.value = '';
   setMessage(teacherDshReviewMessage, '选择学生查看或填写阶段评价。');
-  teacherDshCode.textContent = '选择一条学生记录查看已提交快照。';
+  teacherDshCode.textContent = '选择一名学生查看已提交 Git commit。';
   setMessage(teacherDshMessage, '正在加载授权实验…');
   try {
     const experiments = await apiRequest('/teacher/experiments', { method: 'GET' });
@@ -719,10 +643,10 @@ async function loadTeacherDshRuns(experimentId) {
     const runs = await apiRequest(`/teacher/experiments/${encodeURIComponent(experimentId)}/runs`, { method: 'GET' });
     if (requestEpoch !== teacherDshRunsRequestEpoch || teacherDshExperiment.value !== String(experimentId)) return;
     if (!Array.isArray(runs) || !runs.length) {
-      setMessage(teacherDshMessage, '该实验还没有 DSH 学习记录。');
+      setMessage(teacherDshMessage, '该实验还没有学生运行记录。');
       return;
     }
-    setMessage(teacherDshMessage, `${runs.length} 条学生运行记录；仅展示学习进度与学生主动提交的代码。`);
+    setMessage(teacherDshMessage, `${runs.length} 条学生运行记录；只展示已 push 并主动登记的 commit。`);
     runs.forEach((run) => {
       const card = document.createElement('article');
       card.className = 'teacher-dsh-run';
@@ -733,7 +657,7 @@ async function loadTeacherDshRuns(experimentId) {
       const button = document.createElement('button');
       button.className = 'secondary-action';
       button.type = 'button';
-      button.textContent = '查看主动提交';
+      button.textContent = '查看 Git 提交';
       button.addEventListener('click', () => void loadTeacherDshSubmissions(run.runId));
       card.append(identity, progress, button);
       teacherDshRuns.append(card);
@@ -827,23 +751,23 @@ async function loadTeacherDshSubmissions(runId) {
   setMessage(teacherDshReviewMessage, '正在读取已有评价…');
   void loadTeacherDshReview(runId, requestEpoch);
   teacherDshSubmissions.replaceChildren();
-  teacherDshCode.textContent = '正在加载学生主动提交的快照…';
+  teacherDshCode.textContent = '正在加载已登记的 Git commit…';
   try {
     const submissions = await apiRequest(`/teacher/runs/${encodeURIComponent(runId)}/submissions`, { method: 'GET' });
     if (requestEpoch !== teacherDshSubmissionsRequestEpoch) return;
     if (!Array.isArray(submissions) || !submissions.length) {
-      teacherDshCode.textContent = '该学生尚未主动提交代码快照。';
+      teacherDshCode.textContent = '该学生尚未登记 Git commit。';
       return;
     }
     submissions.forEach((submission) => {
       const button = document.createElement('button');
       button.className = 'teacher-dsh-submission';
       button.type = 'button';
-      button.textContent = `提交 #${submission.submissionId} · ${submission.fileCount} 个文件 · ${formatTeacherDate(submission.createdAt)}`;
+      button.textContent = `${String(submission.commitSha || '').slice(0, 12)} · ${gitDecisionLabel(submission.status)} · ${formatTeacherDate(submission.createdAt)}`;
       button.addEventListener('click', () => void loadTeacherDshSubmission(runId, submission.submissionId, requestEpoch));
       teacherDshSubmissions.append(button);
     });
-    teacherDshCode.textContent = '选择一个提交版本查看所选文件及 SHA-256。';
+    teacherDshCode.textContent = '选择一个 commit 查看代码差异与逐节点 AI 验收证据。';
   } catch (error) {
     if (requestEpoch !== teacherDshSubmissionsRequestEpoch) return;
     teacherDshCode.textContent = error.message || '代码提交列表读取失败。';
@@ -852,7 +776,7 @@ async function loadTeacherDshSubmissions(runId) {
 
 async function loadTeacherDshReview(runId, requestEpoch) {
   try {
-    const review = await apiRequest(`/teacher/dsh/runs/${encodeURIComponent(runId)}/review`, { method: 'GET' });
+    const review = await apiRequest(`/teacher/runs/${encodeURIComponent(runId)}/reviews`, { method: 'GET' });
     if (requestEpoch !== teacherDshSubmissionsRequestEpoch || selectedTeacherDshRunId !== Number(runId)) return;
     if (review && typeof review === 'object') {
       teacherDshRating.value = review.rating == null ? '' : String(review.rating);
@@ -870,10 +794,24 @@ async function loadTeacherDshReview(runId, requestEpoch) {
 
 async function loadTeacherDshSubmission(runId, submissionId, requestEpoch) {
   try {
-    const detail = await apiRequest(`/teacher/runs/${encodeURIComponent(runId)}/submissions/${encodeURIComponent(submissionId)}`, { method: 'GET' });
+    const detail = await apiRequest(`/teacher/submissions/${encodeURIComponent(submissionId)}`, { method: 'GET' });
     if (requestEpoch !== teacherDshSubmissionsRequestEpoch) return;
-    const files = Array.isArray(detail.files) ? detail.files : [];
-    teacherDshCode.textContent = files.map((file) => `// ${file.path} · SHA-256 ${file.sha256}\n${file.content}`).join('\n\n');
+    const sections = [];
+    const commit = detail.commit || {};
+    sections.push(`COMMIT ${detail.commitSha || commit.commitSha || ''}\n${commit.message || ''}\n作者：${commit.author || '未知'} · ${formatTeacherDate(commit.committedAt || detail.createdAt)}`);
+    (Array.isArray(detail.diff) ? detail.diff : []).forEach((file) => {
+      const counts = Number(file.additions) < 0 || Number(file.deletions) < 0
+        ? '变更统计未计算' : `+${Number(file.additions) || 0}/-${Number(file.deletions) || 0}`;
+      sections.push(`--- ${file.path} (${file.status || 'modified'}, ${counts}) ---\n${file.patch || '没有可显示的文本差异。'}`);
+    });
+    (Array.isArray(detail.results) ? detail.results : []).forEach((result) => {
+      sections.push(`节点 ${result.nodeId} · ${gitDecisionLabel(result.decision)}\n${result.summary || ''}`);
+      (Array.isArray(result.evidence) ? result.evidence : []).forEach((evidence) => {
+        sections.push(`证据：${evidence.path || ''}${evidence.lineStart ? `:${evidence.lineStart}` : ''}\n${evidence.excerpt || ''}`);
+      });
+      if (Array.isArray(result.suggestions) && result.suggestions.length) sections.push(`建议：${result.suggestions.join('；')}`);
+    });
+    teacherDshCode.textContent = sections.join('\n\n');
   } catch (error) {
     if (requestEpoch !== teacherDshSubmissionsRequestEpoch) return;
     teacherDshCode.textContent = error.message || '代码快照读取失败。';
@@ -1280,9 +1218,14 @@ async function renderTeacherDashboard() {
 }
 
 function hideProtectedViews() {
+  if (gitCredentials) {
+    gitCredentials.textContent = '凭据只在你点击获取后显示；不要把它提交到代码或截图中。';
+    showGitCredentials.textContent = '获取本实验 Git 凭据';
+  }
   [libraryView, canvasView, editorView].forEach((view) => view.classList.add('auth-hidden'));
   canvasView.classList.add('is-hidden');
   editorView.classList.remove('is-visible');
+  editorView.classList.remove('git-submission-mode');
 }
 
 function setRouteStatus(message = '', isError = false) {
@@ -1917,7 +1860,7 @@ function selectTreeNode(element) {
     inspector.querySelector('.inspector-sequence span').textContent =
       buildTreeNodeNumbers(activeTreeNodes).get(selectedTreeNode.key) || selectedTreeNode.key;
     inspector.querySelector('.node-fact:nth-child(1) dd').textContent = `约 ${selectedTreeNode.estimatedMinutes} 分钟`;
-    inspector.querySelector('.node-fact:nth-child(3) dd').textContent = '启动工作区后查看实际文件路径';
+    inspector.querySelector('.node-fact:nth-child(3) dd').textContent = '在本地 IDE 中创建和编辑项目';
     inspector.querySelector('.node-fact:nth-child(4) dd').textContent = selectedTreeNode.title;
     const taskList = editorView.querySelector('.task-list');
     taskList.replaceChildren();
@@ -1933,13 +1876,13 @@ function renderSelectedNodeTasks() {
   const tasks = Array.isArray(selectedTreeNode?.tasks) ? selectedTreeNode.tasks : [];
   const progressRows = Array.isArray(activeRunProgress?.tasks) ? activeRunProgress.tasks : [];
   const nodeProgress = activeRunProgress?.nodes?.find((item) => Number(item.nodeId) === Number(selectedTreeNode?.nodeId));
-  const canUpdate = Boolean(activeRun && nodeProgress && !['locked', 'completed'].includes(nodeProgress.status));
+  const canUpdate = Boolean(activeRun && nodeProgress && nodeProgress.status !== 'completed');
   let completedCount = 0;
   taskList.replaceChildren();
   if (tasks.length === 0) {
     const emptyState = document.createElement('p');
     emptyState.className = 'task-empty-state';
-    emptyState.textContent = '本节点没有细分任务。进度正常时，可直接手动完成节点。';
+    emptyState.textContent = '本节点没有细分任务。节点顺序仅供参考，不会限制学习。';
     taskList.append(emptyState);
   }
   tasks.forEach((task) => {
@@ -1990,16 +1933,8 @@ function renderSelectedNodeTasks() {
 function updateCompleteNodeControl() {
   const nodes = Array.isArray(activeRunProgress?.nodes) ? activeRunProgress.nodes : [];
   const current = nodes.find((item) => Number(item.nodeId) === Number(activeNodeId));
-  const definition = activeTreeNodes.find((item) => Number(item.nodeId) === Number(activeNodeId));
-  const tasks = Array.isArray(definition?.tasks) ? definition.tasks : [];
-  const progressTasks = Array.isArray(activeRunProgress?.tasks) ? activeRunProgress.tasks : [];
-  const allTasksComplete = Boolean(definition) && tasks.every((task) => {
-    const taskId = Number(task.taskId);
-    return Number.isSafeInteger(taskId) && taskId > 0 && progressTasks.some((item) =>
-      Number(item.taskId) === taskId && Number(item.nodeId) === Number(activeNodeId) && item.status === 'completed');
-  });
   completeNodeButton.disabled = !activeRun || !current
-    || ['locked', 'completed'].includes(current.status) || !allTasksComplete;
+    || current.status === 'completed';
 }
 
 async function updateTaskCompletion(taskId, completed, button) {
@@ -2130,10 +2065,11 @@ function renderExperimentCanvas(experimentId) {
   closePatchReview();
   activeExperimentId = String(experimentId);
   startNodeButton.disabled = false;
-  setStartNodeLabel('在 DSH 中攻克节点');
+  setStartNodeLabel('查看节点并提交代码');
   setStartNodeStatus('');
   writeSessionValue(STORAGE_KEYS.activeExperiment, activeExperimentId);
   activeRun = null;
+  activeGitRepository = null;
   syncGuidanceControls();
   activeRunProgress = null;
   runProgressLoadFailed = false;
@@ -2159,6 +2095,7 @@ function renderExperimentCanvas(experimentId) {
   touchRecentExperiment(experimentId);
   libraryView.style.display = 'none';
   editorView.classList.remove('is-visible');
+  editorView.classList.remove('git-submission-mode');
   canvasView.classList.remove('is-hidden');
   closeInspector();
   document.querySelector('#currentExperimentName').textContent = data.name;
@@ -2238,7 +2175,7 @@ async function connectWorkspace(run, { createTerminalSession = false, epoch = nu
   activeRunProgress = null;
   runProgressLoadFailed = false;
   activeExperimentId = String(run.experimentId);
-  activeNodeId = run.currentNodeId || null;
+  activeNodeId = run.currentNodeId || selectedTreeNode?.nodeId || null;
   activeFilePath = nextFilePath;
   workspaceFileSelectionEpoch += 1;
   activeFileHash = nextFileHash;
@@ -2427,15 +2364,329 @@ async function restoreExistingRun(runId, epoch) {
   if (String(run.runId) !== String(runId) || !/^\d+$/.test(String(run.experimentId))) {
     throw new Error('运行实例不存在或当前账号无权访问。');
   }
+  if (!['git', 'git_submission'].includes(String(run.executionMode || run.mode || '').toLowerCase())) {
+    throw new Error('这是旧工作区记录，已停止在线编辑；请从实验画布启动新的本地 Git 提交流程。');
+  }
   const experiment = await apiRequest(`/experiments/${encodeURIComponent(run.experimentId)}`, { method: 'GET', timeoutMs: 15000 });
   if (epoch !== routeResolutionEpoch) return;
   if (String(experiment.experimentId) !== String(run.experimentId)) throw new Error('运行实例关联的实验不存在或无权访问。');
   experimentData[String(run.experimentId)] = experiment;
   renderExperimentCanvas(String(run.experimentId));
-  const connected = await connectWorkspace(run, { epoch });
-  if (!connected || epoch !== routeResolutionEpoch) return;
+  activeRun = run;
+  activeExperimentId = String(run.experimentId);
+  activeNodeId = run.currentNodeId || null;
+  workspaceStatus.textContent = '本地 Git 提交模式';
+  const nodeProgress = await apiRequest(`/runs/${encodeURIComponent(runId)}/progress`, { method: 'GET' });
+  if (epoch !== routeResolutionEpoch) return;
+  activeRunProgress = nodeProgress;
+  runProgressLoadFailed = false;
+  if (activeNodeId) {
+    const selected = activeTreeNodes.find((node) => Number(node.nodeId) === Number(activeNodeId));
+    const element = selected && canvasView.querySelector(`[data-tree-node-key="${CSS.escape(selected.key)}"]`);
+    if (element) selectTreeNode(element);
+  }
+  await loadGitRepository(String(runId), epoch);
+  await loadGitSubmissions(String(runId), epoch);
+  if (epoch !== routeResolutionEpoch) return;
   canvasView.classList.add('is-hidden');
+  gitSubmissionExperimentName.textContent = experiment.name;
+  editorView.classList.add('git-submission-mode');
   editorView.classList.add('is-visible');
+}
+
+async function startGitExperimentRun() {
+  if (getCurrentUser()?.role !== 'student') {
+    setStartNodeStatus('请以学生账号登录后开始实验。', 'error');
+    return;
+  }
+  if (!/^\d+$/.test(String(activeExperimentId || ''))) {
+    setStartNodeStatus('当前实验编号无效，无法准备代码仓库。', 'error');
+    return;
+  }
+  const experimentId = String(activeExperimentId);
+  const epoch = routeResolutionEpoch;
+  startNodeButton.disabled = true;
+  setStartNodeStatus('正在准备你的独立 Git 仓库…', 'loading');
+  try {
+    const run = await apiRequest(`/student/experiments/${encodeURIComponent(experimentId)}/runs`, {
+      method: 'POST', timeoutMs: 30000,
+      body: JSON.stringify({ currentNodeId: selectedTreeNode?.nodeId || null }),
+    });
+    const runId = run.runId ?? run.id;
+    if (!/^\d+$/.test(String(runId || ''))) throw new Error('服务端未返回有效的实验运行编号。');
+    if (epoch !== routeResolutionEpoch || activeExperimentId !== experimentId) return;
+    navigateTo({ type: 'editor', runId: String(runId) });
+  } catch (error) {
+    if (epoch === routeResolutionEpoch && activeExperimentId === experimentId) {
+      setStartNodeStatus(error.message || 'Git 仓库准备失败，请稍后重试。', 'error');
+    }
+  } finally {
+    if (epoch === routeResolutionEpoch && activeExperimentId === experimentId) startNodeButton.disabled = false;
+  }
+}
+
+function renderGitReviewNodes() {
+  if (!gitReviewNodeList) return;
+  gitReviewNodeList.replaceChildren();
+  const sequenceNumbers = buildTreeNodeNumbers(activeTreeNodes);
+  activeTreeNodes.filter((node) => Number.isSafeInteger(Number(node.nodeId)) && Number(node.nodeId) > 0)
+    .forEach((node) => {
+      const label = document.createElement('label');
+      label.className = 'git-review-node';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.name = 'nodeIds';
+      checkbox.value = String(node.nodeId);
+      checkbox.checked = Number(node.nodeId) === Number(activeNodeId);
+      const text = document.createElement('span');
+      const title = document.createElement('strong');
+      title.textContent = `${sequenceNumbers.get(node.key) || node.key} · ${node.title}`;
+      const description = document.createElement('small');
+      const tasks = Array.isArray(node.tasks) ? node.tasks : [];
+      description.textContent = tasks.map((task) => task.title).filter(Boolean).slice(0, 3).join('；')
+        || node.description || '按实验目标提交代码，由 AI 检查该节点。';
+      text.append(title, description);
+      label.append(checkbox, text);
+      checkbox.addEventListener('change', updateGitSubmitButton);
+      const row = document.createElement('div');
+      row.className = 'git-review-node-row';
+      row.append(label);
+      const progress = activeRunProgress?.nodes?.find((item) => Number(item.nodeId) === Number(node.nodeId));
+      const completeButton = document.createElement('button');
+      completeButton.className = 'git-node-complete';
+      completeButton.type = 'button';
+      completeButton.textContent = progress?.status === 'completed' ? '已完成' : '我已完成';
+      completeButton.disabled = !activeRun || progress?.status === 'completed';
+      completeButton.setAttribute('aria-label', `${title.textContent}：${completeButton.textContent}`);
+      completeButton.addEventListener('click', () => void markGitNodeCompleted(node, completeButton));
+      row.append(completeButton);
+      gitReviewNodeList.append(row);
+    });
+  updateGitSubmitButton();
+}
+
+function gitDecisionLabel(decision) {
+  return ({ meets: '符合', partially_meets: '部分符合', does_not_meet: '不符合', unable_to_verify: '无法判断' })[decision]
+    || ({ queued: '排队中', running: '检查中', completed: '已完成', failed: '检查失败' })[decision]
+    || '处理中';
+}
+
+async function markGitNodeCompleted(node, button) {
+  if (!activeRun || !node?.nodeId) return;
+  const runId = String(activeRun.runId);
+  const epoch = routeResolutionEpoch;
+  button.disabled = true;
+  try {
+    const progress = await apiRequest(`/runs/${encodeURIComponent(runId)}/nodes/${encodeURIComponent(node.nodeId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'completed', progressPercent: 100 }),
+    });
+    if (!isRunContextCurrent(runId, epoch)) return;
+    activeRunProgress = progress;
+    button.textContent = '已完成';
+    button.setAttribute('aria-label', `${node.title || '节点'}：已完成`);
+    setMessage(gitSubmissionMessage, '已记录你的自我确认；这不代表 AI 验收或教师评分。');
+    if (selectedTreeNode) renderSelectedNodeTasks();
+  } catch (error) {
+    if (!isRunContextCurrent(runId, epoch)) return;
+    button.disabled = false;
+    setMessage(gitSubmissionMessage, error.message || '节点进度保存失败，请稍后重试。', true);
+  }
+}
+
+function updateGitSubmitButton() {
+  const selectedCount = gitReviewNodeList?.querySelectorAll('input[name="nodeIds"]:checked').length || 0;
+  submitGitCommit.disabled = !activeRun || selectedCount === 0 || !gitCommitSha.value.trim();
+}
+
+async function loadGitRepository(runId, epoch = routeResolutionEpoch) {
+  gitRepositoryState.textContent = '正在读取仓库信息…';
+  gitCloneCommand.textContent = '正在加载仓库地址…';
+  gitCopyCloneCommand.disabled = true;
+  showGitCredentials.disabled = true;
+  gitCredentials.textContent = '凭据只在你点击获取后显示；不要把它提交到代码或截图中。';
+  try {
+    const repository = await apiRequest(`/student/runs/${encodeURIComponent(runId)}/repository`, { method: 'GET' });
+    if (epoch !== routeResolutionEpoch || String(activeRun?.runId) !== String(runId)) return;
+    const cloneUrl = String(repository.cloneUrl || repository.repoUrl || '').trim();
+    if (!cloneUrl) throw new Error('仓库服务尚未返回可用的克隆地址。');
+    let parsed;
+    try { parsed = new URL(cloneUrl); } catch { throw new Error('仓库克隆地址格式无效。'); }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+      throw new Error('仓库地址包含不安全协议或嵌入式凭据，已阻止显示。');
+    }
+    activeGitRepository = { ...repository, cloneUrl };
+    gitCloneCommand.textContent = `git clone ${cloneUrl}`;
+    gitRepositoryState.textContent = '仓库已准备';
+    gitRepositoryHelp.textContent = repository.setupInstructions || repository.instructions || '克隆仓库到本地，在 VS Code 中完成实验，然后手动 push。';
+    gitCredentialNotice.textContent = repository.credentialNotice || '需要认证时，点击“获取本实验 Git 凭据”；不要把凭据写入代码仓库。';
+    gitCopyCloneCommand.disabled = false;
+    showGitCredentials.disabled = false;
+    renderGitReviewNodes();
+  } catch (error) {
+    if (epoch !== routeResolutionEpoch || String(activeRun?.runId) !== String(runId)) return;
+    activeGitRepository = null;
+    gitRepositoryState.textContent = '仓库暂不可用';
+    gitCloneCommand.textContent = error.message || '仓库地址读取失败。';
+    gitCredentialNotice.textContent = '可以重试读取；不要通过不受信任的外部链接上传源码。';
+    setMessage(gitSubmissionMessage, error.message || 'Git 仓库加载失败。', true);
+  }
+}
+
+async function revealGitCredentials() {
+  if (!activeRun || !activeGitRepository) return;
+  showGitCredentials.disabled = true;
+  gitCredentials.textContent = '正在获取本实验专属凭据…';
+  try {
+    const credentials = await apiRequest(`/student/runs/${encodeURIComponent(activeRun.runId)}/repository-credentials`, {
+      method: 'POST', timeoutMs: 15000,
+    });
+    if (!credentials?.username || !credentials?.password) throw new Error('服务端未返回有效 Git 凭据。');
+    gitCredentials.textContent = `用户名：${credentials.username}\nGit 凭据：${credentials.password}\n只用于本实验仓库 push。建议通过 Git Credential Manager 保存；离开页面前清除剪贴板。`;
+    showGitCredentials.textContent = '重新获取凭据';
+  } catch (error) {
+    gitCredentials.textContent = error.message || '获取凭据失败，请重试。';
+  } finally {
+    showGitCredentials.disabled = false;
+  }
+}
+
+function renderGitSubmissionList(submissions) {
+  gitSubmissionHistory.replaceChildren();
+  if (!Array.isArray(submissions) || submissions.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'library-state';
+    empty.textContent = '还没有提交记录。完成本地 commit 并 push 后，在上方填写 commit SHA 开始检查。';
+    gitSubmissionHistory.append(empty);
+    return;
+  }
+  submissions.forEach((submission) => {
+    const card = document.createElement('article');
+    card.className = 'git-submission-item';
+    const heading = document.createElement('header');
+    const sha = document.createElement('code');
+    sha.textContent = `${String(submission.commitSha || '').slice(0, 12)} · ${gitDecisionLabel(submission.status)}`;
+    const date = document.createElement('small');
+    date.textContent = submission.createdAt ? formatTeacherDate(submission.createdAt) : '';
+    heading.append(sha, date);
+    card.append(heading);
+    if (submission.description) {
+      const description = document.createElement('p');
+      description.textContent = submission.description;
+      card.append(description);
+    }
+    if (submission.status === 'failed') {
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'secondary-action';
+      retry.textContent = '重新尝试验收';
+      retry.addEventListener('click', () => {
+        gitCommitSha.value = String(submission.commitSha || '');
+        const selected = new Set((Array.isArray(submission.nodeIds) ? submission.nodeIds : []).map(String));
+        gitReviewNodeList.querySelectorAll('input[name="nodeIds"]').forEach((input) => {
+          input.checked = selected.has(input.value);
+        });
+        updateGitSubmitButton();
+        gitCommitSha.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setMessage(gitSubmissionMessage, '已恢复失败提交的 SHA 和节点选择；确认后可再次提交验收。');
+      });
+      card.append(retry);
+    }
+    (Array.isArray(submission.results) ? submission.results : []).forEach((result) => {
+      const report = document.createElement('section');
+      report.className = 'git-review-result';
+      report.dataset.decision = result.decision || result.outcome || 'unknown';
+      const title = document.createElement('h4');
+      const node = activeTreeNodes.find((item) => Number(item.nodeId) === Number(result.nodeId));
+      const decision = result.decision || result.outcome;
+      title.textContent = `${node?.title || `节点 ${result.nodeId}`} · ${gitDecisionLabel(decision)}`;
+      const summary = document.createElement('p');
+      summary.textContent = result.summary || result.feedback || '验收正在进行或暂无说明。';
+      report.append(title, summary);
+      (Array.isArray(result.evidence) ? result.evidence : []).forEach((evidence) => {
+        const block = document.createElement('pre');
+        block.className = 'git-review-evidence';
+        block.textContent = `${evidence.path || '代码证据'}${evidence.lineStart ? `:${evidence.lineStart}` : ''}\n${evidence.excerpt || evidence.code || ''}`;
+        report.append(block);
+      });
+      if (Array.isArray(result.suggestions) && result.suggestions.length) {
+        const suggestions = document.createElement('p');
+        suggestions.textContent = `建议：${result.suggestions.join('；')}`;
+        report.append(suggestions);
+      }
+      if (result.bugDraft && typeof result.bugDraft === 'object') {
+        const bugButton = document.createElement('button');
+        bugButton.type = 'button';
+        bugButton.className = 'secondary-action';
+        bugButton.textContent = '检查并提交为 Bug 案例';
+      bugButton.addEventListener('click', () => {
+          activeNodeId = Number(result.nodeId) || activeNodeId;
+        currentGitBugDraftContext = { submissionId: Number(submission.submissionId), nodeId: Number(result.nodeId) };
+          bugTitle.value = result.bugDraft.title || '';
+          bugProblem.value = result.bugDraft.problem || result.summary || '';
+          bugSolution.value = result.bugDraft.solution || '';
+          if (result.bugDraft.technologyStack) bugTechnologyStack.value = result.bugDraft.technologyStack;
+          openBugCaseDialog();
+        });
+        report.append(bugButton);
+      }
+      card.append(report);
+    });
+    gitSubmissionHistory.append(card);
+  });
+}
+
+async function loadGitSubmissions(runId = activeRun?.runId, epoch = routeResolutionEpoch) {
+  if (!runId) return;
+  try {
+    const submissions = await apiRequest(`/student/runs/${encodeURIComponent(runId)}/submissions`, { method: 'GET' });
+    if (epoch !== routeResolutionEpoch || String(activeRun?.runId) !== String(runId)) return;
+    renderGitSubmissionList(submissions);
+  } catch (error) {
+    if (epoch !== routeResolutionEpoch || String(activeRun?.runId) !== String(runId)) return;
+    gitSubmissionHistory.replaceChildren();
+    const message = document.createElement('p');
+    message.className = 'library-state is-error';
+    message.textContent = error.message || '提交历史加载失败。';
+    gitSubmissionHistory.append(message);
+  }
+}
+
+async function submitGitCommitForReview(event) {
+  event.preventDefault();
+  if (!activeRun || !activeGitRepository) return;
+  const runId = String(activeRun.runId);
+  const epoch = routeResolutionEpoch;
+  const nodeIds = Array.from(gitReviewNodeList.querySelectorAll('input[name="nodeIds"]:checked'))
+    .map((input) => Number(input.value)).filter((id) => Number.isSafeInteger(id) && id > 0);
+  const commitSha = gitCommitSha.value.trim();
+  if (!nodeIds.length) {
+    setMessage(gitSubmissionMessage, '至少选择一个要检查的节点。', true);
+    return;
+  }
+  if (!/^[0-9a-f]{40,64}$/i.test(commitSha)) {
+    setMessage(gitSubmissionMessage, '请输入完整的 40–64 位 Git commit SHA。', true);
+    return;
+  }
+  submitGitCommit.disabled = true;
+  setMessage(gitSubmissionMessage, '正在核对远程 commit 并创建节点验收任务…');
+  try {
+    await apiRequest(`/student/runs/${encodeURIComponent(runId)}/submissions`, {
+      method: 'POST', timeoutMs: 30000,
+      body: JSON.stringify({ commitSha, nodeIds, description: gitSubmissionDescription.value.trim() || null }),
+    });
+    if (epoch !== routeResolutionEpoch || String(activeRun?.runId) !== runId) return;
+    gitCommitSha.value = '';
+    gitSubmissionDescription.value = '';
+    setMessage(gitSubmissionMessage, '提交已登记。AI 正在按所选节点检查这个 commit；你可以继续编码或提交新版本。');
+    await loadGitSubmissions(runId, epoch);
+  } catch (error) {
+    if (epoch === routeResolutionEpoch && String(activeRun?.runId) === runId) {
+      setMessage(gitSubmissionMessage, error.message || '提交登记失败，请确认已 push 该 commit 后重试。', true);
+    }
+  } finally {
+    if (epoch === routeResolutionEpoch && String(activeRun?.runId) === runId) updateGitSubmitButton();
+  }
 }
 
 async function refreshRunProgress(runId = activeRun?.runId, epoch = routeResolutionEpoch) {
@@ -2547,12 +2798,13 @@ function closeBugCaseDialog() {
   bugDialog.classList.remove('is-open');
   bugDialog.setAttribute('aria-hidden', 'true');
   bugCaseForm.reset();
+  currentGitBugDraftContext = null;
   setMessage(bugMessage, '');
 }
 
 function openBugCaseDialog() {
   if (!activeRun) {
-    appendChatMessage('agent', '系统', '请先启动工作区，再记录已解决 Bug。');
+    setMessage(gitSubmissionMessage, '请先打开实验，再记录 Bug 案例。', true);
     return;
   }
   bugDialog.classList.add('is-open');
@@ -2570,16 +2822,23 @@ async function saveBugCase(event) {
     return;
   }
   saveBugButton.disabled = true;
-  setMessage(bugMessage, '正在保存个人案例…');
+  setMessage(bugMessage, '正在提交个人 Bug 案例，等待教师审核…');
   try {
-    await apiRequest(`/runs/${activeRun.runId}/bugs`, {
+    const endpoint = currentGitBugDraftContext
+      ? `/student/submissions/${encodeURIComponent(currentGitBugDraftContext.submissionId)}/bug-draft/${encodeURIComponent(currentGitBugDraftContext.nodeId)}/confirm`
+      : `/runs/${activeRun.runId}/bugs`;
+    await apiRequest(endpoint, {
       method: 'POST',
       body: JSON.stringify({ title, problem, solution: bugSolution.value.trim() || null,
         technologyStack: bugTechnologyStack.value || null, nodeId: activeNodeId }),
       timeoutMs: 15000,
     });
     closeBugCaseDialog();
-    appendChatMessage('agent', '系统', 'Bug 案例已保存为个人记录，等待教师审核。');
+    if (!editorView.classList.contains('git-submission-mode')) {
+      appendChatMessage('agent', '系统', 'Bug 案例已保存为个人记录，等待教师审核。');
+    } else {
+      setMessage(gitSubmissionMessage, 'Bug 案例已提交为个人记录，教师审核通过后才会进入本实验记忆池。');
+    }
   } catch (error) {
     setMessage(bugMessage, error.message || '案例保存失败，请稍后重试。', true);
   } finally {
@@ -3057,20 +3316,27 @@ bubble.addEventListener('pointerup', () => {
 bubble.addEventListener('click', selectBubble);
 
 startNodeButton.addEventListener('click', async () => {
-  if (getCurrentUser()?.role !== 'student') {
-    setStartNodeStatus('请以学生身份登录后再启动 DSH 工作区。', 'error');
-    return;
+  await startGitExperimentRun();
+});
+
+gitCommitSha.addEventListener('input', updateGitSubmitButton);
+gitReviewNodeList.addEventListener('change', updateGitSubmitButton);
+gitSubmissionForm.addEventListener('submit', submitGitCommitForReview);
+selectAllReviewNodes.addEventListener('click', () => {
+  gitReviewNodeList.querySelectorAll('input[name="nodeIds"]').forEach((input) => { input.checked = true; });
+  updateGitSubmitButton();
+});
+refreshGitSubmissions.addEventListener('click', () => void loadGitSubmissions());
+showGitCredentials.addEventListener('click', () => void revealGitCredentials());
+gitCopyCloneCommand.addEventListener('click', async () => {
+  if (!activeGitRepository?.cloneUrl) return;
+  const command = `git clone ${activeGitRepository.cloneUrl}`;
+  try {
+    await navigator.clipboard.writeText(command);
+    gitCredentialNotice.textContent = '克隆命令已复制。需要认证时请使用独立的 Git 凭据，不要把令牌写入命令或代码。';
+  } catch {
+    window.prompt('复制下方克隆命令：', command);
   }
-  if (!activeExperimentId || !/^\d+$/.test(activeExperimentId)) {
-    setStartNodeStatus('当前实验没有有效编号，无法连接 DSH。', 'error');
-    return;
-  }
-  const experimentName = document.querySelector('#currentExperimentName').textContent.trim();
-  setStartNodeStatus('正在启动或连接你的 DSH 工作区…', 'loading');
-  await openStudentDsh(startNodeButton, {
-    experiment: { id: activeExperimentId, name: experimentName },
-    statusElement: startNodeStatus,
-  });
 });
 
 saveFileButton.addEventListener('click', saveWorkspaceFile);
@@ -3106,6 +3372,8 @@ desktopNewFileButton.addEventListener('click', async () => {
 completeNodeButton.addEventListener('click', completeCurrentNode);
 
 backToCanvas.addEventListener('click', () => {
+  gitCredentials.textContent = '凭据只在你点击获取后显示；不要把它提交到代码或截图中。';
+  showGitCredentials.textContent = '获取本实验 Git 凭据';
   if (activeExperimentId) navigateTo({ type: 'canvas', experimentId: activeExperimentId });
   else redirectToRoleHome('没有可返回的实验画布。');
 });
@@ -4408,25 +4676,11 @@ publishForm.addEventListener('submit', async (event) => {
 studentCourses.addEventListener('click', async (event) => {
   const button = event.target.closest('.open-published-experiment');
   if (!button) return;
-  void openStudentDsh(button);
+  const experimentId = button.dataset.experimentId;
+  if (experimentId) openExperiment(experimentId);
 });
 
-studentDshLaunchButton.addEventListener('click', () => void openStudentDsh(studentDshLaunchButton));
-studentDshStopButton.addEventListener('click', async () => {
-  const userId = getCurrentUser()?.id;
-  if (!userId || getCurrentUser()?.role !== 'student') return;
-  studentDshStopButton.disabled = true;
-  studentDshState.textContent = '正在停止工作区并保留文件…';
-  try {
-    await apiRequest('/student/dsh/stop', { method: 'POST' });
-    studentDshState.textContent = describeDshStatus('stopped');
-    studentDshStopButton.hidden = true;
-  } catch (error) {
-    studentDshState.textContent = error.message || '停止失败，请稍后重试。';
-  } finally {
-    studentDshStopButton.disabled = false;
-  }
-});
+studentLocalCodingButton.addEventListener('click', () => showRoute('library'));
 
 document.querySelector('#studentLibraryButton').addEventListener('click', () => showRoute('library'));
 document.querySelector('#teacherLibraryButton').addEventListener('click', () => showRoute('library'));
@@ -4447,7 +4701,7 @@ teacherDshReviewForm.addEventListener('submit', async (event) => {
   teacherDshReviewSave.disabled = true;
   setMessage(teacherDshReviewMessage, '正在保存阶段评价…');
   try {
-    await apiRequest(`/teacher/dsh/runs/${encodeURIComponent(runId)}/review`, {
+    await apiRequest(`/teacher/runs/${encodeURIComponent(runId)}/reviews`, {
       method: 'POST',
       body: JSON.stringify({ rating: rating ? Number(rating) : null, feedback: teacherDshFeedback.value.trim() || null }),
     });

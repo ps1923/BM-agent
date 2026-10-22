@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Spring Boot 学习工作台</title>
-    <link rel="stylesheet" href="styles.css?v=33" />
+    <title>编程实验学习平台</title>
+    <link rel="stylesheet" href="styles.css?v=34" />
   </head>
   <body>
     <div id="routeStatus" class="route-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
@@ -27,7 +27,7 @@
       <section class="dashboard-content">
         <div class="dashboard-heading"><div><p class="dashboard-eyebrow">STUDENT SPACE</p><h1 id="studentTitle">我的课程</h1><p>加入课程后查看教师发布的学习实验。</p></div><button id="studentLibraryButton" class="secondary-action" type="button">打开实验库</button></div>
         <section class="join-course-card" aria-labelledby="joinCourseTitle"><div><p class="dashboard-eyebrow">JOIN A COURSE</p><h2 id="joinCourseTitle">使用邀请码加入课程</h2><p>向教师获取 8 位邀请码，例如 <code>SPRING01</code>。</p></div><form id="joinCourseForm" class="inline-form" novalidate><label class="visually-hidden" for="joinCode">课程邀请码</label><input id="joinCode" type="text" maxlength="16" autocomplete="off" placeholder="输入邀请码" /><button class="primary-action" type="submit">加入课程</button></form></section>
-        <section class="join-course-card student-dsh-launch-card" aria-labelledby="studentDshTitle"><div><p class="dashboard-eyebrow">YOUR DSH WORKSPACE</p><h2 id="studentDshTitle">个人编程工作区</h2><p id="studentDshState" role="status" aria-live="polite">正在读取 DSH 状态…</p></div><div class="inline-form"><button id="studentDshLaunchButton" class="primary-action" type="button">打开 DSH</button><button id="studentDshStopButton" class="secondary-action" type="button" hidden>停止工作区</button></div></section>
+        <section class="join-course-card student-local-coding-card" aria-labelledby="studentLocalCodingTitle"><div><p class="dashboard-eyebrow">LOCAL CODING · GIT REVIEW</p><h2 id="studentLocalCodingTitle">在本地 IDE 编码</h2><p id="studentLocalCodingState" role="status" aria-live="polite">在 VS Code 等本地编辑器完成代码，通过 Git 提交后可查看 AI 节点验收报告。</p></div><div class="inline-form"><button id="studentLocalCodingButton" class="primary-action" type="button">查看实验</button></div></section>
         <p id="studentMessage" class="form-message" role="status" aria-live="polite"></p>
         <section aria-labelledby="studentCoursesTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">ENROLLED COURSES</p><h2 id="studentCoursesTitle">已加入课程</h2></div><span id="studentCourseCount" class="section-count"></span></div><div id="studentCourses" class="course-grid"></div></section>
       </section>
@@ -44,14 +44,14 @@
           <section class="publish-card" aria-labelledby="publishTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">PUBLISH EXPERIMENT</p><h2 id="publishTitle">发布实验草稿</h2></div></div><p class="publish-description">选择课程和实验草稿，发布后学生即可在对应课程中看到。</p><form id="publishForm" class="publish-form" novalidate><label for="publishCourse">发布到课程<select id="publishCourse"><option value="">请选择课程</option></select></label><label for="publishExperiment">实验草稿<select id="publishExperiment"><option value="">请选择实验</option></select></label><button class="primary-action" type="submit">发布实验</button></form><div id="teacherDrafts" class="draft-list" aria-live="polite"></div></section>
         </div>
         <section class="teacher-dsh-card" aria-labelledby="teacherDshTitle">
-          <div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">DSH STUDENT EVIDENCE</p><h2 id="teacherDshTitle">DSH 学习记录与主动提交</h2><p class="publish-description">这里只显示学生明确提交的代码快照和学习进度，不读取实时工作区、对话或终端。</p></div><label class="monitor-course-picker" for="teacherDshExperiment">授权实验<select id="teacherDshExperiment"><option value="">正在加载…</option></select></label></div>
+          <div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">GIT COMMIT · AI NODE REVIEW</p><h2 id="teacherDshTitle">学生提交与节点验收</h2><p class="publish-description">只查看学生 push 后提交检查的 commit、代码差异和逐节点 AI 报告，不读取本地未提交代码。</p></div><label class="monitor-course-picker" for="teacherDshExperiment">授权实验<select id="teacherDshExperiment"><option value="">正在加载…</option></select></label></div>
           <p id="teacherDshMessage" class="form-message" role="status" aria-live="polite"></p>
-          <div class="teacher-dsh-layout"><div id="teacherDshRuns" class="teacher-dsh-runs"></div><div class="teacher-dsh-submissions"><div id="teacherDshSubmissions" class="teacher-dsh-submission-list"></div><pre id="teacherDshCode" class="teacher-evidence-code" tabindex="0" aria-label="学生主动提交的代码快照">选择一条学生记录查看已提交快照。</pre></div></div>
+          <div class="teacher-dsh-layout"><div id="teacherDshRuns" class="teacher-dsh-runs"></div><div class="teacher-dsh-submissions"><div id="teacherDshSubmissions" class="teacher-dsh-submission-list"></div><pre id="teacherDshCode" class="teacher-evidence-code" tabindex="0" aria-label="学生 Git commit 差异与 AI 验收证据">选择一条提交查看 commit 差异和验收结果。</pre></div></div>
           <form id="teacherDshReviewForm" class="teacher-review-form" novalidate><label for="teacherDshRating">阶段性评分（0–100）<input id="teacherDshRating" type="number" min="0" max="100" step="1" disabled /></label><label for="teacherDshFeedback">教师评价<textarea id="teacherDshFeedback" rows="3" maxlength="2000" placeholder="选择学生后填写评价" disabled></textarea></label><button id="teacherDshReviewSave" class="primary-action" type="submit" disabled>保存阶段评价</button><p id="teacherDshReviewMessage" class="form-message" role="status" aria-live="polite"></p></form>
           <section class="teacher-dsh-bug-review" aria-labelledby="teacherDshBugsTitle"><h3 id="teacherDshBugsTitle">当前实验 Bug 记忆审核</h3><p id="teacherDshBugMessage" class="form-message" role="status" aria-live="polite"></p><div id="teacherDshBugs" class="teacher-bug-list"></div></section>
         </section>
         <section class="teacher-monitor-card" aria-labelledby="teacherMonitorTitle">
-          <div class="dashboard-section-heading teacher-monitor-heading"><div><p class="dashboard-eyebrow">LEARNING MONITOR</p><h2 id="teacherMonitorTitle">学生学习进度</h2><p class="publish-description">查看节点完成、命令运行、AI 对话和 Bug 记录，并由教师提交最终评价。</p></div><label class="monitor-course-picker" for="teacherDashboardCourse">课程<select id="teacherDashboardCourse"><option value="">请选择课程</option></select></label></div>
+          <div class="dashboard-section-heading teacher-monitor-heading"><div><p class="dashboard-eyebrow">LEARNING MONITOR</p><h2 id="teacherMonitorTitle">学生学习进度</h2><p class="publish-description">查看学生主动提交的代码、节点验收建议和 Bug 学习记录；AI 结果不替代教师评价。</p></div><label class="monitor-course-picker" for="teacherDashboardCourse">课程<select id="teacherDashboardCourse"><option value="">请选择课程</option></select></label></div>
           <p id="teacherDashboardMessage" class="form-message" role="status" aria-live="polite"></p>
           <div id="teacherDashboardEmpty" class="monitor-empty">请选择一门课程查看学生进度。</div>
           <div id="teacherDashboardContent" class="teacher-monitor-content" hidden>
@@ -59,7 +59,7 @@
             <aside id="teacherRunDetail" class="teacher-run-detail" hidden>
               <div class="run-detail-heading"><div><p class="dashboard-eyebrow">SELECTED RUN</p><h3 id="teacherRunTitle">学生运行详情</h3></div><span id="teacherRunStatus" class="section-count"></span></div>
               <p id="teacherRunSummaryState" class="form-message" role="status" aria-live="polite"></p><p id="teacherRunSummary" class="run-summary-copy"></p><p id="teacherAiSummary" class="teacher-ai-summary" hidden></p><div class="run-metrics" id="teacherRunMetrics"></div><p id="teacherTimelineState" class="form-message" role="status" aria-live="polite"></p><div class="timeline-list" id="teacherTimeline"></div>
-              <section class="teacher-evidence" aria-labelledby="teacherEvidenceTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">STAGE CODE EVIDENCE</p><h4 id="teacherEvidenceTitle">阶段代码证据</h4><p class="publish-description">只读查看学生完成节点时保存的代码快照。</p></div></div><p id="teacherEvidenceMessage" class="form-message" role="status" aria-live="polite"></p><div class="teacher-evidence-layout"><div id="teacherStageEvidence" class="teacher-stage-evidence"></div><div class="teacher-evidence-preview"><div id="teacherEvidenceFiles" class="teacher-evidence-files"></div><pre id="teacherEvidenceCode" class="teacher-evidence-code" tabindex="0" aria-label="只读代码内容">选择一个阶段快照文件查看。</pre></div></div></section>
+              <section class="teacher-evidence" aria-labelledby="teacherEvidenceTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">LEGACY READ-ONLY EVIDENCE</p><h4 id="teacherEvidenceTitle">历史工作区快照</h4><p class="publish-description">仅供查阅旧流程已保存的数据；新实验代码请在上方查看 Git commit。</p></div></div><p id="teacherEvidenceMessage" class="form-message" role="status" aria-live="polite"></p><div class="teacher-evidence-layout"><div id="teacherStageEvidence" class="teacher-stage-evidence"></div><div class="teacher-evidence-preview"><div id="teacherEvidenceFiles" class="teacher-evidence-files"></div><pre id="teacherEvidenceCode" class="teacher-evidence-code" tabindex="0" aria-label="只读历史代码快照">选择一个旧流程快照文件查看。</pre></div></div></section>
               <form id="teacherReviewForm" class="teacher-review-form" novalidate><label for="teacherRating">教师评分（0–100）<input id="teacherRating" type="number" min="0" max="100" step="1" /></label><label for="teacherFeedback">阶段性评价<textarea id="teacherFeedback" rows="3" maxlength="2000" placeholder="记录学生本阶段的表现和后续建议"></textarea></label><button class="primary-action" type="submit">保存评价</button><p id="teacherReviewMessage" class="form-message" role="status" aria-live="polite"></p></form>
             </aside>
           </div>
@@ -193,16 +193,29 @@
             <div class="node-fact"><dt>名称</dt><dd>Spring Boot 项目初始化</dd></div>
           </dl>
         </div>
-        <div class="inspector-footer"><p id="startNodeStatus" class="start-node-status" role="status" aria-live="polite" hidden></p><button id="startNodeButton" class="start-node-button" type="button"><span class="start-node-icon" aria-hidden="true"></span><span>在 DSH 中攻克节点</span></button></div>
+        <div class="inspector-footer"><p class="node-order-hint">节点树是学习建议和验收清单，不限制先后；你可以自由选择节点或一次检查多个节点。</p><p id="startNodeStatus" class="start-node-status" role="status" aria-live="polite" hidden></p><button id="startNodeButton" class="start-node-button" type="button"><span class="start-node-icon" aria-hidden="true"></span><span>查看节点并提交代码</span></button></div>
       </aside>
     </main>
 
-    <main id="editorView" class="editor-view" aria-label="节点攻克编辑器">
+    <main id="editorView" class="editor-view" aria-label="代码提交与节点验收">
       <header class="editor-topbar">
         <button id="backToCanvas" class="back-button" type="button" aria-label="返回画布">‹</button>
-        <div class="editor-breadcrumb"><span class="workspace-name"><span class="workspace-dot"></span><span>springboot-learning</span></span><span class="breadcrumb-divider">/</span><span class="editor-file-path">01 项目初始化</span><span class="editor-node-tag">NODE 01</span></div>
-        <div class="editor-top-status"><span class="status-dot"></span><span id="workspaceStatus">未启动工作区</span></div>
+        <div class="editor-breadcrumb"><span class="workspace-name"><span class="workspace-dot"></span><span>本地代码提交</span></span><span class="breadcrumb-divider">/</span><span id="gitSubmissionExperimentName" class="editor-file-path">加载实验中…</span></div>
+        <div class="editor-top-status"><span class="status-dot"></span><span id="workspaceStatus">准备代码仓库…</span></div>
       </header>
+      <section id="gitSubmissionPanel" class="git-submission-panel" aria-label="Git 提交与 AI 节点验收">
+        <div class="git-submission-heading"><div><p class="dashboard-eyebrow">LOCAL IDE → GIT PUSH → AI REVIEW</p><h1>提交代码，检查学习节点</h1><p>代码在你的电脑上编写。只有 push 到本实验仓库的 commit 会被读取和检查。</p></div><span id="gitRepositoryState" class="section-count" role="status" aria-live="polite">正在准备仓库…</span></div>
+        <section class="git-repository-card" aria-labelledby="gitRepositoryTitle"><div><p class="library-eyebrow">YOUR EXPERIMENT REPOSITORY</p><h2 id="gitRepositoryTitle">本实验 Git 仓库</h2><p id="gitRepositoryHelp">将仓库克隆到本地，在 VS Code 中完成实验。</p></div><div class="git-command-row"><code id="gitCloneCommand">正在加载仓库地址…</code><button id="gitCopyCloneCommand" class="secondary-action" type="button" disabled>复制克隆命令</button></div><div class="git-credential-row"><button id="showGitCredentials" class="secondary-action" type="button" disabled>获取本实验 Git 凭据</button><p id="gitCredentials" class="git-credentials" role="status" aria-live="polite">凭据只在你点击获取后显示；不要把它提交到代码或截图中。</p></div><details class="git-quickstart"><summary>首次使用 Git？查看操作步骤</summary><ol><li>在电脑安装 Git，并打开 PowerShell 或终端。</li><li>运行上方克隆命令，进入项目文件夹后用 VS Code 打开。</li><li>完成代码后运行 <code>git add .</code> 和 <code>git commit -m "完成实验任务"</code>。</li><li>运行 <code>git push</code>，再把 commit 编号粘贴到下面提交验收。</li></ol></details><p id="gitCredentialNotice" class="form-message" role="status" aria-live="polite"></p></section>
+        <form id="gitSubmissionForm" class="git-submission-form" novalidate>
+          <div class="git-form-heading"><div><p class="library-eyebrow">SUBMIT A COMMIT</p><h2>选择本次检查的节点</h2><p>节点不限制完成顺序；可以一次选择多个节点或全部节点。</p></div><button id="selectAllReviewNodes" class="text-action" type="button">全选节点</button></div>
+          <div id="gitReviewNodeList" class="git-review-node-list" aria-label="选择验收节点"></div>
+          <label for="gitCommitSha">已 push 的完整 commit SHA<input id="gitCommitSha" name="commitSha" inputmode="text" autocomplete="off" minlength="40" maxlength="64" pattern="[0-9a-fA-F]{40,64}" placeholder="粘贴完整 commit 编号（40–64 位）" required /></label>
+          <label for="gitSubmissionDescription">提交说明（可选）<input id="gitSubmissionDescription" name="description" maxlength="500" placeholder="这次提交完成了哪些内容？" /></label>
+          <p id="gitSubmissionMessage" class="form-message" role="status" aria-live="polite"></p>
+          <button id="submitGitCommit" class="primary-action" type="submit" disabled>提交所选节点验收</button>
+        </form>
+        <section class="git-submission-history" aria-labelledby="gitSubmissionHistoryTitle"><div class="dashboard-section-heading"><div><p class="library-eyebrow">COMMIT HISTORY</p><h2 id="gitSubmissionHistoryTitle">提交与验收历史</h2></div><button id="refreshGitSubmissions" class="secondary-action" type="button">刷新</button></div><div id="gitSubmissionHistory" class="git-submission-list" aria-live="polite"><p class="library-state">正在读取提交记录…</p></div></section>
+      </section>
       <section class="editor-workspace">
         <aside class="task-panel editor-panel">
           <div class="panel-heading"><span>本节点任务</span><span class="panel-count">3 项</span></div>
@@ -248,6 +261,6 @@
       </div>
     </div>
     <script src="api-config.js?v=1"></script>
-    <script src="app.js?v=45"></script>
+    <script src="app.js?v=46"></script>
   </body>
 </html>

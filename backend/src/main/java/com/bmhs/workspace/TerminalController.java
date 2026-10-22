@@ -1,6 +1,7 @@
 package com.bmhs.workspace;
 
 import com.bmhs.auth.AuthModels.AuthenticatedUser;
+import com.bmhs.experimentcreation.LegacyWriteDisabled;
 import com.bmhs.workspace.TerminalModels.CommandRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -25,14 +26,14 @@ public class TerminalController {
     public ResponseEntity<?> createSession(@PathVariable long workspaceId,
                                            @RequestHeader(value = "Idempotency-Key", required = false) String clientSessionId,
                                            AuthenticatedUser user) {
-        return ResponseEntity.ok(service.createSession(user, workspaceId, clientSessionId));
+        throw LegacyWriteDisabled.exception();
     }
 
     @PostMapping("/terminal-sessions/{sessionId:\\d+}/commands")
     public ResponseEntity<?> command(@PathVariable long sessionId, AuthenticatedUser user,
                                      @RequestHeader(value = "Idempotency-Key", required = false) String clientCommandId,
                                      @Valid @RequestBody CommandRequest request) {
-        return ResponseEntity.ok(service.execute(user, sessionId, clientCommandId, request));
+        throw LegacyWriteDisabled.exception();
     }
 
     @GetMapping("/terminal-sessions/{sessionId:\\d+}/commands/{clientCommandId}")

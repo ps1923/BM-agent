@@ -22,7 +22,8 @@ class TeacherRepositoryEvidenceTest {
     @SuppressWarnings({"rawtypes", "unchecked"})
     void rejectsUnauthorizedRunBeforeLookingUpSnapshotFiles() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
-        when(jdbc.query(contains("course_experiment_assignments"), any(RowMapper.class), eq(3L), eq(8L)))
+        when(jdbc.query(contains("course_experiment_assignments"), any(RowMapper.class),
+                eq(3L), eq(8L), eq(3L), eq(3L)))
                 .thenReturn(java.util.List.of());
         TeacherRepository repository = new TeacherRepository(jdbc);
 
@@ -31,8 +32,9 @@ class TeacherRepositoryEvidenceTest {
 
         assertEquals("RUN_FORBIDDEN", exception.code());
         ArgumentCaptor<String> query = ArgumentCaptor.forClass(String.class);
-        verify(jdbc).query(query.capture(), any(RowMapper.class), eq(3L), eq(8L));
-        assertTrue(query.getValue().contains("r.execution_mode = 'legacy'"));
+        verify(jdbc).query(query.capture(), any(RowMapper.class), eq(3L), eq(8L), eq(3L), eq(3L));
+        assertTrue(query.getValue().contains("r.execution_mode IN ('legacy', 'git')"));
+        assertTrue(query.getValue().contains("experiment_reviewers"));
         verifyNoMoreInteractions(jdbc);
     }
 }

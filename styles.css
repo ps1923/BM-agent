@@ -415,6 +415,7 @@ button { cursor: pointer; }
 .completion-track span { display: block; width: 0%; height: 100%; border-radius: inherit; background: #22c55e; }
 .file-location { color: #64748b !important; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px !important; word-break: break-word; }
 .inspector-footer { padding: 18px 20px 22px; border-top: 1px solid #f1f5f9; }
+.node-order-hint { margin: 0 0 12px; color: #64748b; font-size: 10px; line-height: 1.6; }
 .start-node-status { margin: 0 0 12px; color: #475569; font-size: 12px; line-height: 1.55; }
 .start-node-status.is-error { color: #b91c1c; }
 .start-node-button { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 12px 15px; border: 0; border-radius: 10px; color: #fff; background: #0f172a; box-shadow: 0 4px 12px rgba(15, 23, 42, .14); font-size: 12px; font-weight: 700; transition: background .16s ease, transform .16s ease; }
@@ -529,6 +530,56 @@ button { cursor: pointer; }
 .diagnosis-apply-button { margin-top: 8px; }
 #terminalInput { flex: 1; border: 0; outline: 0; color: #e2e8f0; background: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 #terminalInput::placeholder { color: #687382; }
+
+/* Git submission flow replaces the old browser editor for new student runs. */
+.editor-view.git-submission-mode { overflow-y: auto; color: #172033; background: #f5f7fb; }
+.git-submission-mode .editor-topbar { position: sticky; top: 0; flex: 0 0 56px; border-color: #e2e8f0; background: #fff; color: #172033; }
+.git-submission-mode .workspace-name { color: #172033; }
+.git-submission-mode .workspace-dot { border-color: #2563eb; background: #2563eb; box-shadow: none; }
+.git-submission-mode .editor-top-status { color: #64748b; }
+.git-submission-mode .editor-top-status .status-dot { background: #64748b; box-shadow: none; }
+.git-submission-mode .editor-workspace, .git-submission-mode > .terminal-panel { display: none !important; }
+.git-submission-panel { display: grid; gap: 18px; width: min(980px, calc(100% - 40px)); margin: 34px auto 56px; }
+.git-submission-heading, .git-form-heading, .git-submission-history > .dashboard-section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.git-submission-heading h1 { margin: 0; color: #172033; font-size: clamp(23px, 3vw, 32px); letter-spacing: -.04em; }
+.git-submission-heading p:last-child, .git-form-heading p:last-child { margin: 8px 0 0; color: #667085; font-size: 13px; line-height: 1.65; }
+.git-repository-card, .git-submission-form, .git-submission-history { padding: 22px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; box-shadow: 0 5px 20px rgb(15 23 42 / 4%); }
+.git-repository-card h2, .git-form-heading h2, .git-submission-history h2 { margin: 0; color: #172033; font-size: 17px; }
+.git-repository-card > div:first-child > p:last-child { margin: 7px 0 0; color: #64748b; font-size: 12px; }
+.git-command-row { display: flex; align-items: center; gap: 10px; margin-top: 17px; }
+.git-command-row code { min-width: 0; flex: 1; overflow-wrap: anywhere; padding: 12px 14px; border: 1px solid #d8e0ea; border-radius: 8px; color: #dbeafe; background: #172033; font-size: 12px; }
+  .git-credential-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 12px; margin-top: 12px; }
+  .git-credentials { margin: 0; min-width: 0; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; color: #475569; background: #f8fafc; font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
+.git-quickstart { margin-top: 15px; color: #475569; font-size: 12px; }
+.git-quickstart summary { cursor: pointer; font-weight: 700; }
+.git-quickstart ol { display: grid; gap: 8px; padding-left: 21px; line-height: 1.65; }
+.git-submission-form { display: grid; gap: 16px; }
+.git-submission-form label { display: grid; gap: 7px; color: #475569; font-size: 12px; font-weight: 700; }
+.git-submission-form input { width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 8px; outline: 0; color: #172033; background: #fff; font: inherit; font-size: 13px; }
+.git-submission-form input:focus { border-color: #64748b; box-shadow: 0 0 0 3px rgb(100 116 139 / 12%); }
+.git-review-node-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 8px; max-height: 320px; overflow: auto; padding: 2px; }
+.git-review-node-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; padding: 7px; border: 1px solid #e2e8f0; border-radius: 9px; background: #fff; }
+.git-review-node { display: flex; align-items: flex-start; gap: 10px; min-width: 0; padding: 5px; cursor: pointer; }
+.git-review-node:has(input:checked) { border-color: #93c5fd; background: #eff6ff; }
+.git-review-node input { flex: 0 0 auto; width: 16px; margin: 2px 0 0; accent-color: #2563eb; }
+.git-review-node span { min-width: 0; }
+.git-review-node strong, .git-review-node small { display: block; }
+.git-review-node strong { color: #1e293b; font-size: 12px; }
+.git-review-node small { margin-top: 4px; color: #64748b; font-size: 10px; line-height: 1.5; }
+.git-node-complete { padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 7px; color: #475569; background: #f8fafc; font: inherit; font-size: 11px; white-space: nowrap; cursor: pointer; }
+.git-node-complete:disabled { color: #15803d; border-color: #bbf7d0; background: #f0fdf4; cursor: default; }
+.git-submission-list { display: grid; gap: 10px; margin-top: 15px; }
+.git-submission-item { padding: 14px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+.git-submission-item > header { display: flex; justify-content: space-between; gap: 12px; }
+.git-submission-item code { color: #334155; font-size: 11px; overflow-wrap: anywhere; }
+.git-submission-item p { margin: 8px 0 0; color: #64748b; font-size: 11px; line-height: 1.6; }
+.git-review-result { margin-top: 9px; padding: 12px; border-left: 3px solid #94a3b8; border-radius: 6px; background: #fff; }
+.git-review-result[data-decision="meets"] { border-left-color: #16a34a; }
+.git-review-result[data-decision="partially_meets"] { border-left-color: #d97706; }
+.git-review-result[data-decision="does_not_meet"] { border-left-color: #dc2626; }
+.git-review-result h4 { margin: 0; color: #1e293b; font-size: 12px; }
+.git-review-result p { margin: 6px 0 0; color: #475569; font-size: 11px; white-space: pre-wrap; }
+.git-review-evidence { margin: 8px 0 0; padding: 9px; overflow: auto; border-radius: 6px; color: #dbeafe; background: #172033; font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
 
 /* Authentication and local course publishing demo */
 .route-view { display: none; }
@@ -773,6 +824,14 @@ button { cursor: pointer; }
   .patch-diff-list { max-height: 55vh; }
   .patch-diff-columns { grid-template-columns: 1fr; }
   .editor-topbar { gap: 9px; padding: 0 12px; }
+  .git-submission-panel { width: calc(100% - 24px); gap: 12px; margin: 18px auto 30px; }
+  .git-repository-card, .git-submission-form, .git-submission-history { padding: 16px; }
+  .git-submission-heading, .git-form-heading, .git-submission-history > .dashboard-section-heading { align-items: flex-start; }
+  .git-submission-heading { flex-direction: column; }
+  .git-command-row { align-items: stretch; flex-direction: column; }
+  .git-command-row .secondary-action { width: 100%; }
+    .git-credential-row { grid-template-columns: 1fr; }
+    .git-review-node-list { grid-template-columns: 1fr; max-height: 40vh; }
   .editor-breadcrumb { gap: 8px; }
   .workspace-name { gap: 7px; font-size: 10px; }
   .editor-file-path { font-size: 10px; }

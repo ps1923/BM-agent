@@ -1,32 +1,20 @@
 # 学习画布
 
-## 当前 DSH 改造状态（进行中）
+## 当前教学与编码基线
 
-目标教学流程已调整为：学生进入集中部署的 DeepSeek Harness（DSH），在 DSH 自建工作区并编码；BM-HS 以 Cordis 工具插件提供实验节点、学生确认后的进度记录、实验专属 Bug 记忆，以及学生主动选择并提交的代码快照。教师仅查看进度和主动提交的快照，不读取 DSH 实时工作区、对话或终端。
+学生在本地 VS Code 等 IDE 中从事编码，自行创建 Git commit 并手动 push 到 BM-HS 为该实验运行实例配置的私有 Gitea 仓库。push 后，学生在 BM-HS 选择一个或多个节点并登记 commit SHA，系统只分析该仓库中已提交的固定版本；AI 按节点标准给出“符合、部分符合、不符合、无法判断”的验收建议、代码证据和修改建议。学生可以并行或跳过节点，AI 结果不自动评分，也不阻止继续学习。教师查看已提交 commit、代码差异和每个节点的验收记录，并保留最终评价权。
 
-本地代码现已增加 DSH 实例启动/状态/停止接口、独立持久卷与容器配置、30 分钟闲置回收、短凭据自动轮换，以及学生工作台的 DSH 入口。当前已在本机恢复 Docker Engine、构建锁定版 DSH 镜像，并验证插件 Bundle 加载、Web 服务启动、凭据不进入 Docker 配置/日志。**真实 BM-HS 登录到 DSH 的完整页面链路和反向代理尚未验收**：尚未在隔离数据库执行迁移或启动 DSH 后端接口，路径前缀代理、Cookie 和 WebSocket 行为也未验证。因此 DSH 启动功能默认关闭，不能开放给学生使用。旧编辑器、终端和工作区接口暂作历史兼容，不代表新基线流程。
+Bug 经验按实验隔离：AI 只能起草案例；学生确认后提交，授权教师审核通过后才进入该实验的检索池。学生的本地未提交代码、DSH 对话和终端输出不会被自动收集。旧 DSH、在线编辑器、服务器工作区、终端和快照记录仅作为历史兼容数据，不作为新实验的编码入口。
 
-启动功能的默认配置为 `DSH_ENABLED=false`。本机锁定版本镜像构建方式：
+此基线正在实施中。Gitea 服务、后端 API、迁移脚本和前端提交页面尚需完成整合验收；在迁移及隔离 Gitea 端到端验证完成前，不要把新流程视为已部署或可用于线上课程。本轮不执行生产数据库迁移、不修改线上服务。
 
-```powershell
-docker build --file Dockerfile --tag bmhs-dsh:0.2.1-rc.2 .
-```
-
-在 `dsh-plugin` 目录执行此命令。启用前需在隔离环境配置该镜像、可达的 BM-HS HTTPS API 和 DSH 公共 HTTPS 地址，并提供受控的 Docker 管理运行时。容器内访问/刷新凭据经标准输入送入 tmpfs，启动器读取后立即删除；启动 URL 也不会写入 Docker 日志。反向代理必须用 BM-HS 会话校验 `GET /api/student/dsh/proxy-target?routeKey=...`，只代理到回环随机端口；须保留 Host、转发 WebSocket、移除 `/dsh/<routeKey>/` 前缀、把 DSH Cookie 限定到对应路径并避免记录带启动凭据的访问 URL。当前尚未应用任何 Nginx、生产配置或数据库迁移。
-
-兼容基线锁定为 DSH `v0.2.1-rc.2`（上游不可变标签 `dsh-v0.2.1-rc.2`）。DSH 仍处于开发预览阶段且插件 API 可能破坏性变化；上线前必须按锁定版本通过真实安装、工具交互、身份隔离和安全路由验收。[上游版本记录](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)。
-
-新数据库迁移 `database/migrations/20261021_add_dsh_plugin_baseline.sql` 还新增不透明路由、回环代理端口及可轮换续期凭据表；现有旧运行保留为 `legacy`。迁移文件已加入代码但**尚未在任何数据库执行**。执行前需在备份后的隔离数据库检验迁移、回滚预案和 `database/verify.sql`。
-
-DSH 当前 Web 服务默认仅监听回环地址，不能直接把端口暴露到公网。集中式多学生部署必须提供身份认证、每人隔离实例/持久存储、资源限制和安全反向路由；缺少其中任何一项都不能开放给学生。[DSH Web 部署说明](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.1-rc.2/docs/user/guide/public-deployments.md)。
-
-这是一个面向毕业设计的智能编程实验教学系统：教师或学生通过三段式向导创建树状学习实验，学生在独立工作区编写和运行代码，教师通过课程管理查看学习过程。创建前先讨论实验方向，再填写周期与难度，最后预览并确认实验树；确认前不会写入正式实验，确认后由后端一次性创建阶段、节点、任务与连线。
+项目保留实验方向澄清、动态规划树状学习节点、课程发布、学生进度和教师评价。创建前先讨论实验方向，再填写周期与难度，最后预览并确认实验树；确认前不会写入正式实验，确认后由后端一次性创建阶段、节点、任务与连线。
 
 - 点阵画布与可拖动节点
 - 节点显示序号、绿色状态点和学习介绍
 - 点击节点后从右侧打开用时、完成度、文件位置和名称
-- 底部保留「开始攻克节点」主按钮样式
-- 点击「开始攻克节点」进入黑底编辑器布局：任务、代码、智能体、终端与顶部工作区栏
+- 节点是非阻塞的学习提示，可在任意顺序查看；进入节点后可开始或恢复 Git 提交验收
+- 学生在本地 IDE 编码；BM-HS 提供仓库地址、节点多选、commit 登记及验收历史
 - 首屏按当前登录用户从服务端加载个人实验；点击实验进入对应画布，画布可返回实验库
 - 最近打开区域只记录本次页面访问中的个人实验，不伪称跨登录持久化
 - 文件库右侧「＋」打开三段式 Agent 创建向导：方向对话、整数周期、五档节点难度
@@ -36,7 +24,7 @@ DSH 当前 Web 服务默认仅监听回环地址，不能直接把端口暴露�
 - 两个 Harness 是独立 Python MCP Streamable HTTP 服务，使用不同进程、端口、提示词和唯一工具
 - 确认后由 Spring Boot 校验并布局实验树，再通过 MySQL 事务创建阶段、节点、任务与连线
 - 个人实验列表提供真实加载、空状态、错误重试；未实现持久化的分组与删除入口不展示
-- 编辑器终端已经通过后端受限命令接口连接独立工作区；普通代码指导、Bug 案例审核、补丁确认、异步深度诊断和教师过程管理均已接入真实后端接口，不得用前端假数据代替
+- 新 Git 验收流程只读取已 push 的 commit；旧编辑器和服务器工作区不属于新实验入口
 
 ## 前端角色与课程流程
 
@@ -65,7 +53,7 @@ DSH 当前 Web 服务默认仅监听回环地址，不能直接把端口暴露�
 
 ## MySQL 数据库
 
-`database/schema.sql` 提供面向服务器部署的数据模型，数据库名称固定为 `BM-sql`。模型区分实验定义、学生实验实例和服务器代码工作区；源码正文保存在服务器持久化卷或对象存储中，数据库只保存文件索引、哈希和快照位置。
+`database/schema.sql` 提供面向服务器部署的数据模型，数据库名称固定为 `BM-sql`。新 Git 流程只在数据库保存仓库映射、commit 元数据、节点关联和不可变验收报告；已 push 的源码由私有 Gitea 保存。旧服务器工作区、终端和快照表仍为历史兼容结构，不代表新流程会启动服务器工作区。
 
 运行环境必须是 MySQL 8.0.16 或更高版本，因为更早的 MySQL 8.0 版本不会强制执行 `CHECK` 约束。请使用有权创建数据库和表的账号；命令中的 `--password` 会让 MySQL 客户端安全地交互式询问密码，不要把密码写进命令、脚本或仓库文件。
 
@@ -94,9 +82,11 @@ database/migrations/20261001_add_node_linked_workspace_snapshots.sql
 database/migrations/20261001_backfill_task_progress.sql
 database/migrations/20261001_fix_rejected_patch_timestamp_constraint.sql
 database/migrations/20261001_add_workspace_starting_state.sql
+database/migrations/20261021_add_dsh_plugin_baseline.sql
+database/migrations/20261022_add_git_commit_acceptance.sql
 ```
 
-迁移完成后先执行 `database/verify.sql`，确认认证、课程、Bug、补丁、诊断任务、教师评价和阶段快照结构均为 `OK`，并确认 `task_progress_status` 为 `OK`、`inconsistent_task_progress_rows` 为 `0`，课程关键 CHECK 定义和 `ENFORCED` 状态匹配，再启动后端和前端。验证脚本会显式限定 `BM-sql`，缺少必要进度表时报告 `SKIPPED_MISSING_SCHEMA_OR_TABLE`；没有完成迁移时，不得进行正向页面验收。
+迁移完成后先执行 `database/verify.sql`，确认认证、课程、Bug、补丁、诊断任务、教师评价和 Git 验收结构均为 `OK`，并确认 `task_progress_status` 为 `OK`、`inconsistent_task_progress_rows` 为 `0`，课程关键 CHECK 定义和 `ENFORCED` 状态匹配，再启动后端和前端。验证脚本会显式限定 `BM-sql`，缺少必要进度表时报告 `SKIPPED_MISSING_SCHEMA_OR_TABLE`；没有完成迁移时，不得进行正向页面验收。当前新增迁移只在隔离/本地测试库验证后使用；未经审批不得对生产库执行。
 
 创建完成后执行只读验证：
 
@@ -110,7 +100,7 @@ mysql --user=root --password --execute="SOURCE database/verify.sql"
 
 节点依赖是否形成多节点环、用户是否有权启动某个实验，以及实验和运行状态能否跳转，必须由后端服务在事务中验证；仅靠静态外键和 `CHECK` 约束无法完整表达这些规则。
 
-## 本地运行 Harness、后端与工作区
+## 本地运行 Harness 与后端
 
 要求 Java 17、Maven 3.9+ 和 Python 3.11+。首次安装 Python 依赖：
 
@@ -119,7 +109,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r harnesses\requirements.txt
 ```
 
-在三个终端分别启动需求 Harness、规划 Harness 和 Java API；如果要验收学生工作区，还必须准备可用的 Docker Engine 和工作区运行镜像：
+在三个终端分别启动需求 Harness、规划 Harness 和 Java API。学生新编码流程不需要服务器工作区镜像；Docker Compose 中的 Gitea 服务只用于仓库功能联调：
 
 ```powershell
 .\.venv\Scripts\python.exe -m harnesses.requirements.service
@@ -129,7 +119,13 @@ $env:DB_PASSWORD = Read-Host 'MySQL password'
 mvn -f backend/pom.xml spring-boot:run
 ```
 
-后端启动前必须通过环境变量提供数据库密码，不能把密码写入命令、日志或仓库。工作区运行时默认使用 `WORKSPACE_ROOT`、`WORKSPACE_RUNTIME_IMAGE`、`WORKSPACE_CPU_LIMIT`、`WORKSPACE_MEMORY_LIMIT_MB` 等环境变量配置资源限制。终端输出由 `WORKSPACE_MAX_OUTPUT_BYTES` 限制（默认 65536 字节，最大 1048576 字节），超出部分会被丢弃并标记为已截断。
+后端启动前必须通过环境变量提供数据库密码，不能把密码写入命令、日志或仓库。旧工作区 API 如需回归测试才配置 `WORKSPACE_ROOT`、`WORKSPACE_RUNTIME_IMAGE` 等参数；它们不是新 Git 提交流程的依赖。
+
+Git 验收还需配置 Gitea 管理员令牌、对外 HTTPS 地址、Gitea webhook 目标地址、至少 32 字节随机 webhook 密钥，以及 Base64 编码的 32 字节 `GIT_CREDENTIAL_ENCRYPTION_KEY`。这些值通过受保护的环境配置注入，不能提交到仓库。Gitea API 内部地址格式为 `http://gitea:3000`（不带 `/api/v1` 后缀）；对外仓库地址必须是学生能够访问的 HTTPS 地址。未配置完整时，创建仓库会返回明确的不可用错误，不会伪造克隆地址。
+
+学生 Git 接口：`POST /api/student/experiments/{experimentId}/runs` 创建或复用 Git 运行实例；`GET /api/student/runs/{runId}/repository` 读取仓库；`POST /api/student/runs/{runId}/repository-credentials` 在认证后获取个人 Git 凭据；学生本地 push 后，调用 `POST /api/student/runs/{runId}/submissions` 提交完整 commit SHA 和 `nodeIds`；`GET /api/student/runs/{runId}/submissions` 查看异步检查历史，`GET /api/student/submissions/{submissionId}` 查看报告。Gitea 的签名 push webhook 接收入口为 `POST /api/integrations/gitea/webhook`。教师读取列表及差异分别使用 `GET /api/teacher/runs/{runId}/submissions` 和 `GET /api/teacher/submissions/{submissionId}`。提交只检查学生已 push 的 SHA；webhook 本身不接受学生身份或自行创建验收任务。
+
+Git 静态验收由独立的 `GitCodeAcceptanceHarness` 组件负责提示、结构校验和代码证据校验；它只接收固定 commit 的脱敏文件、节点标准和当前实验已审核 Bug 记忆。首次登记时该 SHA 关联的节点集合固定；相同 SHA、相同节点集合的重复登记幂等返回，不能用同一 SHA 补选或替换节点；需要检查其他节点时应创建新的 Git commit 后登记。应用重启会恢复超时未完成任务；暂时失败的提交可用原 SHA/节点选择重新发起。教师差异对小型文件计算准确行级变更；大文件或超出展示上限时明确标注快照/截断，避免显示虚假的变更统计。
 
 随后启动前端并访问 `http://127.0.0.1:8000/`：
 
@@ -183,7 +179,9 @@ location ^~ /bm-agent/ {
 
 创建流程依次调用 `/api/experiment-creation` 下的 `POST /sessions`、方向消息、方向确认、配置、计划生成和最终物化接口。最终物化请求必须提供 `Idempotency-Key`。这些业务接口要求先调用 `/api/auth/login` 建立 HttpOnly `BM_SESSION` Cookie；服务端从会话解析用户身份，不再接受 `X-User-Id` 或固定演示用户。退出调用 `/api/auth/logout`，当前用户可通过 `/api/me` 查询；`/api/auth/me` 保留为兼容接口。
 
-个人实验库通过 `GET /api/experiments/mine` 按 `creator_id` 返回当前用户未归档实验，按更新时间倒序；它不把仅通过课程发布获得访问权的实验复制进个人列表。工作区启动时，学生可运行本人创建的 `draft` 实验，其他学生仍需满足已发布课程及有效成员权限。个人实验分组、归档和删除暂未提供服务端持久化能力，因此界面不显示会造成已保存错觉的管理入口。
+个人实验库通过 `GET /api/experiments/mine` 按 `creator_id` 返回当前用户未归档实验，按更新时间倒序；它不把仅通过课程发布获得访问权的实验复制进个人列表。学生创建 Git 运行实例时，其他学生仍需满足已发布课程及有效成员权限。个人实验分组、归档和删除暂未提供服务端持久化能力，因此界面不显示会造成已保存错觉的管理入口。
+
+以下仍描述原服务器工作区的 guidance、补丁、深度诊断以及历史教师过程接口，保留用于旧运行记录兼容和回归，不属于新实验的编码/验收链路。新实验由本地 IDE、Gitea push 和固定 commit 的 AI 节点验收组成。
 
 学生工作区就绪后可调用 `POST /api/runs/{runId}/guidance` 请求普通代码指导。后端按运行实例权限读取实验、当前节点、索引文件和最近对话，再调用 DeepSeek OpenAI-compatible `/chat/completions`；上下文采用结构化 JSON，数据内容按不可信输入处理，并受 `GUIDANCE_MAX_CONTEXT_CHARS` 总字符预算限制（不等同于模型 Token 数），超限时优先保留学生问题并缩减代码/历史/RAG 内容。未配置模型时返回明确错误，不生成演示答案。RAG 是否可用由 Embedding 和 Chroma 的运行状态决定，未配置时返回 `ragAvailable=false`。
 

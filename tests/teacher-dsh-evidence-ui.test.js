@@ -4,16 +4,18 @@ import test from 'node:test';
 
 const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 
-test('teacher DSH view is explicitly limited to student-submitted snapshots', async () => {
+test('teacher Git review shows submitted commits, diffs, evidence, and keeps legacy snapshots historical', async () => {
   const [html, app] = await Promise.all([read('../index.html'), read('../app.js')]);
-  assert.match(html, /DSH 学习记录与主动提交/);
-  assert.match(html, /不读取实时工作区、对话或终端/);
+  assert.match(html, /学生提交与节点验收/);
+  assert.match(html, /只查看学生 push 后提交检查的 commit/);
+  assert.match(html, /历史工作区快照/);
   assert.match(app, /apiRequest\('\/teacher\/experiments'/);
   assert.match(app, /\/teacher\/experiments\/\$\{encodeURIComponent\(experimentId\)\}\/runs/);
   assert.match(app, /\/teacher\/runs\/\$\{encodeURIComponent\(runId\)\}\/submissions/);
-  assert.match(app, /\/teacher\/runs\/\$\{encodeURIComponent\(runId\)\}\/submissions\/\$\{encodeURIComponent\(submissionId\)\}/);
-  assert.match(app, /\/teacher\/dsh\/runs\/\$\{encodeURIComponent\(runId\)\}\/review/);
-  assert.match(app, /teacherDshCode\.textContent = files\.map/);
+  assert.match(app, /\/teacher\/submissions\/\$\{encodeURIComponent\(submissionId\)\}/);
+  assert.match(app, /\/teacher\/runs\/\$\{encodeURIComponent\(runId\)\}\/reviews/);
+  assert.match(app, /Array\.isArray\(detail\.diff\)/);
+  assert.match(app, /Array\.isArray\(detail\.results\)/);
   assert.doesNotMatch(app, /teacherDshCode\.innerHTML/);
 });
 

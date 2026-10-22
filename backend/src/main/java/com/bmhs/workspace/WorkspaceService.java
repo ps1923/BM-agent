@@ -2,6 +2,7 @@ package com.bmhs.workspace;
 
 import com.bmhs.auth.AuthModels.AuthenticatedUser;
 import com.bmhs.experimentcreation.ApiException;
+import com.bmhs.experimentcreation.LegacyWriteDisabled;
 import com.bmhs.workspace.WorkspaceModels.RunRecord;
 import com.bmhs.workspace.WorkspaceModels.RunView;
 import com.bmhs.workspace.WorkspaceModels.WorkspaceFile;
@@ -194,7 +195,7 @@ public class WorkspaceService {
 
     public RunView getRun(AuthenticatedUser user, long runId) {
         requireStudent(user);
-        return repository.toView(repository.findRun(runId, user.id()));
+        return repository.findRunView(runId, user.id());
     }
 
     public RunProgressView getProgress(AuthenticatedUser user, long runId) {
@@ -202,12 +203,20 @@ public class WorkspaceService {
         return repository.findProgress(runId, user.id());
     }
 
+    public void assertGitProgressWrite(AuthenticatedUser user, long runId) {
+        requireStudent(user);
+        RunRecord run = repository.findProgressRun(runId, user.id());
+        if (!"git".equals(run.workspace().workspaceType())) throw LegacyWriteDisabled.exception();
+    }
+
     @Transactional
     public RunProgressView updateNode(AuthenticatedUser user, long runId, long nodeId,
                                       WorkspaceModels.UpdateNodeRequest request) {
         requireStudent(user);
-        RunRecord run = repository.findRun(runId, user.id());
-        repository.lockWorkspaceForMutation(run.workspace().id());
+        RunRecord run = repository.findProgressRun(runId, user.id());
+        if (!"git".equals(run.workspace().workspaceType())) {
+            repository.lockWorkspaceForMutation(run.workspace().id());
+        }
         RunProgressView before = repository.findProgress(runId, user.id());
         boolean newlyCompleting = "completed".equals(request.status()) && before.nodes().stream()
                 .anyMatch(node -> node.nodeId() == nodeId && !"completed".equals(node.status()));

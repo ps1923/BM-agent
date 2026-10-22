@@ -4,14 +4,10 @@ import com.bmhs.auth.AuthService;
 import com.bmhs.auth.AuthModels.AuthenticatedUser;
 import com.bmhs.auth.CurrentUserArgumentResolver;
 import com.bmhs.auth.SessionAuthenticationFilter;
-import com.bmhs.experimentcreation.ApiException;
 import com.bmhs.experimentcreation.ApiExceptionHandler;
-import com.bmhs.workspace.WorkspaceModels.NodeProgressView;
-import com.bmhs.workspace.WorkspaceModels.RunProgressView;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
@@ -62,43 +58,36 @@ class WorkspaceControllerWebTest {
     }
 
     @Test
-    void taskPatchUsesAuthenticatedStudentAndReturnsPersistedProgress() throws Exception {
-        RunProgressView progress = new RunProgressView(8L, 5L, "in_progress", 12L, List.of(),
-                List.of(new WorkspaceModels.TaskProgressView(22L, 12L, "completed", null)));
-        when(repository.updateTaskProgress(8L, student.id(), 22L, "completed")).thenReturn(progress);
+    void legacyWorkspaceTaskWritesAreDisabledAndDoNotMutateHistory() throws Exception {
+        WorkspaceModels.WorkspaceRecord workspace = new WorkspaceModels.WorkspaceRecord(9L, 8L, 5L,
+                student.id(), "unused-root/run-8", "test-image", "container", "running", BigDecimal.ONE, 512);
+        when(repository.findProgressRun(8L, student.id())).thenReturn(new WorkspaceModels.RunRecord(
+                8L, 5L, student.id(), "in_progress", 12L, workspace));
 
         mvc.perform(patch("/api/runs/8/tasks/22")
                         .cookie(new Cookie("BM_SESSION", "test-session"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"completed\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.runId").value(8))
-                .andExpect(jsonPath("$.tasks[0].taskId").value(22))
-                .andExpect(jsonPath("$.tasks[0].status").value("completed"));
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.code").value("LEGACY_WRITE_DISABLED"));
 
-        verify(repository).updateTaskProgress(8L, student.id(), 22L, "completed");
+        verify(repository, never()).updateTaskProgress(anyLong(), anyLong(), anyLong(), any());
     }
 
     @Test
-    void directRestNodeCompletionReturnsStableConflictWhenTasksAreIncomplete() throws Exception {
+    void legacyWorkspaceNodeWritesAreDisabledWithoutCreatingSnapshots() throws Exception {
         WorkspaceModels.WorkspaceRecord workspace = new WorkspaceModels.WorkspaceRecord(9L, 8L, 5L,
                 student.id(), "unused-root/run-8", "test-image", "container", "running", BigDecimal.ONE, 512);
-        when(repository.findRun(8L, student.id())).thenReturn(new WorkspaceModels.RunRecord(
+        when(repository.findProgressRun(8L, student.id())).thenReturn(new WorkspaceModels.RunRecord(
                 8L, 5L, student.id(), "in_progress", 12L, workspace));
-        RunProgressView before = new RunProgressView(8L, 5L, "in_progress", 12L,
-                List.of(new NodeProgressView(12L, "in_progress", BigDecimal.valueOf(50), null, null)), List.of());
-        when(repository.findProgress(8L, student.id())).thenReturn(before);
-        when(repository.updateNodeProgress(8L, student.id(), 12L, "completed", BigDecimal.valueOf(100)))
-                .thenThrow(new ApiException(HttpStatus.CONFLICT, "NODE_TASKS_INCOMPLETE", "请先完成当前节点的所有任务"));
-
         mvc.perform(patch("/api/runs/8/nodes/12")
                         .cookie(new Cookie("BM_SESSION", "test-session"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"completed\",\"progressPercent\":100}"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("NODE_TASKS_INCOMPLETE"));
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.code").value("LEGACY_WRITE_DISABLED"));
 
-        verify(repository).updateNodeProgress(8L, student.id(), 12L, "completed", BigDecimal.valueOf(100));
+        verify(repository, never()).updateNodeProgress(anyLong(), anyLong(), anyLong(), any(), any());
         verify(repository, never()).createNodeCompletionSnapshot(anyLong(), anyLong(), anyLong(), anyString());
     }
 

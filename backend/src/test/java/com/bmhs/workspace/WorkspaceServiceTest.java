@@ -588,7 +588,7 @@ class WorkspaceServiceTest {
         WorkspaceRecord workspace = new WorkspaceRecord(9L, 3L, 2L, 7L, root.toString(),
                 "test-image", "container", "running", BigDecimal.ONE, 512);
         RunRecord run = new RunRecord(3L, 2L, 7L, "in_progress", 31L, workspace);
-        when(repository.findRun(3L, 7L)).thenReturn(run);
+        when(repository.findProgressRun(3L, 7L)).thenReturn(run);
         RunProgressView before = new RunProgressView(3L, 2L, "in_progress", 31L,
                 List.of(new WorkspaceModels.NodeProgressView(31L, "in_progress", BigDecimal.valueOf(90), null, null)), List.of());
         RunProgressView after = new RunProgressView(3L, 2L, "in_progress", null,
@@ -623,7 +623,7 @@ class WorkspaceServiceTest {
         WorkspaceRuntime runtime = mock(WorkspaceRuntime.class);
         WorkspaceRecord workspace = new WorkspaceRecord(9L, 3L, 2L, 7L, root.toString(),
                 "test-image", "container", "running", BigDecimal.ONE, 512);
-        when(repository.findRun(3L, 7L)).thenReturn(new RunRecord(3L, 2L, 7L, "in_progress", 31L, workspace));
+        when(repository.findProgressRun(3L, 7L)).thenReturn(new RunRecord(3L, 2L, 7L, "in_progress", 31L, workspace));
         RunProgressView before = new RunProgressView(3L, 2L, "in_progress", 31L,
                 List.of(new WorkspaceModels.NodeProgressView(31L, "in_progress", BigDecimal.ZERO, null, null)), List.of());
         when(repository.findProgress(3L, 7L)).thenReturn(before);

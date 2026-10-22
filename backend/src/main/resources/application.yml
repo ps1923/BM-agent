@@ -87,3 +87,12 @@ bm-hs:
     collection: ${CHROMA_COLLECTION:bm_hs_bugs}
     api-key: ${CHROMA_API_KEY:}
     timeout: ${CHROMA_TIMEOUT:PT20S}
+  git:
+    api-base-url: ${GITEA_API_BASE_URL:}
+    public-base-url: ${GITEA_PUBLIC_BASE_URL:}
+    admin-token: ${GITEA_ADMIN_TOKEN:}
+    webhook-secret: ${GITEA_WEBHOOK_SECRET:}
+    webhook-target-url: ${GITEA_WEBHOOK_TARGET_URL:}
+    credential-encryption-key: ${GIT_CREDENTIAL_ENCRYPTION_KEY:}
+    max-workers: ${GIT_ACCEPTANCE_MAX_WORKERS:2}
+    max-queue: ${GIT_ACCEPTANCE_MAX_QUEUE:16}

@@ -1,6 +1,7 @@
 package com.bmhs.guidance;
 
 import com.bmhs.auth.AuthModels.AuthenticatedUser;
+import com.bmhs.experimentcreation.LegacyWriteDisabled;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,6 +23,6 @@ public class GuidanceController {
     public ResponseEntity<GuidanceModels.GuidanceResponse> guidance(
             @PathVariable long runId, AuthenticatedUser user,
             @Valid @RequestBody GuidanceModels.GuidanceRequest request) {
-        return ResponseEntity.ok(service.guide(user, runId, request));
+        throw LegacyWriteDisabled.exception();
     }
 }

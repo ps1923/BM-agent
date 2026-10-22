@@ -1,6 +1,7 @@
 package com.bmhs.dsh;
 
 import com.bmhs.auth.AuthModels.AuthenticatedUser;
+import com.bmhs.experimentcreation.LegacyWriteDisabled;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,13 +26,12 @@ public class DshInstanceController {
 
     @PostMapping("/launch")
     public ResponseEntity<DshInstanceModels.InstanceView> launch(AuthenticatedUser user) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.launch(user));
+        throw LegacyWriteDisabled.exception();
     }
 
     @PostMapping("/stop")
     public ResponseEntity<Void> stop(AuthenticatedUser user) {
-        service.stop(user);
-        return ResponseEntity.noContent().build();
+        throw LegacyWriteDisabled.exception();
     }
 
     /** Called only by the trusted reverse proxy's auth_request subrequest. */

@@ -1,6 +1,7 @@
 package com.bmhs.dsh;
 
 import com.bmhs.rag.RagModels;
+import com.bmhs.experimentcreation.LegacyWriteDisabled;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,7 +29,7 @@ public class DshPluginController {
     @PostMapping("/runs")
     public ResponseEntity<DshPluginModels.RunView> bindRun(DshPrincipal principal,
                                                             @Valid @RequestBody DshPluginModels.RunBindRequest request) {
-        return ResponseEntity.ok(service.bindRun(principal, request));
+        throw LegacyWriteDisabled.exception();
     }
 
     @GetMapping("/runs/{runId:\\d+}/learning-path")
@@ -40,16 +41,14 @@ public class DshPluginController {
     public ResponseEntity<?> updateNode(DshPrincipal principal, @PathVariable long runId,
                                         @PathVariable long nodeId,
                                         @Valid @RequestBody DshPluginModels.ProgressUpdateRequest request) {
-        service.updateNode(principal, runId, nodeId, request);
-        return ResponseEntity.noContent().build();
+        throw LegacyWriteDisabled.exception();
     }
 
     @PatchMapping("/runs/{runId:\\d+}/tasks/{taskId:\\d+}")
     public ResponseEntity<?> updateTask(DshPrincipal principal, @PathVariable long runId,
                                         @PathVariable long taskId,
                                         @Valid @RequestBody DshPluginModels.ProgressUpdateRequest request) {
-        service.updateTask(principal, runId, taskId, request);
-        return ResponseEntity.noContent().build();
+        throw LegacyWriteDisabled.exception();
     }
 
     @PostMapping("/experiments/{experimentId:\\d+}/bug-memory/search")
@@ -61,12 +60,12 @@ public class DshPluginController {
     @PostMapping("/runs/{runId:\\d+}/bugs")
     public ResponseEntity<?> submitBug(DshPrincipal principal, @PathVariable long runId,
                                        @Valid @RequestBody RagModels.BugRequest request) {
-        return ResponseEntity.ok(service.submitBug(principal, runId, request));
+        throw LegacyWriteDisabled.exception();
     }
 
     @PostMapping("/runs/{runId:\\d+}/code-submissions")
     public ResponseEntity<?> submitCode(DshPrincipal principal, @PathVariable long runId,
                                         @Valid @RequestBody DshPluginModels.CodeSubmissionRequest request) {
-        return ResponseEntity.ok(service.submitCode(principal, runId, request));
+        throw LegacyWriteDisabled.exception();
     }
 }

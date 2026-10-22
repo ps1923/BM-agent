@@ -40,4 +40,9 @@ public class TeacherDashboardController {
                                                             @Valid @RequestBody TeacherModels.ReviewRequest request) {
         return ResponseEntity.ok(service.review(user, runId, request));
     }
+
+    @GetMapping("/runs/{runId:\\d+}/reviews")
+    public ResponseEntity<TeacherModels.ReviewView> getReview(@PathVariable long runId, AuthenticatedUser user) {
+        return ResponseEntity.ok(service.review(user, runId));
+    }
 }

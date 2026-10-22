@@ -74,4 +74,9 @@ public class TeacherService {
         AuthContext.requireRole(user, "teacher");
         return repository.review(user.id(), runId, request);
     }
+
+    public TeacherModels.ReviewView review(AuthenticatedUser user, long runId) {
+        AuthContext.requireRole(user, "teacher");
+        return repository.review(user.id(), runId);
+    }
 }

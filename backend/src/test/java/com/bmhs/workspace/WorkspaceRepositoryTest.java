@@ -113,7 +113,7 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
-    void nodeWithoutDeclaredTasksCanCompleteAndUnlockItsChildren() {
+    void nodeWithoutDeclaredTasksCanCompleteWithoutUnlockTransition() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         RunRecord run = runRecord();
         when(jdbc.query(contains("FROM experiment_runs r JOIN coding_workspaces"),
@@ -134,7 +134,8 @@ class WorkspaceRepositoryTest {
 
         assertEquals(expected, actual);
         verify(jdbc).update(contains("SET status = 'completed', progress_percent = 100"), eq(12L), eq(5L), eq(31L));
-        verify(jdbc).update(contains("UPDATE node_progress child"), eq(12L), eq(5L), eq(31L));
+        verify(jdbc, org.mockito.Mockito.never()).update(contains("UPDATE node_progress child"),
+                ArgumentMatchers.<Object[]>any());
         verify(jdbc).update(contains("SET status = 'in_progress', current_node_id = NULL"), eq(12L), eq(7L));
     }
 
@@ -158,21 +159,22 @@ class WorkspaceRepositoryTest {
     }
 
     @Test
-    void lockedTaskCannotBeUpdated() {
+    void previouslyLockedTaskIsNoLongerBlockedByNodeOrder() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         when(jdbc.query(contains("FROM experiment_runs r JOIN coding_workspaces"),
                 ArgumentMatchers.<RowMapper<RunRecord>>any(), eq(12L), eq(7L))).thenReturn(List.of(runRecord()));
         when(jdbc.query(contains("FROM node_tasks nt"), ArgumentMatchers.<RowMapper<NodeProgressView>>any(),
                 eq(12L), eq(22L), eq(5L))).thenReturn(List.of(new NodeProgressView(31L, "locked",
                 java.math.BigDecimal.ZERO, null, null)));
-        WorkspaceRepository repository = new WorkspaceRepository(jdbc);
+        WorkspaceRepository repository = spy(new WorkspaceRepository(jdbc));
+        RunProgressView expected = new RunProgressView(12L, 5L, "in_progress", null, List.of(), List.of());
+        doReturn(expected).when(repository).findProgress(12L, 7L);
 
-        ApiException exception = assertThrows(ApiException.class,
-                () -> repository.updateTaskProgress(12L, 7L, 22L, "completed"));
+        RunProgressView actual = repository.updateTaskProgress(12L, 7L, 22L, "completed");
 
-        assertEquals("NODE_LOCKED", exception.code());
-        verify(jdbc, org.mockito.Mockito.never()).update(contains("UPDATE task_progress"),
-                ArgumentMatchers.<Object[]>any());
+        assertEquals(expected, actual);
+        verify(jdbc).update(contains("UPDATE task_progress"), eq("completed"), eq("completed"),
+                eq(12L), eq(5L), eq(22L));
     }
 
     @Test

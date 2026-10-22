@@ -18,7 +18,7 @@ const sha256HexFallback = runInNewContext(
   { Uint8Array, DataView, Array, Math },
 );
 const studentDashboardStart = app.indexOf('async function renderStudentDashboard()');
-const studentDashboardEnd = app.indexOf('\nfunction validateDshLaunchUrl', studentDashboardStart);
+const studentDashboardEnd = app.indexOf('\nasync function renderAdminDashboard', studentDashboardStart);
 const clearStudentDashboardStart = app.indexOf('function clearStudentDashboard()');
 const clearStudentDashboardEnd = app.indexOf('\nfunction formatTeacherDate', clearStudentDashboardStart);
 const renderSimpleRouteStart = app.indexOf('function renderSimpleRoute(route)');
@@ -53,7 +53,7 @@ function createStudentDashboardHarness() {
     studentIdentity,
     studentCourseCount,
     studentCourses,
-    loadStudentDshStatus() {},
+    studentLocalCodingState: makeElement(),
     loginView: { classList: { remove() {}, add() {} } },
     studentView: { classList: { remove() {}, add() {} } },
     teacherView: { classList: { remove() {}, add() {} } },
@@ -410,9 +410,10 @@ test('teacher dashboards and task updates discard stale request results', () => 
   assert.match(app, /clearTeacherBugReview\(\);\s*try \{\s*window\.localStorage\.setItem\(STORAGE_KEYS\.teacherCourse/);
   assert.match(app, /function isRunContextCurrent\(runId, epoch\)/);
   assert.match(app, /if \(!isRunContextCurrent\(runId, epoch\)\) return;/);
-  assert.match(app, /const allTasksComplete = Boolean\(definition\) && tasks\.every/);
-  assert.match(app, /本节点没有细分任务。进度正常时，可直接手动完成节点。/);
-  assert.match(app, /本节点没有细分任务。进度正常时，可直接手动完成节点。/);
+  assert.match(app, /canUpdate = Boolean\(activeRun && nodeProgress && nodeProgress\.status !== 'completed'\)/);
+  assert.match(app, /completeNodeButton\.disabled = !activeRun \|\| !current\s*\|\| current\.status === 'completed'/);
+  assert.doesNotMatch(app, /allTasksComplete/);
+  assert.match(app, /本节点没有细分任务。节点顺序仅供参考，不会限制学习。/);
 });
 
 test('student dashboard discards a pending response after switching to a teacher account', async () => {
