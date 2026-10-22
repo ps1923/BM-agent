@@ -47,6 +47,7 @@ bm-hs:
     image: ${DSH_IMAGE:}
     api-base-url: ${DSH_BMHS_API_BASE_URL:}
     public-base-url: ${DSH_PUBLIC_BASE_URL:}
+    insecure-http-enabled: ${DSH_INSECURE_HTTP_ENABLED:false}
     cpu-limit: ${DSH_CPU_LIMIT:1.0}
     memory-limit-mb: ${DSH_MEMORY_LIMIT_MB:2048}
     pids-limit: ${DSH_PIDS_LIMIT:256}

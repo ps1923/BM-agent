@@ -1,6 +1,6 @@
 const DEFAULT_TIMEOUT_MS = 15_000;
 
-function normalizeBaseUrl(value) {
+function normalizeBaseUrl(value, allowInsecureHttp = false) {
   if (!value) throw new Error('BMHS_API_BASE_URL is required.');
   let url;
   try {
@@ -11,15 +11,16 @@ function normalizeBaseUrl(value) {
   if (url.username || url.password || url.search || url.hash) {
     throw new Error('BMHS_API_BASE_URL must not contain credentials, query, or fragment.');
   }
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))) {
+  const loopbackHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  if (url.protocol !== 'https:' && !loopbackHttp && !(allowInsecureHttp && url.protocol === 'http:')) {
     throw new Error('BMHS_API_BASE_URL must use HTTPS except for loopback development.');
   }
   return url.toString().replace(/\/$/, '');
 }
 
 export class BmhsApiClient {
-  constructor({ baseUrl, credential, refreshCredential, fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS }) {
-    this.baseUrl = normalizeBaseUrl(baseUrl);
+  constructor({ baseUrl, credential, refreshCredential, allowInsecureHttp = false, fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+    this.baseUrl = normalizeBaseUrl(baseUrl, allowInsecureHttp);
     if (typeof credential !== 'string' || credential.length < 16 || /[\r\n]/.test(credential)) {
       throw new Error('BMHS_DSH_CREDENTIAL must be a valid short-lived bearer credential.');
     }
@@ -96,6 +97,7 @@ export function createApiFromEnvironment(env = process.env, fetchImpl = globalTh
     baseUrl: env.BMHS_API_BASE_URL,
     credential: env.BMHS_DSH_CREDENTIAL,
     refreshCredential: env.BMHS_DSH_REFRESH_CREDENTIAL,
+    allowInsecureHttp: env.BMHS_DSH_ALLOW_INSECURE_HTTP === 'true',
     fetchImpl,
   });
 }

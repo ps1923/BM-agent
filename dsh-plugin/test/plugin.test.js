@@ -194,6 +194,8 @@ test('API client accepts HTTPS and loopback only and sends bearer without identi
   assert.equal(received.options.headers.Authorization, 'Bearer short-lived-credential-value');
   assert.equal(received.options.body, undefined);
   assert.throws(() => new BmhsApiClient({ baseUrl: 'http://bmhs.example.test', credential: 'short-lived-credential-value' }), /HTTPS/);
+  assert.equal(new BmhsApiClient({ baseUrl: 'http://bmhs.example.test', credential: 'short-lived-credential-value', allowInsecureHttp: true }).baseUrl,
+    'http://bmhs.example.test');
 });
 
 test('API error never echoes response body', async () => {

@@ -6,7 +6,7 @@ Standalone Cordis bundle for DeepSeek Harness `dsh-v0.2.1-rc.2`. It adds model t
 
 The DSH instance launcher must inject these variables into each isolated student's DSH process/container:
 
-- `BMHS_API_BASE_URL`: BM-HS origin. HTTPS is required except loopback development.
+- `BMHS_API_BASE_URL`: BM-HS origin. HTTPS is required except loopback development. `BMHS_DSH_ALLOW_INSECURE_HTTP=true` is an explicit temporary-test-only override; it must remain unset/false for public deployments.
 - `BMHS_DSH_CREDENTIAL`: 15-minute bearer credential minted by the server for that student and DSH instance.
 - `BMHS_DSH_REFRESH_CREDENTIAL`: rotating, instance-bound refresh credential. The plugin exchanges it only with `/api/plugin/auth/refresh`, keeps both credentials inside its closure, and removes them from the process environment so child command tools do not inherit them. Refresh credentials are revoked when the instance stops; never persist or log either credential.
 - `BMHS_DSH_WORKSPACE_ID`: random opaque workspace binding identifier, not a filesystem path. It must be unique to the DSH instance/workspace and must not encode a username or path.

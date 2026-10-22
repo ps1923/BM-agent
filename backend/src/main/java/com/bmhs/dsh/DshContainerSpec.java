@@ -7,4 +7,4 @@ public record DshContainerSpec(String image, String dockerBinary, String apiBase
                                String networkName, String volumeName, String workspaceRef,
                                String accessCredential, String refreshCredential,
                                double cpuLimit, int memoryLimitMb, int pidsLimit,
-                               Duration startupTimeout) {}
+                               Duration startupTimeout, boolean insecureHttpEnabled) {}

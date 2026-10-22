@@ -20,7 +20,7 @@ class DshInstanceServiceTest {
     private final DshContainerRuntime runtime = mock(DshContainerRuntime.class);
     private final DshInstanceService service = new DshInstanceService(repository, tokenRepository, tokenService, runtime,
             "docker", "dsh:test", "https://bmhs.example.test", "https://bmhs.example.test/dsh",
-            true, 1.0, 2048, 256, Duration.ofSeconds(20));
+            true, false, 1.0, 2048, 256, Duration.ofSeconds(20));
     private final AuthenticatedUser student = new AuthenticatedUser(7, "s@example.test", "Student", "student");
 
     @Test
@@ -40,7 +40,8 @@ class DshInstanceServiceTest {
         assertEquals("running", result.status());
         assertTrue(result.launchUrl().contains("?token="));
         verify(runtime).start(argThat(spec -> spec.cpuLimit() == 1.0 && spec.memoryLimitMb() == 2048
-                && spec.pidsLimit() == 256 && spec.workspaceRef().equals(stopped.routeKey())));
+                && spec.pidsLimit() == 256 && spec.workspaceRef().equals(stopped.routeKey())
+                && !spec.insecureHttpEnabled()));
         verify(repository, never()).markError(12);
     }
 
@@ -119,10 +120,32 @@ class DshInstanceServiceTest {
         assertThrows(ApiException.class, () -> service.launch(teacher));
 
         DshInstanceService unconfigured = new DshInstanceService(repository, tokenRepository, tokenService, runtime,
-                "docker", "", "", "", true, 1, 2048, 256, Duration.ofSeconds(20));
+                "docker", "", "", "", true, false, 1, 2048, 256, Duration.ofSeconds(20));
         ApiException error = assertThrows(ApiException.class, () -> unconfigured.launch(student));
         assertEquals("DSH_NOT_CONFIGURED", error.code());
         verifyNoInteractions(runtime);
+    }
+
+    @Test
+    void publicHttpIsRejectedUnlessTheExplicitInsecureTestSwitchIsEnabled() {
+        DshInstanceModels.Instance stopped = instance("stopped", null, null);
+        when(repository.getOrCreate(eq(7L), anyString(), anyString(), eq(0.5), eq(768), eq(128))).thenReturn(stopped);
+        when(repository.claimStart(12)).thenReturn(true);
+        when(tokenService.issuePair(7, 12)).thenReturn(credentials());
+        when(runtime.start(any())).thenReturn(new DshInstanceModels.RuntimeHandle("abcdef123456", 49152, "http://example.test"));
+        when(repository.markRunning(12, "abcdef123456", 49152)).thenReturn(true);
+        when(repository.findByStudent(7)).thenReturn(Optional.of(instance("running", "abcdef123456", 49152)));
+
+        DshInstanceService httpEnabled = new DshInstanceService(repository, tokenRepository, tokenService, runtime,
+                "docker", "dsh:test", "http://47.109.176.135/bm-agent/api", "http://47.109.176.135/bm-agent/dsh",
+                true, true, 0.5, 768, 128, Duration.ofSeconds(20));
+        assertEquals("running", httpEnabled.launch(student).status());
+        verify(runtime).start(argThat(spec -> spec.insecureHttpEnabled()));
+
+        DshInstanceService httpDisabled = new DshInstanceService(repository, tokenRepository, tokenService, runtime,
+                "docker", "dsh:test", "http://47.109.176.135/bm-agent/api", "http://47.109.176.135/bm-agent/dsh",
+                true, false, 0.5, 768, 128, Duration.ofSeconds(20));
+        assertEquals("DSH_NOT_CONFIGURED", assertThrows(ApiException.class, () -> httpDisabled.launch(student)).code());
     }
 
     private DshTokenService.CredentialPair credentials() {

@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.time.Duration;
@@ -15,6 +17,7 @@ import java.util.UUID;
 
 @Service
 public class DshInstanceService {
+    private static final Logger logger = LoggerFactory.getLogger(DshInstanceService.class);
     private static final Duration IDLE_TIMEOUT = Duration.ofMinutes(30);
     private static final int CLEANUP_BATCH_SIZE = 50;
 
@@ -27,6 +30,7 @@ public class DshInstanceService {
     private final String apiBaseUrl;
     private final String publicBaseUrl;
     private final boolean enabled;
+    private final boolean insecureHttpEnabled;
     private final double cpuLimit;
     private final int memoryLimitMb;
     private final int pidsLimit;
@@ -39,6 +43,7 @@ public class DshInstanceService {
                               @Value("${bm-hs.dsh.api-base-url:}") String apiBaseUrl,
                               @Value("${bm-hs.dsh.public-base-url:}") String publicBaseUrl,
                               @Value("${bm-hs.dsh.enabled:false}") boolean enabled,
+                              @Value("${bm-hs.dsh.insecure-http-enabled:false}") boolean insecureHttpEnabled,
                               @Value("${bm-hs.dsh.cpu-limit:1.0}") double cpuLimit,
                               @Value("${bm-hs.dsh.memory-limit-mb:2048}") int memoryLimitMb,
                               @Value("${bm-hs.dsh.pids-limit:256}") int pidsLimit,
@@ -52,6 +57,7 @@ public class DshInstanceService {
         this.apiBaseUrl = apiBaseUrl;
         this.publicBaseUrl = publicBaseUrl;
         this.enabled = enabled;
+        this.insecureHttpEnabled = insecureHttpEnabled;
         this.cpuLimit = cpuLimit;
         this.memoryLimitMb = memoryLimitMb;
         this.pidsLimit = pidsLimit;
@@ -79,6 +85,7 @@ public class DshInstanceService {
 
         String networkName = networkName(instance.routeKey());
         DshInstanceModels.RuntimeHandle started = null;
+        String failureStage = "container_start";
         try {
             String publicUrl = publicUrl(instance.routeKey());
             URI publicUri = URI.create(publicUrl);
@@ -86,14 +93,18 @@ public class DshInstanceService {
             DshContainerSpec spec = new DshContainerSpec(image, dockerBinary, apiBaseUrl, publicUrl,
                     publicUri.getRawAuthority(), containerName(instance.routeKey()), networkName,
                     instance.storageVolume(), instance.routeKey(), credentials.access().token(),
-                    credentials.refreshCredential(), cpuLimit, memoryLimitMb, pidsLimit, startupTimeout);
+                    credentials.refreshCredential(), cpuLimit, memoryLimitMb, pidsLimit, startupTimeout,
+                    insecureHttpEnabled);
             started = runtime.start(spec);
+            failureStage = "persist_running";
             if (!repository.markRunning(instance.id(), started.containerId(), started.proxyPort())) {
                 throw new IllegalStateException("DSH 启动状态无法提交");
             }
+            failureStage = "load_running_state";
             DshInstanceModels.Instance running = repository.findByStudent(user.id()).orElseThrow();
             return new DshInstanceModels.InstanceView(running.status(), started.launchUrl(), running.lastActiveAt());
         } catch (RuntimeException exception) {
+            logger.warn("DSH launch failed at {} ({})", failureStage, exception.getClass().getSimpleName());
             if (started != null) {
                 try { runtime.stop(dockerBinary, started.containerId(), networkName, startupTimeout); }
                 catch (RuntimeException ignored) { }
@@ -168,20 +179,20 @@ public class DshInstanceService {
 
     private void validateConfiguration() {
         if (image == null || !image.matches("[A-Za-z0-9._/:@-]{1,255}")) unavailable("DSH 镜像未配置");
-        if (apiBaseUrl == null || !validOrigin(apiBaseUrl)) unavailable("BM-HS API 地址未配置或不安全");
-        if (publicBaseUrl == null || !validOrigin(publicBaseUrl)) unavailable("DSH 安全访问地址未配置");
+        if (apiBaseUrl == null || !validOrigin(apiBaseUrl, insecureHttpEnabled)) unavailable("BM-HS API 地址未配置或不安全");
+        if (publicBaseUrl == null || !validOrigin(publicBaseUrl, insecureHttpEnabled)) unavailable("DSH 安全访问地址未配置");
         if (!Double.isFinite(cpuLimit) || cpuLimit <= 0 || memoryLimitMb <= 0 || pidsLimit <= 0
                 || startupTimeout == null || startupTimeout.isNegative() || startupTimeout.isZero()) {
             unavailable("DSH 资源或启动参数无效");
         }
     }
 
-    private boolean validOrigin(String value) {
+    private boolean validOrigin(String value, boolean allowInsecureHttp) {
         try {
             URI uri = URI.create(value);
             boolean secure = "https".equalsIgnoreCase(uri.getScheme());
             boolean loopbackHttp = "http".equalsIgnoreCase(uri.getScheme())
-                    && ("localhost".equalsIgnoreCase(uri.getHost()) || "127.0.0.1".equals(uri.getHost()));
+                    && (allowInsecureHttp || "localhost".equalsIgnoreCase(uri.getHost()) || "127.0.0.1".equals(uri.getHost()));
             return (secure || loopbackHttp) && uri.getHost() != null && uri.getRawUserInfo() == null
                     && uri.getRawQuery() == null && uri.getRawFragment() == null;
         } catch (RuntimeException exception) {

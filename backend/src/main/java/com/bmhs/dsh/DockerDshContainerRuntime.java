@@ -1,6 +1,8 @@
 package com.bmhs.dsh;
 
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -16,20 +18,28 @@ import java.util.regex.Pattern;
 
 @Component
 public class DockerDshContainerRuntime implements DshContainerRuntime {
+    private static final Logger logger = LoggerFactory.getLogger(DockerDshContainerRuntime.class);
     private static final int MAX_OUTPUT_BYTES = 32_768;
     private static final Pattern PUBLISHED_PORT = Pattern.compile("127\\.0\\.0\\.1:(\\d+)");
     @Override
     public DshInstanceModels.RuntimeHandle start(DshContainerSpec spec) {
         String containerId = null;
+        String failureStage = "create_volume";
         try {
             createNamedResource(spec.dockerBinary(), "volume", spec.volumeName(), spec.startupTimeout());
+            failureStage = "create_network";
             createNamedResource(spec.dockerBinary(), "network", spec.networkName(), spec.startupTimeout());
+            failureStage = "create_container";
             containerId = createContainer(spec);
+            failureStage = "inject_credentials";
             writeCredentials(spec, containerId);
+            failureStage = "resolve_proxy_port";
             int port = resolvePublishedPort(spec.dockerBinary(), containerId, spec.startupTimeout());
+            failureStage = "await_launch_url";
             String launchUrl = awaitLaunchUrl(spec, containerId);
             return new DshInstanceModels.RuntimeHandle(containerId, port, launchUrl);
         } catch (RuntimeException exception) {
+            logger.warn("DSH container provisioning failed at {} ({})", failureStage, exception.getClass().getSimpleName());
             try {
                 removeContainer(spec.dockerBinary(), containerId == null ? spec.containerName() : containerId,
                         spec.startupTimeout());
@@ -63,6 +73,7 @@ public class DockerDshContainerRuntime implements DshContainerRuntime {
                 "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                 "--env", "DSH_PUBLIC_URL=" + spec.publicUrl(),
                 "--env", "DSH_TRUSTED_HOST=" + spec.trustedHost(),
+                "--env", "BMHS_DSH_ALLOW_INSECURE_HTTP=" + spec.insecureHttpEnabled(),
                 "--publish", "127.0.0.1::3080", "--volume", spec.volumeName() + ":/workspace",
                 "--tmpfs", "/run/bmhs-dsh:rw,noexec,nosuid,nodev,size=64k,mode=0700,uid=10001,gid=10001",
                 "--workdir", "/workspace",
@@ -76,18 +87,23 @@ public class DockerDshContainerRuntime implements DshContainerRuntime {
     }
 
     private void writeCredentials(DshContainerSpec spec, String containerId) {
-        String contents = "BMHS_API_BASE_URL=" + envValue(spec.apiBaseUrl()) + "\n"
-                + "BMHS_DSH_CREDENTIAL=" + envValue(spec.accessCredential()) + "\n"
-                + "BMHS_DSH_REFRESH_CREDENTIAL=" + envValue(spec.refreshCredential()) + "\n"
-                + "BMHS_DSH_WORKSPACE_ID=" + envValue(spec.workspaceRef()) + "\n";
+        String contents = "BMHS_API_BASE_URL=" + envValue("BMHS_API_BASE_URL", spec.apiBaseUrl()) + "\n"
+                + "BMHS_DSH_CREDENTIAL=" + envValue("BMHS_DSH_CREDENTIAL", spec.accessCredential()) + "\n"
+                + "BMHS_DSH_REFRESH_CREDENTIAL=" + envValue("BMHS_DSH_REFRESH_CREDENTIAL", spec.refreshCredential()) + "\n"
+                + "BMHS_DSH_WORKSPACE_ID=" + envValue("BMHS_DSH_WORKSPACE_ID", spec.workspaceRef()) + "\n";
         CommandResult result = command(List.of(spec.dockerBinary(), "exec", "--interactive", containerId,
                 "sh", "-lc", "umask 077 && cat > /run/bmhs-dsh/credentials"), spec.startupTimeout(),
                 contents.getBytes(StandardCharsets.UTF_8));
-        if (result.exitCode() != 0 || result.truncated()) throw new IllegalStateException("DSH 凭据安全注入失败");
+        if (result.exitCode() != 0 || result.truncated()) {
+            logger.warn("DSH credential injection returned exitCode={} outputBytes={} truncated={}",
+                    result.exitCode(), result.output().length(), result.truncated());
+            throw new IllegalStateException("DSH 凭据安全注入失败");
+        }
     }
 
-    private String envValue(String value) {
+    private String envValue(String name, String value) {
         if (value == null || value.isBlank() || value.contains("\n") || value.contains("\r")) {
+            logger.warn("DSH credential input is invalid for {}", name);
             throw new IllegalArgumentException("DSH 容器环境配置无效");
         }
         return value;
@@ -156,8 +172,14 @@ public class DockerDshContainerRuntime implements DshContainerRuntime {
         }, "bmhs-dsh-docker-output");
         reader.setDaemon(true);
         reader.start();
-        try (OutputStream output = process.getOutputStream()) {
-            if (stdin != null) output.write(stdin);
+        try {
+            if (stdin != null) {
+                try (OutputStream output = process.getOutputStream()) {
+                    output.write(stdin);
+                }
+            } else {
+                process.getOutputStream().close();
+            }
             if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
                 throw new IllegalStateException("Docker 操作超时");
