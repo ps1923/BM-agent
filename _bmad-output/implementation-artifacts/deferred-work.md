@@ -104,3 +104,9 @@
 - 新本地 IDE + 手动 push + 固定 commit 多节点 AI 验收主流程、Git-only 学习进度、教师提交/差异查看、实验范围 Bug 审核、增量迁移脚本和 Gitea Compose 配置已实现；自动化 Spring Boot 205 项、Node 107 项通过，Compose 配置检查通过。
 - 尚未在 disposable MySQL/Gitea 环境执行迁移或完成真实本地 push、签名 webhook、模型报告和登录后教师页面 E2E；未执行生产部署或生产数据库修改。下一次阶段验收需先准备隔离数据库、可访问的 Gitea 与模型测试配置，再进行真实浏览器和权限/并发验证。
 - 首次登记同一运行实例的 commit SHA 时节点集合固定；同一 SHA 不能后续补选节点。需要检查其他节点时，创建新 commit 后重新登记。
+
+## 2026-10-22 管理员 Git 配置页面
+
+- **Webhook 出站目标限制：**配置保存会拒绝常见私网/保留 IP 字面量和保留域名，但不会解析管理员输入的公网主机名；该主机名仍可能解析到内网地址或遭遇 DNS rebinding。部署前限制 Gitea 容器的出站网络，只允许 BM-HS Webhook 服务或明确的公网目标；不能只依赖主机名语法校验。
+- **部署前置：**发布新后端前，将 `database/migrations/20261022_add_git_global_settings.sql` 应用到应用实际连接的数据库；`GIT_CREDENTIAL_ENCRYPTION_KEY` 必须在各后端实例间保持一致且稳定。
+- **未完成的实际页面验收：**本机前端可加载，但本地 Spring API 不可用，未能使用管理员账号完成登录后的表单读写；部署到验收环境后需补做浏览器验证。未执行迁移、线上部署或生产数据操作。

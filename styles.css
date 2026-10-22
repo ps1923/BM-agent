@@ -670,6 +670,22 @@ button { cursor: pointer; }
 .admin-reviewer-card { align-items: end; margin-top: 26px; }
 .admin-reviewer-card label { display: grid; flex: 1; gap: 7px; color: #64748b; font-size: 10px; }
 .admin-reviewer-card select { min-height: 40px; padding: 0 11px; border: 1px solid #dbe2ea; border-radius: 7px; color: #334155; background: #fff; font: inherit; }
+.admin-settings-card { display: block; max-width: 820px; margin-top: 24px; padding: 24px; }
+.admin-settings-status { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.admin-settings-status h2 { margin: 2px 0 7px; color: #253247; font-size: 17px; }
+.admin-settings-status .publish-description { margin-bottom: 0; }
+.status-badge-incomplete { color: #92400e; background: #fef3c7; }
+.admin-git-settings-form { display: grid; gap: 14px; margin-top: 20px; }
+.admin-git-settings-form > label:not(.admin-secret-clear) { display: grid; gap: 7px; color: #536176; font-size: 11px; font-weight: 650; }
+.admin-git-settings-form input:not([type="checkbox"]) { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid #dbe2ea; border-radius: 7px; color: #253247; background: #fff; font: inherit; font-weight: 450; }
+.admin-git-settings-form input:focus { border-color: #6b9df2; outline: 3px solid rgba(59, 130, 246, .12); }
+.admin-git-settings-form input:disabled { color: #94a3b8; background: #f8fafc; }
+.admin-git-settings-form small { color: #8793a3; font-size: 10px; font-weight: 400; line-height: 1.5; }
+.admin-git-settings-form .admin-secret-clear { display: flex; align-items: center; gap: 8px; margin-top: -8px; color: #8a4b35; font-size: 10px; font-weight: 500; }
+.admin-secret-clear input { accent-color: #c2410c; }
+.admin-settings-actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 5px; }
+.admin-settings-actions .primary-action, .admin-settings-actions .secondary-action { min-height: 38px; padding: 0 14px; }
+.admin-git-settings-form .form-message { min-height: 18px; margin: 0; }
 .teacher-monitor-heading { align-items: flex-end; margin-top: 0; }
 .monitor-course-picker { display: grid; flex: 0 0 min(250px, 35%); gap: 6px; color: #64748b; font-size: 10px; }
 .monitor-course-picker select { width: 100%; }
@@ -736,9 +752,17 @@ button { cursor: pointer; }
 .topbar-action.is-quiet { color: #94a3b8; }
 
 @media (max-width: 900px) {
+  .admin-settings-card { padding: 18px; }
   .editor-workspace { grid-template-columns: 190px minmax(300px, 1fr) 318px; }
   .code-location { display: none; }
   .editor-node-tag { display: none; }
+}
+
+@media (max-width: 600px) {
+  .admin-settings-status { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .admin-settings-actions { justify-content: stretch; }
+  .admin-settings-actions > button { flex: 1; }
+  .dashboard-user { flex-wrap: wrap; }
 }
 
 @media (max-width: 820px) {

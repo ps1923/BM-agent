@@ -73,10 +73,31 @@
     </main>
 
     <main id="adminView" class="route-view dashboard-view" aria-labelledby="adminTitle">
-      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>系统管理</small></div></div><div class="dashboard-user"><span id="adminIdentity"></span><button id="adminLogoutButton" class="text-action" type="button">退出</button></div></header>
+      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>系统管理</small></div></div><div class="dashboard-user"><span id="adminIdentity"></span><button id="adminPersonalCenterButton" class="secondary-action" type="button">个人中心</button><button id="adminLogoutButton" class="text-action" type="button">退出</button></div></header>
       <section class="dashboard-content"><div class="dashboard-heading"><div><p class="dashboard-eyebrow">ADMINISTRATION</p><h1 id="adminTitle">个人实验审核教师</h1><p>为未纳入课程发布的个人实验指定唯一审核教师。</p></div></div>
         <section class="teacher-create-card admin-reviewer-card"><label for="adminExperiment">个人实验<select id="adminExperiment"><option value="">正在加载…</option></select></label><label for="adminReviewer">审核教师<select id="adminReviewer"><option value="">请选择教师</option></select></label><button id="adminAssignReviewer" class="primary-action" type="button" disabled>保存审核教师</button></section>
         <p id="adminReviewerMessage" class="form-message" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <main id="adminPersonalCenterView" class="route-view dashboard-view" aria-labelledby="adminPersonalCenterTitle">
+      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>个人中心</small></div></div><div class="dashboard-user"><span id="adminPersonalCenterIdentity"></span><button id="adminBackToDashboardButton" class="secondary-action" type="button">管理工作台</button><button id="adminPersonalCenterLogoutButton" class="text-action" type="button">退出</button></div></header>
+      <section class="dashboard-content">
+        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">ADMIN PERSONAL CENTER</p><h1 id="adminPersonalCenterTitle">Git 仓库连接配置</h1><p>配置全站共享的 Gitea 服务。只有管理员可查看和修改；凭据加密保存在服务器数据库中。</p></div></div>
+        <section class="teacher-create-card admin-settings-card" aria-labelledby="adminGitSettingsTitle">
+          <div class="admin-settings-status"><div><p class="dashboard-eyebrow">GITEA INTEGRATION</p><h2 id="adminGitSettingsTitle">仓库服务设置</h2><p id="adminGitSettingsSummary" class="publish-description">正在读取配置状态…</p></div><span id="adminGitSettingsBadge" class="status-badge">读取中</span></div>
+          <form id="adminGitSettingsForm" class="admin-git-settings-form" novalidate>
+            <label for="adminGitApiUrl">Gitea 内部 API 地址<input id="adminGitApiUrl" name="apiBaseUrl" maxlength="500" placeholder="http://gitea:3000" required /><small>仅允许 localhost、127.0.0.1、::1 或隔离服务名 gitea。</small></label>
+            <label for="adminGitPublicUrl">公网克隆地址<input id="adminGitPublicUrl" name="publicBaseUrl" type="url" maxlength="500" placeholder="https://git.example.edu" required /><small>学生使用此地址克隆实验仓库，必须为 HTTPS。</small></label>
+            <label for="adminGitWebhookUrl">Gitea Webhook 回调地址<input id="adminGitWebhookUrl" name="webhookTargetUrl" type="url" maxlength="1000" placeholder="https://example.edu/api/integrations/gitea/webhook" required /><small>必须是公网 HTTPS 地址；系统不会向该地址发起探测请求。</small></label>
+            <label for="adminGitAdminToken">Gitea 管理令牌<input id="adminGitAdminToken" name="adminToken" type="password" maxlength="4096" autocomplete="new-password" placeholder="留空表示保留当前令牌" /><small id="adminGitAdminTokenState">正在读取凭据状态…</small></label>
+            <label class="admin-secret-clear"><input id="adminGitClearAdminToken" type="checkbox" />明确清除已保存的管理令牌</label>
+            <label for="adminGitWebhookSecret">Webhook 签名密钥<input id="adminGitWebhookSecret" name="webhookSecret" type="password" maxlength="4096" autocomplete="new-password" placeholder="至少 32 个字符；留空表示保留当前密钥" /><small id="adminGitWebhookSecretState">正在读取凭据状态…</small></label>
+            <label class="admin-secret-clear"><input id="adminGitClearWebhookSecret" type="checkbox" />明确清除已保存的 Webhook 密钥</label>
+            <p id="adminGitSettingsMessage" class="form-message" role="status" aria-live="polite"></p>
+            <div class="admin-settings-actions"><button id="adminGitSettingsReload" class="secondary-action" type="button">重新读取</button><button id="adminGitSettingsSave" class="primary-action" type="submit">保存配置</button></div>
+          </form>
+        </section>
       </section>
     </main>
 

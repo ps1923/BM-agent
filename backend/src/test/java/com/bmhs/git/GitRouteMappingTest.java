@@ -18,6 +18,7 @@ class GitRouteMappingTest {
     void gitAndLegacyDshTeacherRoutesRegisterTogetherWithoutAmbiguity() {
         MockMvcBuilders.standaloneSetup(
                 new GitAcceptanceController(mock(GitAcceptanceService.class)),
+                new GitAdminSettingsController(mock(GitAdminSettingsService.class)),
                 new TeacherDshController(mock(DshPluginService.class)))
                 .build();
     }

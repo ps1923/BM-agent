@@ -58,6 +58,7 @@ function createStudentDashboardHarness() {
     studentView: { classList: { remove() {}, add() {} } },
     teacherView: { classList: { remove() {}, add() {} } },
     adminView: { classList: { remove() {}, add() {} } },
+    adminPersonalCenterView: { classList: { remove() {}, add() {} } },
     hideProtectedViews() {},
     renderTeacherDashboard() {},
     document: { createElement: makeElement },

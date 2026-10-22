@@ -2,6 +2,8 @@ package com.bmhs.git;
 
 import com.bmhs.experimentcreation.ApiException;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
@@ -15,10 +17,15 @@ import java.util.Base64;
 public class GitCredentialCipher {
     private static final int NONCE_BYTES = 12;
     private static final int TAG_BITS = 128;
-    private final GitConfig config;
+    private final String credentialEncryptionKey;
     private final SecureRandom random = new SecureRandom();
 
-    public GitCredentialCipher(GitConfig config) { this.config = config; }
+    @Autowired
+    public GitCredentialCipher(@Value("${bm-hs.git.credential-encryption-key:}") String credentialEncryptionKey) {
+        this.credentialEncryptionKey = credentialEncryptionKey == null ? "" : credentialEncryptionKey.trim();
+    }
+
+    public GitCredentialCipher(GitConfig config) { this(config.credentialEncryptionKey()); }
 
     public String encrypt(String plaintext) {
         try {
@@ -55,7 +62,7 @@ public class GitCredentialCipher {
 
     private SecretKeySpec key() {
         try {
-            byte[] bytes = Base64.getDecoder().decode(config.credentialEncryptionKey());
+            byte[] bytes = Base64.getDecoder().decode(credentialEncryptionKey);
             if (bytes.length != 32) throw new IllegalArgumentException("Git credential key must be 32 bytes");
             return new SecretKeySpec(bytes, "AES");
         } catch (IllegalArgumentException exception) {

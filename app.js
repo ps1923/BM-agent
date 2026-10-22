@@ -70,11 +70,33 @@ const routeStatus = document.querySelector('#routeStatus');
 const studentView = document.querySelector('#studentView');
 const teacherView = document.querySelector('#teacherView');
 const adminView = document.querySelector('#adminView');
+const adminPersonalCenterView = document.querySelector('#adminPersonalCenterView');
 const adminIdentity = document.querySelector('#adminIdentity');
 const adminExperiment = document.querySelector('#adminExperiment');
 const adminReviewer = document.querySelector('#adminReviewer');
 const adminAssignReviewer = document.querySelector('#adminAssignReviewer');
 const adminReviewerMessage = document.querySelector('#adminReviewerMessage');
+const adminPersonalCenterIdentity = document.querySelector('#adminPersonalCenterIdentity');
+const adminPersonalCenterButton = document.querySelector('#adminPersonalCenterButton');
+const adminBackToDashboardButton = document.querySelector('#adminBackToDashboardButton');
+const adminGitSettingsForm = document.querySelector('#adminGitSettingsForm');
+const adminGitApiUrl = document.querySelector('#adminGitApiUrl');
+const adminGitPublicUrl = document.querySelector('#adminGitPublicUrl');
+const adminGitWebhookUrl = document.querySelector('#adminGitWebhookUrl');
+const adminGitAdminToken = document.querySelector('#adminGitAdminToken');
+const adminGitWebhookSecret = document.querySelector('#adminGitWebhookSecret');
+const adminGitClearAdminToken = document.querySelector('#adminGitClearAdminToken');
+const adminGitClearWebhookSecret = document.querySelector('#adminGitClearWebhookSecret');
+const adminGitAdminTokenState = document.querySelector('#adminGitAdminTokenState');
+const adminGitWebhookSecretState = document.querySelector('#adminGitWebhookSecretState');
+const adminGitSettingsSummary = document.querySelector('#adminGitSettingsSummary');
+const adminGitSettingsBadge = document.querySelector('#adminGitSettingsBadge');
+const adminGitSettingsMessage = document.querySelector('#adminGitSettingsMessage');
+const adminGitSettingsSave = document.querySelector('#adminGitSettingsSave');
+const adminGitSettingsReload = document.querySelector('#adminGitSettingsReload');
+const adminGitSettingsFields = [adminGitApiUrl, adminGitPublicUrl, adminGitWebhookUrl, adminGitAdminToken,
+  adminGitWebhookSecret, adminGitClearAdminToken, adminGitClearWebhookSecret];
+let adminGitSettingsRequestId = 0;
 const studentIdentity = document.querySelector('#studentIdentity');
 const teacherIdentity = document.querySelector('#teacherIdentity');
 const studentLogoutButton = document.querySelector('#studentLogoutButton');
@@ -418,6 +440,98 @@ async function renderAdminDashboard() {
     setMessage(adminReviewerMessage, error.message || '管理数据加载失败。', true);
   }
 }
+
+async function renderAdminGitSettings() {
+  const user = getCurrentUser();
+  if (!user || user.role !== 'admin') return false;
+  const requestId = ++adminGitSettingsRequestId;
+  adminGitSettingsFields.forEach((field) => { field.disabled = true; });
+  adminGitSettingsSave.disabled = true;
+  adminGitSettingsReload.disabled = true;
+  setMessage(adminGitSettingsMessage, '正在安全读取配置状态…');
+  try {
+    const settings = await apiRequest('/admin/integrations/gitea', { method: 'GET' });
+    if (requestId !== adminGitSettingsRequestId || getCurrentUser()?.id !== user.id
+      || getCurrentUser()?.role !== 'admin' || parseHashRoute().type !== 'admin-personal-center') return false;
+    adminGitApiUrl.value = settings.apiBaseUrl || '';
+    adminGitPublicUrl.value = settings.publicBaseUrl || '';
+    adminGitWebhookUrl.value = settings.webhookTargetUrl || '';
+    adminGitAdminToken.value = '';
+    adminGitWebhookSecret.value = '';
+    adminGitClearAdminToken.checked = false;
+    adminGitClearWebhookSecret.checked = false;
+    adminGitAdminToken.disabled = false;
+    adminGitWebhookSecret.disabled = false;
+    adminGitAdminTokenState.textContent = settings.adminTokenConfigured ? '当前已安全保存；不会显示原值。填写新值可轮换。' : '尚未配置管理令牌。';
+    adminGitWebhookSecretState.textContent = settings.webhookSecretConfigured ? '当前已安全保存；不会显示原值。填写新值可轮换。' : '尚未配置 Webhook 密钥。';
+    adminGitSettingsSummary.textContent = settings.source === 'database'
+      ? `当前使用数据库中的共享配置${settings.updatedAt ? ` · 最近更新 ${formatTeacherDate(settings.updatedAt)}` : ''}。`
+      : settings.source === 'environment'
+        ? '数据库尚无配置记录，当前沿用服务器环境变量；保存后数据库配置将优先生效。'
+        : '尚未配置 Gitea 连接信息。';
+    adminGitSettingsBadge.textContent = settings.configured ? '已配置' : '待配置';
+    adminGitSettingsBadge.classList.toggle('status-badge-incomplete', !settings.configured);
+    setMessage(adminGitSettingsMessage, '秘密字段留空会保留现有值；只有勾选“明确清除”才会删除凭据。');
+    adminGitSettingsSave.disabled = false;
+    adminGitSettingsFields.forEach((field) => { field.disabled = false; });
+    return true;
+  } catch (error) {
+    if (requestId !== adminGitSettingsRequestId || getCurrentUser()?.id !== user.id
+      || parseHashRoute().type !== 'admin-personal-center') return false;
+    adminGitSettingsBadge.textContent = '读取失败';
+    setMessage(adminGitSettingsMessage, error.message || '配置读取失败，请重试。', true);
+    adminGitSettingsSave.disabled = false;
+    adminGitSettingsFields.forEach((field) => { field.disabled = false; });
+    return false;
+  } finally {
+    if (requestId === adminGitSettingsRequestId && getCurrentUser()?.id === user.id
+      && parseHashRoute().type === 'admin-personal-center') adminGitSettingsReload.disabled = false;
+  }
+}
+
+function syncAdminSecretClearState(input, checkbox) {
+  input.disabled = checkbox.checked;
+  if (checkbox.checked) input.value = '';
+}
+
+adminPersonalCenterButton.addEventListener('click', () => navigateTo({ type: 'admin-personal-center' }));
+adminBackToDashboardButton.addEventListener('click', () => navigateTo({ type: 'admin' }));
+adminGitSettingsReload.addEventListener('click', () => void renderAdminGitSettings());
+adminGitClearAdminToken.addEventListener('change', () => syncAdminSecretClearState(adminGitAdminToken, adminGitClearAdminToken));
+adminGitClearWebhookSecret.addEventListener('change', () => syncAdminSecretClearState(adminGitWebhookSecret, adminGitClearWebhookSecret));
+adminGitSettingsForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  adminGitSettingsSave.disabled = true;
+  adminGitSettingsReload.disabled = true;
+  setMessage(adminGitSettingsMessage, '正在加密并保存到服务器数据库…');
+  try {
+    await apiRequest('/admin/integrations/gitea', {
+      method: 'PUT',
+      body: JSON.stringify({
+        apiBaseUrl: adminGitApiUrl.value.trim(),
+        publicBaseUrl: adminGitPublicUrl.value.trim(),
+        webhookTargetUrl: adminGitWebhookUrl.value.trim(),
+        adminToken: adminGitAdminToken.value,
+        clearAdminToken: adminGitClearAdminToken.checked,
+        webhookSecret: adminGitWebhookSecret.value,
+        clearWebhookSecret: adminGitClearWebhookSecret.checked,
+      }),
+    });
+    adminGitAdminToken.value = '';
+    adminGitWebhookSecret.value = '';
+    adminGitClearAdminToken.checked = false;
+    adminGitClearWebhookSecret.checked = false;
+    adminGitAdminToken.disabled = false;
+    adminGitWebhookSecret.disabled = false;
+    const refreshed = await renderAdminGitSettings();
+    if (refreshed) setMessage(adminGitSettingsMessage, '配置已安全保存并立即生效。');
+  } catch (error) {
+    setMessage(adminGitSettingsMessage, error.message || '配置保存失败；原配置保持不变。', true);
+    adminGitSettingsSave.disabled = false;
+  } finally {
+    adminGitSettingsReload.disabled = false;
+  }
+});
 
 function syncAdminReviewerSelection() {
   const option = adminExperiment.selectedOptions?.[0];
@@ -1245,7 +1359,7 @@ function setRouteStatus(message = '', isError = false) {
 function parseHashRoute(hash = window.location.hash) {
   const path = hash.replace(/^#\/?/, '').replace(/\/$/, '');
   if (!path) return { type: 'default' };
-  if (['login', 'student', 'teacher', 'admin', 'library'].includes(path)) return { type: path };
+  if (['login', 'student', 'teacher', 'admin', 'admin-personal-center', 'library'].includes(path)) return { type: path };
   const canvasMatch = path.match(/^experiments\/([^/]+)\/canvas$/);
   if (canvasMatch && /^[a-zA-Z0-9_-]+$/.test(canvasMatch[1])) {
     return { type: 'canvas', experimentId: decodeURIComponent(canvasMatch[1]) };
@@ -1612,7 +1726,7 @@ function clearCachedTerminalSessions() {
 }
 
 function persistPendingRoute(route) {
-  if (!['student', 'teacher', 'library', 'canvas', 'editor'].includes(route?.type)) return;
+  if (!['student', 'teacher', 'admin-personal-center', 'library', 'canvas', 'editor'].includes(route?.type)) return;
   const serialized = routeHash(route);
   const parsed = parseHashRoute(serialized);
   if (!parsed || parsed.type !== route.type) return;
@@ -1623,7 +1737,7 @@ function readPendingRoute() {
   const serialized = readSessionValue(STORAGE_KEYS.pendingRoute);
   if (!serialized) return null;
   const route = parseHashRoute(serialized);
-  if (!['student', 'teacher', 'library', 'canvas', 'editor'].includes(route.type)) {
+  if (!['student', 'teacher', 'admin-personal-center', 'library', 'canvas', 'editor'].includes(route.type)) {
     removeSessionValue(STORAGE_KEYS.pendingRoute);
     return null;
   }
@@ -1654,6 +1768,7 @@ function renderSimpleRoute(route) {
   studentView.classList.remove('is-visible');
   teacherView.classList.remove('is-visible');
   adminView.classList.remove('is-visible');
+  adminPersonalCenterView.classList.remove('is-visible');
   hideProtectedViews();
   if (route === 'login') {
     loginView.classList.add('is-visible');
@@ -1672,6 +1787,12 @@ function renderSimpleRoute(route) {
   if (route === 'admin' && user.role === 'admin') {
     adminView.classList.add('is-visible');
     renderAdminDashboard();
+    return;
+  }
+  if (route === 'admin-personal-center' && user.role === 'admin') {
+    adminPersonalCenterIdentity.textContent = `${user.name} · ${user.email}`;
+    adminPersonalCenterView.classList.add('is-visible');
+    void renderAdminGitSettings();
     return;
   }
   if (route === 'library') {
@@ -1715,7 +1836,7 @@ async function resolveCurrentRoute() {
     return;
   }
   const requiredRole = route.type === 'teacher' ? 'teacher'
-    : route.type === 'admin' ? 'admin'
+    : ['admin', 'admin-personal-center'].includes(route.type) ? 'admin'
     : ['student', 'canvas', 'editor'].includes(route.type) ? 'student' : null;
   if (requiredRole && user.role !== requiredRole) {
     redirectToRoleHome('当前账号无权访问此页面，已返回本角色工作台。');
@@ -1730,6 +1851,10 @@ async function resolveCurrentRoute() {
   }
 
   if (route.type === 'student' || route.type === 'teacher') {
+    renderSimpleRoute(route.type);
+    return;
+  }
+  if (route.type === 'admin' || route.type === 'admin-personal-center') {
     renderSimpleRoute(route.type);
     return;
   }
@@ -4796,7 +4921,7 @@ async function logout() {
   showRoute('login');
 }
 
-document.querySelectorAll('#studentLogoutButton, #teacherLogoutButton, #adminLogoutButton, #libraryLogoutButton').forEach((button) => button.addEventListener('click', logout));
+document.querySelectorAll('#studentLogoutButton, #teacherLogoutButton, #adminLogoutButton, #adminPersonalCenterLogoutButton, #libraryLogoutButton').forEach((button) => button.addEventListener('click', logout));
 
 async function restoreSession() {
   renderCanvas();
@@ -4811,7 +4936,7 @@ async function restoreSession() {
   }
   if (sessionError && sessionError.status !== 401) {
     const currentRoute = parseHashRoute();
-    if (['student', 'teacher', 'library', 'canvas', 'editor'].includes(currentRoute.type)) {
+    if (['student', 'teacher', 'admin-personal-center', 'library', 'canvas', 'editor'].includes(currentRoute.type)) {
       pendingProtectedRoute = currentRoute;
       persistPendingRoute(currentRoute);
     }
