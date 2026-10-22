@@ -12,16 +12,6 @@ PREPARE run_execution_mode_stmt FROM @run_execution_mode_sql;
 EXECUTE run_execution_mode_stmt;
 DEALLOCATE PREPARE run_execution_mode_stmt;
 
-SET @old_run_unique_exists = (
-  SELECT COUNT(*) FROM information_schema.STATISTICS
-  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'experiment_runs' AND INDEX_NAME = 'uq_runs_experiment_student'
-);
-SET @drop_old_run_unique_sql = IF(@old_run_unique_exists > 0,
-  'ALTER TABLE `experiment_runs` DROP INDEX `uq_runs_experiment_student`', 'SELECT 1');
-PREPARE drop_old_run_unique_stmt FROM @drop_old_run_unique_sql;
-EXECUTE drop_old_run_unique_stmt;
-DEALLOCATE PREPARE drop_old_run_unique_stmt;
-
 SET @run_mode_unique_exists = (
   SELECT COUNT(*) FROM information_schema.STATISTICS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'experiment_runs' AND INDEX_NAME = 'uq_runs_experiment_student_mode'
@@ -32,6 +22,18 @@ SET @add_run_mode_unique_sql = IF(@run_mode_unique_exists = 0,
 PREPARE add_run_mode_unique_stmt FROM @add_run_mode_unique_sql;
 EXECUTE add_run_mode_unique_stmt;
 DEALLOCATE PREPARE add_run_mode_unique_stmt;
+
+-- The old index also supports the experiment_id foreign key on experiment_runs.
+-- Add its replacement first so InnoDB can safely keep that foreign key indexed.
+SET @old_run_unique_exists = (
+  SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'experiment_runs' AND INDEX_NAME = 'uq_runs_experiment_student'
+);
+SET @drop_old_run_unique_sql = IF(@old_run_unique_exists > 0,
+  'ALTER TABLE `experiment_runs` DROP INDEX `uq_runs_experiment_student`', 'SELECT 1');
+PREPARE drop_old_run_unique_stmt FROM @drop_old_run_unique_sql;
+EXECUTE drop_old_run_unique_stmt;
+DEALLOCATE PREPARE drop_old_run_unique_stmt;
 
 SET @teacher_review_course_nullable = (
   SELECT COUNT(*) FROM information_schema.COLUMNS
