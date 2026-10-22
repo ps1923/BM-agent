@@ -27,9 +27,19 @@ public class ExperimentCreationController {
         return ResponseEntity.ok(service.createSession(user.id()));
     }
 
+    @GetMapping("/sessions/drafts")
+    public ResponseEntity<?> drafts(AuthenticatedUser user) {
+        return ResponseEntity.ok(service.listDrafts(user.id()));
+    }
+
     @GetMapping("/sessions/{sessionId}")
     public ResponseEntity<?> get(@PathVariable String sessionId, AuthenticatedUser user) {
         return ResponseEntity.ok(service.get(sessionId, user.id()));
+    }
+
+    @GetMapping("/sessions/{sessionId}/messages")
+    public ResponseEntity<?> messages(@PathVariable String sessionId, AuthenticatedUser user) {
+        return ResponseEntity.ok(service.getMessages(sessionId, user.id()));
     }
 
     @PostMapping("/sessions/{sessionId}/messages")

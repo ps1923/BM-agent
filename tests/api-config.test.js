@@ -129,7 +129,7 @@ test('apiRequest keeps its independent timeout when no caller cancellation occur
   await assert.rejects(request('/slow', { timeoutMs: 5 }), /请求超时/);
 });
 
-test('creation dialog aborts cancellable requests while keeping materialization commit-safe', () => {
+test('creation dialog close only hides the panel while request and materialization safeguards remain', () => {
   const lifecycleStart = app.indexOf('function beginCreateRequest()');
   const lifecycleEnd = app.indexOf('\nfunction createApiRequest', lifecycleStart);
   assert.ok(lifecycleStart >= 0 && lifecycleEnd > lifecycleStart, 'creation request lifecycle helpers must exist');
@@ -153,8 +153,8 @@ test('creation dialog aborts cancellable requests while keeping materialization 
   const closeStart = app.indexOf('function closeCreateDialogPanel()');
   const closeEnd = app.indexOf('\nfunction updateCreateStep', closeStart);
   const closeSource = app.slice(closeStart, closeEnd);
-  assert.match(closeSource, /if \(createMaterializationInFlight\)/);
-  assert.match(closeSource, /cancelCreateRequest\(\)/);
+  assert.match(closeSource, /createDialog\.classList\.remove\('is-open'\)/);
+  assert.doesNotMatch(closeSource, /cancelCreateRequest\(\)|createDialogEpoch\s*\+\+/);
   assert.match(app, /createMaterializationInFlight = true;[\s\S]*await apiRequest\(`\/experiment-creation\/sessions\/\$\{creationSessionId\}\/confirm`/);
   assert.match(app, /const requestController = createPlanReady \? null : beginCreateRequest\(\)/);
 });

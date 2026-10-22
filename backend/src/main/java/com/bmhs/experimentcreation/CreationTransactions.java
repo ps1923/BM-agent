@@ -24,6 +24,19 @@ public class CreationTransactions {
     }
 
     @Transactional
+    public void persistUserTurn(CreationRepository.SessionRecord snapshot, String message) {
+        var current = repository.lock(snapshot.id(), snapshot.userId());
+        if (current.intentVersion() != snapshot.intentVersion()
+                || !Objects.equals(current.status(), snapshot.status())) {
+            stale();
+        }
+        if (!repository.hasPendingUserMessage(snapshot.id(), message)) {
+            repository.appendMessage(snapshot.id(), "user", message);
+            repository.touchSession(snapshot.id());
+        }
+    }
+
+    @Transactional
     public StudentIntentEnvelope saveDirectionTurn(CreationRepository.SessionRecord snapshot,
                                                    String message, StudentIntentEnvelope result) {
         var current = repository.lock(snapshot.id(), snapshot.userId());
@@ -31,7 +44,7 @@ public class CreationTransactions {
                 || !Objects.equals(current.status(), snapshot.status())) {
             stale();
         }
-        repository.appendMessage(snapshot.id(), "user", message);
+        if (!repository.hasPendingUserMessage(snapshot.id(), message)) stale();
         repository.appendMessage(snapshot.id(), "assistant", result.assistantMessage());
         repository.saveDirection(snapshot.id(), result);
         return result;

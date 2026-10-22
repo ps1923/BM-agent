@@ -188,7 +188,37 @@ class ExperimentCreationServiceTest {
         when(harness.clarify("目标", null, false)).thenReturn(roleViolation);
 
         assertThrows(ApiException.class, () -> service.sendDirectionMessage("session-2", 7L, "目标"));
+        verify(transactions).persistUserTurn(session, "目标");
         verify(transactions, never()).saveDirectionTurn(any(), any(), any());
+    }
+
+    @Test
+    void draftListingUsesOnlyRepositorySessionsOwnedByTheAuthenticatedUser() {
+        var intent = new StudentIntentEnvelope("0.1", "needs_clarification", "你想完成什么？",
+                Map.of("raw_request", "做一个待办应用"), Map.of(), List.of(), List.of(),
+                new CreationModels.NextQuestion("功能范围", "你希望支持哪些功能？", "text", List.of(), "决定实验的首批节点"));
+        var session = new CreationRepository.SessionRecord("draft-1", 7L, "direction_discussion",
+                intent, null, 1, null, null, null, null, null, null);
+        when(repository.findDrafts(7L)).thenReturn(List.of(new CreationRepository.DraftRecord(
+                session, "2026-10-22T10:00:00.000000")));
+
+        var drafts = service.listDrafts(7L);
+
+        assertEquals(1, drafts.size());
+        assertEquals("draft-1", drafts.get(0).sessionId());
+        assertEquals("做一个待办应用", drafts.get(0).title());
+        assertEquals("2026-10-22T10:00:00.000000", drafts.get(0).updatedAt());
+        verify(repository).findDrafts(7L);
+    }
+
+    @Test
+    void messageReadingPassesAuthenticatedOwnerToRepository() {
+        var transcript = List.of(new CreationModels.ConversationMessage(
+                "user", "我想学习 Django", "2026-10-22T10:00:00.000000"));
+        when(repository.findMessages("draft-1", 7L)).thenReturn(transcript);
+
+        assertEquals(transcript, service.getMessages("draft-1", 7L));
+        verify(repository).findMessages("draft-1", 7L);
     }
 
     @Test

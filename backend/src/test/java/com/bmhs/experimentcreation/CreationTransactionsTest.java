@@ -12,6 +12,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 class CreationTransactionsTest {
     @Test
@@ -29,7 +30,23 @@ class CreationTransactionsTest {
                 () -> transactions.saveDirectionTurn(snapshot, "补充", result));
 
         verify(repository, never()).appendMessage(any(), any(), any());
+        verify(repository, never()).hasPendingUserMessage(any(), any());
         verify(repository, never()).saveDirection(any(), any());
+    }
+
+    @Test
+    void retryingLastFailedUserTurnDoesNotDuplicateIt() {
+        CreationRepository repository = mock(CreationRepository.class);
+        CreationTransactions transactions = new CreationTransactions(repository);
+        var snapshot = session("direction_discussion", 1);
+        when(repository.lock("session", 9L)).thenReturn(snapshot);
+        when(repository.hasPendingUserMessage("session", "補充")).thenReturn(true);
+
+        transactions.persistUserTurn(snapshot, "補充");
+
+        verify(repository).lock("session", 9L);
+        verify(repository).hasPendingUserMessage("session", "補充");
+        verifyNoMoreInteractions(repository);
     }
 
     private CreationRepository.SessionRecord session(String status, int version) {

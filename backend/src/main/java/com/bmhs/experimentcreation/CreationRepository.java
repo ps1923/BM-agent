@@ -38,6 +38,9 @@ public class CreationRepository {
             Long experimentId,
             PlanResponse plan) {}
 
+    public record DraftRecord(SessionRecord session, String updatedAt) {}
+    private record DraftIdentity(String id, String updatedAt) {}
+
     private final JdbcTemplate jdbc;
     private final Gson gson = new GsonBuilder()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
@@ -55,6 +58,29 @@ public class CreationRepository {
 
     public SessionRecord find(String sessionId, long userId) {
         return findWithSql(sessionId, userId, "");
+    }
+
+    public List<DraftRecord> findDrafts(long userId) {
+        List<DraftIdentity> identities = jdbc.query("""
+                SELECT id, DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%s.%f') AS updated_at
+                FROM experiment_creation_sessions
+                WHERE user_id = ? AND created_experiment_id IS NULL AND status <> 'materialized'
+                ORDER BY updated_at DESC, id DESC
+                LIMIT 50
+                """, (rs, rowNum) -> new DraftIdentity(rs.getString("id"), rs.getString("updated_at")), userId);
+        return identities.stream().map(identity -> new DraftRecord(find(identity.id(), userId), identity.updatedAt())).toList();
+    }
+
+    public List<CreationModels.ConversationMessage> findMessages(String sessionId, long userId) {
+        // Ownership is checked before reading the child table; an unknown or foreign session is indistinguishable.
+        find(sessionId, userId);
+        return jdbc.query("""
+                SELECT role, content, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s.%f') AS created_at
+                FROM experiment_creation_messages
+                WHERE session_id = ?
+                ORDER BY created_at ASC, id ASC
+                """, (rs, rowNum) -> new CreationModels.ConversationMessage(
+                rs.getString("role"), rs.getString("content"), rs.getString("created_at")), sessionId);
     }
 
     public SessionRecord lock(String sessionId, long userId) {
@@ -100,6 +126,20 @@ public class CreationRepository {
     public void appendMessage(String sessionId, String role, String content) {
         jdbc.update("INSERT INTO experiment_creation_messages (session_id, role, content) VALUES (?, ?, ?)",
                 sessionId, role, content);
+    }
+
+    public boolean hasPendingUserMessage(String sessionId, String content) {
+        List<Boolean> latest = jdbc.query("""
+                SELECT role = 'user' AND content = ? AS is_pending
+                FROM experiment_creation_messages
+                WHERE session_id = ?
+                ORDER BY id DESC LIMIT 1
+                """, (rs, rowNum) -> rs.getBoolean("is_pending"), content, sessionId);
+        return !latest.isEmpty() && latest.get(0);
+    }
+
+    public void touchSession(String sessionId) {
+        jdbc.update("UPDATE experiment_creation_sessions SET updated_at = CURRENT_TIMESTAMP(6) WHERE id = ?", sessionId);
     }
 
     public void saveDirection(String sessionId, StudentIntentEnvelope envelope) {

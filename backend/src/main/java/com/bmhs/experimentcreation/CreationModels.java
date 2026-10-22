@@ -173,4 +173,17 @@ public final class CreationModels {
             Difficulty difficulty,
             PlanResponse plan,
             Long experimentId) {}
+
+    public record SessionDraft(
+            String sessionId,
+            String status,
+            String updatedAt,
+            String title,
+            Integer durationMinutes,
+            Difficulty difficulty) {}
+
+    public record ConversationMessage(
+            String role,
+            String content,
+            String createdAt) {}
 }

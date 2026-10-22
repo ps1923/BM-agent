@@ -6,6 +6,7 @@ const editorView = document.querySelector('#editorView');
 const openExperimentButtons = document.querySelectorAll('.experiment-link');
 const backToLibrary = document.querySelector('#backToLibrary');
 const startNodeButton = document.querySelector('#startNodeButton');
+const startNodeStatus = document.querySelector('#startNodeStatus');
 const backToCanvas = document.querySelector('#backToCanvas');
 const chatMessages = document.querySelector('#chatMessages');
 const chatInput = document.querySelector('#chatInput');
@@ -144,6 +145,7 @@ const directionReview = document.querySelector('#directionReview');
 const directionTitleReview = document.querySelector('#directionTitleReview');
 const directionDetailReview = document.querySelector('#directionDetailReview');
 const recentExperiments = document.querySelector('#recentExperiments');
+const creationDraftList = document.querySelector('#creationDraftList');
 const personalExperimentList = document.querySelector('#personalExperimentList');
 const defaultLearningGoalPlaceholder = learningGoal.placeholder;
 let API_BASE_URL = '';
@@ -187,6 +189,8 @@ let selectedDuration = '1 天 0 小时';
 let durationTotalHours = 24;
 let createPlanReady = false;
 let creationSessionId = null;
+let creationSessionOwnerId = null;
+let creationPendingMessage = null;
 let directionReady = false;
 let pendingPlan = null;
 let createBusy = false;
@@ -252,6 +256,9 @@ function setCurrentUser(user) {
     recentlyOpenedExperimentIds.length = 0;
     libraryLoadEpoch += 1;
     renderRecentExperiments();
+    creationSessionId = null;
+    creationSessionOwnerId = null;
+    creationPendingMessage = null;
   }
   currentUser = nextUser;
   routeResolutionEpoch += 1;
@@ -378,20 +385,39 @@ async function renderStudentDashboard() {
 function validateDshLaunchUrl(value) {
   let url;
   try { url = new URL(value); } catch { throw new Error('DSH 返回的访问地址无效。'); }
-  const isLoopbackHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname);
-  if (url.protocol !== 'https:' && !isLoopbackHttp) throw new Error('DSH 访问地址必须使用 HTTPS。');
   if (url.username || url.password) throw new Error('DSH 访问地址包含不允许的凭据。');
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('DSH 访问地址仅支持 HTTP 或 HTTPS。');
+  const authorizedOrigins = new Set([window.location.origin.toLowerCase()]);
+  try {
+    const apiUrl = new URL(API_BASE_URL, window.location.href);
+    if (['http:', 'https:'].includes(apiUrl.protocol)) authorizedOrigins.add(apiUrl.origin.toLowerCase());
+  } catch { /* The current platform origin remains the only authorized origin. */ }
+  if (!authorizedOrigins.has(url.origin.toLowerCase())
+      || !/(?:^|\/)dsh\/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\/?$/i.test(url.pathname)) {
+    throw new Error('DSH 访问地址与当前平台的专属工作区路由不匹配，已阻止打开。');
+  }
   return url.href;
 }
 
-async function openStudentDsh(triggerButton) {
+async function openStudentDsh(triggerButton, { experiment = null, statusElement = studentDshState } = {}) {
   const userId = getCurrentUser()?.id;
   if (!userId || getCurrentUser()?.role !== 'student') return;
   const blankTab = window.open('about:blank', '_blank');
   if (blankTab) blankTab.opener = null;
-  const previousText = triggerButton.textContent;
+  const labelElement = triggerButton.querySelector('span:last-child') || triggerButton;
+  const previousText = labelElement.textContent;
   triggerButton.disabled = true;
-  studentDshState.textContent = '正在启动或连接你的 DSH 工作区…';
+  const publishStatus = (message, state = 'loading') => {
+    studentDshState.textContent = message;
+    if (statusElement !== studentDshState) {
+      statusElement.textContent = message;
+      statusElement.hidden = !message;
+      statusElement.classList.toggle('is-error', state === 'error' && Boolean(message));
+    }
+    labelElement.textContent = state === 'loading' ? '正在连接 DSH…' : previousText;
+    if (triggerButton === startNodeButton) triggerButton.setAttribute('aria-label', labelElement.textContent);
+  };
+  publishStatus('正在启动或连接你的 DSH 工作区…');
   try {
     let result = await apiRequest('/student/dsh/launch', { method: 'POST' });
     const deadline = Date.now() + 90_000;
@@ -402,19 +428,26 @@ async function openStudentDsh(triggerButton) {
     }
     if (result.status !== 'running' || !result.launchUrl) throw new Error(describeDshStatus(result.status));
     const launchUrl = validateDshLaunchUrl(result.launchUrl);
-    studentDshState.textContent = '工作区已就绪，正在打开 DSH…';
+    const readyMessage = experiment
+      ? `DSH 已就绪。请在 DSH 对话中输入：请连接实验“${experiment.name}”（编号 ${experiment.id}），并读取当前学习节点和任务。DSH 插件会在绑定前请求你确认。`
+      : '工作区已就绪，正在打开 DSH…';
+    publishStatus(readyMessage, 'success');
     if (blankTab && !blankTab.closed) blankTab.location.replace(launchUrl);
     else window.location.assign(launchUrl);
+    return true;
   } catch (error) {
     if (blankTab && !blankTab.closed) blankTab.close();
     if (getCurrentUser()?.id === userId) {
-      studentDshState.textContent = error.message || 'DSH 启动失败，请稍后重试。';
-      setMessage(studentMessage, error.message || 'DSH 启动失败，请稍后重试。', true);
+      const errorMessage = error.message || 'DSH 启动失败，请稍后重试。';
+      publishStatus(errorMessage, 'error');
+      if (!experiment) setMessage(studentMessage, errorMessage, true);
     }
+    return false;
   } finally {
     if (getCurrentUser()?.id === userId) {
       triggerButton.disabled = false;
-      triggerButton.textContent = previousText;
+      labelElement.textContent = previousText;
+      if (triggerButton === startNodeButton) triggerButton.setAttribute('aria-label', previousText);
       void loadStudentDshStatus(() => getCurrentUser()?.id === userId && getCurrentUser()?.role === 'student');
     }
   }
@@ -2096,6 +2129,9 @@ function renderExperimentCanvas(experimentId) {
   [canvasView, editorView].forEach((view) => view.classList.remove('auth-hidden'));
   closePatchReview();
   activeExperimentId = String(experimentId);
+  startNodeButton.disabled = false;
+  setStartNodeLabel('在 DSH 中攻克节点');
+  setStartNodeStatus('');
   writeSessionValue(STORAGE_KEYS.activeExperiment, activeExperimentId);
   activeRun = null;
   syncGuidanceControls();
@@ -2136,38 +2172,16 @@ function renderExperimentCanvas(experimentId) {
   renderCanvas();
 }
 
-async function startWorkspaceRun() {
-  if (!activeExperimentId || !/^\d+$/.test(activeExperimentId)) {
-    appendChatMessage('agent', '系统', '当前实验还没有连接到服务端运行实例，请从课程中打开已发布实验。');
-    return false;
-  }
-  startNodeButton.disabled = true;
-  workspaceStatus.textContent = '正在启动工作区…';
-  const epoch = routeResolutionEpoch;
-  try {
-    const runPath = window.BMDesktop?.isDesktop
-      ? `/desktop/experiments/${activeExperimentId}/runs`
-      : `/experiments/${activeExperimentId}/runs`;
-    const run = await apiRequest(runPath, { method: 'POST', timeoutMs: 45000 });
-    if (epoch !== routeResolutionEpoch) return false;
-    if (run.workspaceType === 'desktop') {
-      const local = await window.BMDesktop.workspace.create(String(run.runId), run.localWorkspaceId);
-      if (String(local.workspaceId) !== String(run.localWorkspaceId) || String(local.runId) !== String(run.runId)) {
-        throw new Error('本地工作区与运行实例绑定校验失败。');
-      }
-    }
-    const connected = await connectWorkspace(run, { createTerminalSession: true, epoch });
-    if (!connected || epoch !== routeResolutionEpoch) return false;
-    appendChatMessage('agent', '系统', '独立工作区已就绪，可以开始修改代码。');
-    return true;
-  } catch (error) {
-    workspaceStatus.textContent = '工作区启动失败';
-    appendChatMessage('agent', '系统', error.message || '工作区启动失败，请稍后重试。');
-    return false;
-  } finally {
-    if (!activeTerminalSession && activeRun?.workspaceType !== 'desktop') terminalInput.disabled = true;
-    startNodeButton.disabled = false;
-  }
+function setStartNodeLabel(label) {
+  const labelElement = startNodeButton.querySelector('span:last-child');
+  labelElement.textContent = label;
+  startNodeButton.setAttribute('aria-label', label);
+}
+
+function setStartNodeStatus(message, state = 'error') {
+  startNodeStatus.textContent = message;
+  startNodeStatus.hidden = !message;
+  startNodeStatus.classList.toggle('is-error', state === 'error' && Boolean(message));
 }
 
 async function connectWorkspace(run, { createTerminalSession = false, epoch = null } = {}) {
@@ -2577,6 +2591,68 @@ function workspaceFileUrl(path) {
   return path.split('/').map((part) => encodeURIComponent(part)).join('/');
 }
 
+function sha256HexFallback(bytes) {
+  const constants = new Uint32Array([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+  ]);
+  const hash = new Uint32Array([
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  ]);
+  const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
+  const padded = new Uint8Array(paddedLength);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const bitLength = bytes.length * 8;
+  const view = new DataView(padded.buffer);
+  view.setUint32(paddedLength - 8, Math.floor(bitLength / 0x100000000), false);
+  view.setUint32(paddedLength - 4, bitLength >>> 0, false);
+  const words = new Uint32Array(64);
+  const rotateRight = (value, amount) => (value >>> amount) | (value << (32 - amount));
+
+  for (let offset = 0; offset < paddedLength; offset += 64) {
+    for (let index = 0; index < 16; index += 1) {
+      words[index] = view.getUint32(offset + index * 4, false);
+    }
+    for (let index = 16; index < 64; index += 1) {
+      const x = words[index - 15];
+      const y = words[index - 2];
+      const sigma0 = rotateRight(x, 7) ^ rotateRight(x, 18) ^ (x >>> 3);
+      const sigma1 = rotateRight(y, 17) ^ rotateRight(y, 19) ^ (y >>> 10);
+      words[index] = (words[index - 16] + sigma0 + words[index - 7] + sigma1) >>> 0;
+    }
+
+    let [a, b, c, d, e, f, g, h] = hash;
+    for (let index = 0; index < 64; index += 1) {
+      const sum1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
+      const choice = (e & f) ^ (~e & g);
+      const temp1 = (h + sum1 + choice + constants[index] + words[index]) >>> 0;
+      const sum0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
+      const majority = (a & b) ^ (a & c) ^ (b & c);
+      const temp2 = (sum0 + majority) >>> 0;
+      [a, b, c, d, e, f, g, h] = [
+        (temp1 + temp2) >>> 0, a, b, c, (d + temp1) >>> 0, e, f, g,
+      ];
+    }
+    hash[0] = (hash[0] + a) >>> 0;
+    hash[1] = (hash[1] + b) >>> 0;
+    hash[2] = (hash[2] + c) >>> 0;
+    hash[3] = (hash[3] + d) >>> 0;
+    hash[4] = (hash[4] + e) >>> 0;
+    hash[5] = (hash[5] + f) >>> 0;
+    hash[6] = (hash[6] + g) >>> 0;
+    hash[7] = (hash[7] + h) >>> 0;
+  }
+  return Array.from(hash, (word) => word.toString(16).padStart(8, '0')).join('');
+}
+
 async function verifyWorkspaceFileResponse(response, workspaceId, expectedFile) {
   const metadata = response?.file;
   if (!expectedFile?.path || typeof response?.content !== 'string' || !metadata
@@ -2596,11 +2672,14 @@ async function verifyWorkspaceFileResponse(response, workspaceId, expectedFile) 
   }
   const expectedHash = returnedHash || listedHash;
   if (expectedHash) {
-    if (!/^[a-f0-9]{64}$/.test(expectedHash) || !window.crypto?.subtle || !window.TextEncoder) {
+    if (!/^[a-f0-9]{64}$/.test(expectedHash) || !window.TextEncoder) {
       throw new Error('当前浏览器无法安全校验文件内容，请使用受支持的安全浏览器重试。');
     }
-    const digest = await window.crypto.subtle.digest('SHA-256', new window.TextEncoder().encode(response.content));
-    const actualHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    const encodedContent = new window.TextEncoder().encode(response.content);
+    const actualHash = window.crypto?.subtle
+      ? Array.from(new Uint8Array(await window.crypto.subtle.digest('SHA-256', encodedContent)),
+        (byte) => byte.toString(16).padStart(2, '0')).join('')
+      : sha256HexFallback(encodedContent);
     if (actualHash !== expectedHash) {
       throw new Error('文件内容校验失败，已阻止显示和编辑。请刷新后重试。');
     }
@@ -2654,6 +2733,162 @@ function renderPersonalExperiment(item) {
   if (isStudent) button.addEventListener('click', () => openExperiment(experimentId));
   row.append(button);
   return row;
+}
+
+function renderCreationDraft(draft) {
+  const row = document.createElement('article');
+  row.className = 'creation-draft-item';
+  const details = document.createElement('div');
+  details.className = 'creation-draft-copy';
+  const title = document.createElement('strong');
+  title.textContent = draft.title || '未完成的实验规划';
+  const status = document.createElement('small');
+  const statusLabels = {
+    direction_discussion: '方向讨论中', direction_ready: '等待确认方向', direction_confirmed: '方向已确认',
+    configured: '等待生成方案', planning: '正在生成方案', plan_ready: '方案待确认', failed: '上次生成未完成',
+  };
+  const updatedAt = draft.updatedAt ? new Date(draft.updatedAt) : null;
+  const updatedLabel = updatedAt && !Number.isNaN(updatedAt.getTime())
+    ? ` · 更新于 ${updatedAt.toLocaleString()}` : '';
+  status.textContent = `${statusLabels[draft.status] || '创建中'}${updatedLabel}`;
+  details.append(title, status);
+  const resume = document.createElement('button');
+  resume.className = 'creation-draft-resume';
+  resume.type = 'button';
+  resume.dataset.sessionId = draft.sessionId;
+  resume.textContent = '继续';
+  resume.addEventListener('click', () => void resumeCreationDraft(draft.sessionId));
+  row.append(details, resume);
+  return row;
+}
+
+async function loadCreationDrafts(routeEpoch = routeResolutionEpoch) {
+  if (!creationDraftList) return;
+  creationDraftList.replaceChildren();
+  const loading = document.createElement('p');
+  loading.className = 'library-state';
+  loading.textContent = '正在读取未完成草稿…';
+  creationDraftList.append(loading);
+  try {
+    const drafts = await apiRequest('/experiment-creation/sessions/drafts', { method: 'GET', timeoutMs: 15000 });
+    if (routeEpoch !== routeResolutionEpoch || !Array.isArray(drafts)) return;
+    creationDraftList.replaceChildren();
+    if (!drafts.length) {
+      const empty = document.createElement('p');
+      empty.className = 'library-state';
+      empty.textContent = '目前没有未完成的实验规划。';
+      creationDraftList.append(empty);
+      return;
+    }
+    drafts.forEach((draft) => {
+      if (draft?.sessionId) creationDraftList.append(renderCreationDraft(draft));
+    });
+  } catch (error) {
+    if (routeEpoch !== routeResolutionEpoch) return;
+    creationDraftList.replaceChildren();
+    const state = document.createElement('p');
+    state.className = 'library-state is-error';
+    state.textContent = error.message || '未完成草稿暂时无法读取。';
+    creationDraftList.append(state);
+    const retry = document.createElement('button');
+    retry.className = 'library-retry-button';
+    retry.type = 'button';
+    retry.textContent = '重试读取';
+    retry.addEventListener('click', () => void loadCreationDrafts(routeEpoch));
+    creationDraftList.append(retry);
+  }
+}
+
+function formatDifficulty(value) {
+  return ({ beginner: '入门', easy: '简单', normal: '普通', hard: '困难', challenge: '挑战' })[
+    String(value || '').toLowerCase()
+  ] || '入门';
+}
+
+function formatDurationMinutes(minutes) {
+  const hours = Math.max(1, Math.round(Number(minutes || 1440) / 60));
+  durationHoursInput.value = hours;
+  updateDurationPreview();
+}
+
+async function saveCreationConfiguration() {
+  updateDurationPreview();
+  if (!Number.isInteger(durationTotalHours) || durationTotalHours <= 0) {
+    throw new Error('学习周期必须是大于 0 的整数小时数。');
+  }
+  return createApiRequest(`/experiment-creation/sessions/${encodeURIComponent(creationSessionId)}/configuration`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      durationDays: Math.floor(durationTotalHours / 24),
+      durationHours: durationTotalHours % 24,
+      difficulty: difficultyCode(selectedDifficulty),
+    }),
+  });
+}
+
+async function resumeCreationDraft(sessionId) {
+  if (createBusy || createMaterializationInFlight) return;
+  const ownerId = getCurrentUser()?.id;
+  const epoch = ++createDialogEpoch;
+  const controller = beginCreateRequest();
+  createBusy = true;
+  createDialog.classList.add('is-open');
+  createPlan.classList.remove('is-active');
+  createPlanReady = false;
+  pendingPlan = null;
+  creationSessionId = String(sessionId);
+  creationSessionOwnerId = ownerId;
+  materializationKey = null;
+  creationConversation.replaceChildren();
+  updateCreateStep();
+  setCreateLoading(true, '正在恢复实验规划…');
+  try {
+    const encodedId = encodeURIComponent(sessionId);
+    const [session, messages] = await Promise.all([
+      createApiRequest(`/experiment-creation/sessions/${encodedId}`, { method: 'GET' }),
+      createApiRequest(`/experiment-creation/sessions/${encodedId}/messages`, { method: 'GET' }),
+    ]);
+    if (epoch !== createDialogEpoch || ownerId !== getCurrentUser()?.id || creationSessionId !== String(sessionId)) return;
+    if (!Array.isArray(messages)) throw new Error('草稿消息格式无效，请稍后重试。');
+    if (!messages.length) appendCreationMessage('system', '实验规划对话已开始。请描述你想学习的内容或希望完成的成果。');
+    messages.forEach((message) => appendCreationMessage(message.role === 'user' ? 'user' : 'assistant', message.content));
+    const direction = session.direction || {};
+    const intent = direction.intent || {};
+    directionTitle.textContent = intent.observable_outcome || intent.raw_request || '方向待补充';
+    directionDetail.textContent = intent.target_artifact || intent.target_skill || '';
+    directionTitleReview.textContent = directionTitle.textContent;
+    directionDetailReview.textContent = directionDetail.textContent;
+    directionReady = session.status === 'direction_ready' || direction.status === 'ready_for_confirmation';
+    directionReview.hidden = !directionReady;
+    const statusSteps = {
+      direction_discussion: 1, direction_ready: 1, direction_confirmed: 2,
+      configured: 3, planning: 3, plan_ready: 3, failed: session.durationMinutes ? 3 : directionReady ? 2 : 1,
+    };
+    createStep = statusSteps[session.status] || 1;
+    if (session.durationMinutes) formatDurationMinutes(session.durationMinutes);
+    selectedDifficulty = formatDifficulty(session.difficulty);
+    document.querySelectorAll('[data-choice-group="difficulty"]').forEach((choice) => {
+      choice.classList.toggle('is-selected', choice.dataset.value === selectedDifficulty);
+    });
+    if (session.plan && session.status === 'plan_ready') {
+      renderPlanPreview(session.plan);
+      createPlanReady = true;
+      createPlan.classList.add('is-active');
+    }
+    updateCreateStep();
+    setCreateLoading(false);
+  } catch (error) {
+    if (epoch === createDialogEpoch && ownerId === getCurrentUser()?.id) {
+      showCreationMessage(error.message || '草稿恢复失败，请重试。', true);
+    }
+  } finally {
+    finishCreateRequest(controller);
+    if (epoch === createDialogEpoch && ownerId === getCurrentUser()?.id) {
+      createBusy = false;
+      setCreateLoading(false);
+      updateCreateStep();
+    }
+  }
 }
 
 function renderRecentExperiments() {
@@ -2718,6 +2953,7 @@ async function loadPersonalExperiments(routeEpoch = routeResolutionEpoch) {
       items.forEach((item) => personalExperimentList.append(renderPersonalExperiment(item)));
     }
     renderRecentExperiments();
+    void loadCreationDrafts(routeEpoch);
     updateLibraryCount();
   } catch (error) {
     if (requestEpoch !== libraryLoadEpoch || routeEpoch !== routeResolutionEpoch) return;
@@ -2821,9 +3057,20 @@ bubble.addEventListener('pointerup', () => {
 bubble.addEventListener('click', selectBubble);
 
 startNodeButton.addEventListener('click', async () => {
-  inspector.classList.remove('is-open');
-  const started = await startWorkspaceRun();
-  if (started && activeRun) navigateTo({ type: 'editor', runId: String(activeRun.runId) });
+  if (getCurrentUser()?.role !== 'student') {
+    setStartNodeStatus('请以学生身份登录后再启动 DSH 工作区。', 'error');
+    return;
+  }
+  if (!activeExperimentId || !/^\d+$/.test(activeExperimentId)) {
+    setStartNodeStatus('当前实验没有有效编号，无法连接 DSH。', 'error');
+    return;
+  }
+  const experimentName = document.querySelector('#currentExperimentName').textContent.trim();
+  setStartNodeStatus('正在启动或连接你的 DSH 工作区…', 'loading');
+  await openStudentDsh(startNodeButton, {
+    experiment: { id: activeExperimentId, name: experimentName },
+    statusElement: startNodeStatus,
+  });
 });
 
 saveFileButton.addEventListener('click', saveWorkspaceFile);
@@ -3598,20 +3845,21 @@ function difficultyCode(label) {
 
 function appendCreationMessage(role, text) {
   const message = document.createElement('div');
-  message.className = `direction-message ${role === 'user' ? 'is-user' : role === 'error' ? 'is-error' : 'is-agent'}`;
+  message.className = `direction-message ${role === 'user' ? 'is-user' : role === 'error' ? 'is-error' : role === 'system' ? 'is-system' : 'is-agent'}`;
   const avatar = document.createElement('span');
   avatar.className = 'direction-message-avatar';
-  avatar.textContent = role === 'user' ? '我' : role === 'error' ? '!' : 'H';
+  avatar.textContent = role === 'user' ? '我' : role === 'error' ? '!' : role === 'system' ? '·' : 'H';
   const content = document.createElement('div');
   content.className = 'direction-message-content';
   const label = document.createElement('strong');
-  label.textContent = role === 'user' ? '你' : role === 'error' ? '连接提示' : 'Harness';
+  label.textContent = role === 'user' ? '你' : role === 'error' ? '连接提示' : role === 'system' ? '进度' : 'Harness';
   const body = document.createElement('p');
   body.textContent = text;
   content.append(label, body);
   message.append(avatar, content);
   creationConversation.append(message);
   creationConversation.scrollTop = creationConversation.scrollHeight;
+  return message;
 }
 
 function showCreationMessage(text, isError = false) {
@@ -3623,6 +3871,94 @@ function setCreateLoading(active, text = 'Harness 正在处理中…') {
   createLoading.setAttribute('aria-hidden', String(!active));
   createDialog.setAttribute('aria-busy', String(active));
   if (active) createLoadingText.textContent = text;
+}
+
+function appendCreationPending(text = '正在等待 Harness 回复') {
+  const pending = document.createElement('div');
+  pending.className = 'direction-message is-agent is-pending';
+  pending.setAttribute('role', 'status');
+  const avatar = document.createElement('span');
+  avatar.className = 'direction-message-avatar';
+  avatar.textContent = 'H';
+  const content = document.createElement('div');
+  content.className = 'direction-message-content';
+  const label = document.createElement('strong');
+  label.textContent = 'Harness';
+  const body = document.createElement('p');
+  body.className = 'direction-pending-copy';
+  body.textContent = text;
+  const dots = document.createElement('span');
+  dots.className = 'direction-pending-dots';
+  dots.setAttribute('aria-hidden', 'true');
+  dots.textContent = '•••';
+  content.append(label, body, dots);
+  pending.append(avatar, content);
+  creationConversation.append(pending);
+  creationConversation.scrollTop = creationConversation.scrollHeight;
+  creationPendingMessage = pending;
+  return pending;
+}
+
+function appendCreationRetry(message, failedBubble = null) {
+  const errorBubble = appendCreationMessage('error', message);
+  const retry = document.createElement('button');
+  retry.className = 'direction-retry-button';
+  retry.type = 'button';
+  retry.textContent = '重试发送';
+  retry.addEventListener('click', () => {
+    retry.disabled = true;
+    errorBubble.remove();
+    void sendCreationDirection(message, failedBubble);
+  });
+  errorBubble.querySelector('.direction-message-content').append(retry);
+}
+
+async function sendCreationDirection(message, existingBubble = null) {
+  if (createBusy || !creationSessionId) return;
+  const sessionId = creationSessionId;
+  const ownerId = getCurrentUser()?.id;
+  const controller = beginCreateRequest();
+  const userBubble = existingBubble || appendCreationMessage('user', message);
+  const pending = appendCreationPending();
+  createBusy = true;
+  createDialog.setAttribute('aria-busy', 'true');
+  createLoading.hidden = true;
+  updateCreateStep();
+  try {
+    const envelope = await createApiRequest(`/experiment-creation/sessions/${encodeURIComponent(sessionId)}/messages`, {
+      method: 'POST', body: JSON.stringify({ message }),
+    });
+    if (ownerId !== getCurrentUser()?.id || creationSessionId !== sessionId) return;
+    if (typeof envelope.assistantMessage !== 'string') throw new Error('Harness 未返回可显示的回复，请重试。');
+    pending.remove();
+    if (creationPendingMessage === pending) creationPendingMessage = null;
+    showCreationMessage(envelope.assistantMessage);
+    learningGoal.value = '';
+    directionTitle.textContent = envelope.intent?.observable_outcome || envelope.intent?.raw_request || '方向待补充';
+    directionDetail.textContent = envelope.intent?.target_artifact || envelope.intent?.target_skill || envelope.assistantMessage;
+    directionReady = envelope.status === 'ready_for_confirmation';
+    directionTitleReview.textContent = directionTitle.textContent;
+    directionDetailReview.textContent = directionDetail.textContent;
+    directionReview.hidden = !directionReady;
+    learningGoal.placeholder = directionReady
+      ? '如需修正或补充方向，可以继续告诉 Harness…'
+      : envelope.nextQuestion?.text || '请继续补充…';
+  } catch (error) {
+    pending.remove();
+    if (creationPendingMessage === pending) creationPendingMessage = null;
+    if (ownerId === getCurrentUser()?.id && creationSessionId === sessionId) {
+      learningGoal.value = message;
+      appendCreationRetry(error.message || '发送失败，请检查连接后重试。', userBubble);
+    }
+  } finally {
+    finishCreateRequest(controller);
+    if (ownerId === getCurrentUser()?.id && creationSessionId === sessionId) {
+      createBusy = false;
+      setCreateLoading(false);
+      updateCreateStep();
+      if (!createDialog.classList.contains('is-open')) void loadCreationDrafts(routeResolutionEpoch);
+    }
+  }
 }
 
 function renderPlanPreview(plan) {
@@ -3694,12 +4030,24 @@ function renderPlanPreview(plan) {
 
 async function openCreateDialog() {
   if (createMaterializationInFlight) return;
+  if (createBusy && creationSessionOwnerId === getCurrentUser()?.id) {
+    createDialog.classList.add('is-open');
+    updateCreateStep();
+    return;
+  }
+  if (creationSessionId && creationSessionOwnerId === getCurrentUser()?.id) {
+    createDialog.classList.add('is-open');
+    updateCreateStep();
+    if (!createBusy) learningGoal.focus();
+    return;
+  }
   const epoch = ++createDialogEpoch;
   const requestController = beginCreateRequest();
   createStep = 1;
   createPlanReady = false;
   directionReady = false;
   creationSessionId = null;
+  creationSessionOwnerId = getCurrentUser()?.id;
   pendingPlan = null;
   materializationKey = null;
   createPlan.classList.remove('is-active');
@@ -3711,7 +4059,7 @@ async function openCreateDialog() {
   });
   directionReview.hidden = true;
   creationConversation.replaceChildren();
-  appendCreationMessage('assistant', '告诉我你想学习什么，或想完成什么成果。我会先帮你把方向说清楚；如果关键信息不足，只会一次追问一个问题。');
+  appendCreationMessage('system', '实验规划对话已开始。请描述你想学习的内容或希望完成的成果。');
   updateDurationPreview();
   directionTitle.textContent = '等待第一段对话';
   directionDetail.textContent = '完成方向描述后，这里会显示 Harness 记录的事实。';
@@ -3723,16 +4071,17 @@ async function openCreateDialog() {
   setCreateLoading(true, '正在建立独立的 Harness 会话…');
   try {
     const session = await createApiRequest('/experiment-creation/sessions', { method: 'POST', body: '{}' });
-    if (epoch !== createDialogEpoch || !createDialog.classList.contains('is-open')) return;
+    if (epoch !== createDialogEpoch || creationSessionOwnerId !== getCurrentUser()?.id) return;
     creationSessionId = session.sessionId;
-    learningGoal.focus();
+    if (createDialog.classList.contains('is-open')) learningGoal.focus();
+    if (!createDialog.classList.contains('is-open')) void loadCreationDrafts(routeResolutionEpoch);
   } catch (error) {
-    if (epoch === createDialogEpoch && createDialog.classList.contains('is-open') && !requestController.signal.aborted) {
+    if (epoch === createDialogEpoch && creationSessionOwnerId === getCurrentUser()?.id) {
       showCreationMessage(error.message, true);
     }
   } finally {
     finishCreateRequest(requestController);
-    if (epoch === createDialogEpoch && createDialog.classList.contains('is-open')) {
+    if (epoch === createDialogEpoch && creationSessionOwnerId === getCurrentUser()?.id) {
       createBusy = false;
       setCreateLoading(false);
       updateCreateStep();
@@ -3741,16 +4090,11 @@ async function openCreateDialog() {
 }
 
 function closeCreateDialogPanel() {
-  if (createMaterializationInFlight) {
-    setCreateLoading(true, '实验正在提交创建，完成后会自动返回，请勿重复提交。');
-    return;
-  }
-  createDialogEpoch += 1;
-  cancelCreateRequest();
   createDialog.classList.remove('is-open');
-  createBusy = false;
-  setCreateLoading(false);
-  updateCreateStep();
+  if (!createBusy) {
+    setCreateLoading(false);
+    void loadCreationDrafts(routeResolutionEpoch);
+  }
 }
 
 function updateCreateStep() {
@@ -3775,7 +4119,7 @@ function updateCreateStep() {
       : createStep === 2 ? '保存周期并继续' : '生成实验方案';
   createStepButton.innerHTML = `${label} <span>→</span>`;
   createStepButton.disabled = createBusy;
-  closeCreateDialog.disabled = createMaterializationInFlight;
+  closeCreateDialog.disabled = false;
   learningGoal.disabled = createBusy;
   durationHoursInput.disabled = createBusy;
   document.querySelectorAll('.choice-item').forEach((choice) => { choice.disabled = createBusy; });
@@ -3796,7 +4140,27 @@ document.querySelectorAll('.choice-item').forEach((choice) => {
     const group = choice.dataset.choiceGroup;
     document.querySelectorAll(`[data-choice-group="${group}"]`).forEach((item) => item.classList.remove('is-selected'));
     choice.classList.add('is-selected');
-    if (group === 'difficulty') selectedDifficulty = choice.dataset.value;
+    if (group === 'difficulty') {
+      selectedDifficulty = choice.dataset.value;
+      if (creationSessionId && createStep === 3) {
+        createBusy = true;
+        updateCreateStep();
+        setCreateLoading(true, '正在保存难度选择…');
+        const sessionId = creationSessionId;
+        const ownerId = getCurrentUser()?.id;
+        void saveCreationConfiguration().catch((error) => {
+          if (sessionId === creationSessionId && ownerId === getCurrentUser()?.id) {
+            showCreationMessage(error.message || '难度暂未保存，请重试。', true);
+          }
+        }).finally(() => {
+          if (sessionId !== creationSessionId || ownerId !== getCurrentUser()?.id) return;
+          createBusy = false;
+          setCreateLoading(false);
+          updateCreateStep();
+          if (!createDialog.classList.contains('is-open')) void loadCreationDrafts(routeResolutionEpoch);
+        });
+      }
+    }
     if (group === 'duration') selectedDuration = choice.dataset.value;
   });
 });
@@ -3805,6 +4169,15 @@ createStepButton.addEventListener('click', async () => {
   if (createBusy) return;
   if (!creationSessionId) {
     showCreationMessage('需求会话尚未建立，请关闭后重试。', true);
+    return;
+  }
+  if (createStep === 1 && (!directionReady || learningGoal.value.trim())) {
+    const message = learningGoal.value.trim();
+    if (!message) {
+      learningGoal.focus();
+      return;
+    }
+    await sendCreationDirection(message);
     return;
   }
   createBusy = true;
@@ -3829,6 +4202,8 @@ createStepButton.addEventListener('click', async () => {
       createMaterializationInFlight = false;
       ownsMaterialization = false;
       createBusy = false;
+      creationSessionId = null;
+      creationSessionOwnerId = null;
       closeCreateDialogPanel();
       learningGoal.value = '';
       createPlanReady = false;
@@ -3840,34 +4215,10 @@ createStepButton.addEventListener('click', async () => {
       return;
     }
 
-    if (createStep === 1 && (!directionReady || learningGoal.value.trim())) {
-      setCreateLoading(true, 'Harness 正在整理实验方向…');
-      const message = learningGoal.value.trim();
-      if (!message) {
-        learningGoal.focus();
-        return;
-      }
-      const envelope = await createApiRequest(`/experiment-creation/sessions/${creationSessionId}/messages`, {
-        method: 'POST', body: JSON.stringify({ message }),
-      });
-      appendCreationMessage('user', message);
-      showCreationMessage(envelope.assistantMessage);
-      learningGoal.value = '';
-      directionTitle.textContent = envelope.intent.observable_outcome || envelope.intent.raw_request;
-      directionDetail.textContent = envelope.intent.target_artifact || envelope.assistantMessage;
-      directionReady = envelope.status === 'ready_for_confirmation';
-      directionTitleReview.textContent = directionTitle.textContent;
-      directionDetailReview.textContent = directionDetail.textContent;
-      directionReview.hidden = !directionReady;
-      learningGoal.placeholder = directionReady
-        ? '如果想修正或补充方向，可以继续告诉 Harness…'
-        : envelope.nextQuestion?.text || '请继续补充…';
-      return;
-    }
-
     if (createStep === 1 && directionReady) {
       setCreateLoading(true, '正在确认实验方向…');
       await createApiRequest(`/experiment-creation/sessions/${creationSessionId}/direction/confirm`, { method: 'POST', body: '{}' });
+      appendCreationMessage('system', '实验方向已确认。');
       createStep = 2;
       updateCreateStep();
       return;
@@ -3875,25 +4226,16 @@ createStepButton.addEventListener('click', async () => {
 
     if (createStep === 2) {
       setCreateLoading(true, '正在保存学习周期…');
-      updateDurationPreview();
-      if (durationTotalHours <= 0) {
-        durationHoursInput.focus();
-        return;
-      }
+      await saveCreationConfiguration();
+      appendCreationMessage('system', `学习周期已设置：${selectedDuration}。`);
       createStep = 3;
       updateCreateStep();
       return;
     }
 
     setCreateLoading(true, 'Harness 正在生成树状实验方案，请稍候…');
-    await createApiRequest(`/experiment-creation/sessions/${creationSessionId}/configuration`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        durationDays: Math.floor(durationTotalHours / 24),
-        durationHours: durationTotalHours % 24,
-        difficulty: difficultyCode(selectedDifficulty),
-      }),
-    });
+    appendCreationMessage('system', `方案生成设置：周期 ${selectedDuration}，难度 ${selectedDifficulty}。`);
+    await saveCreationConfiguration();
     const plan = await createApiRequest(`/experiment-creation/sessions/${creationSessionId}/plan`, {
       method: 'POST',
       body: '{}',
@@ -3903,17 +4245,19 @@ createStepButton.addEventListener('click', async () => {
     createPlanReady = true;
     document.querySelectorAll('.create-step').forEach((step) => step.classList.remove('is-active'));
     createPlan.classList.add('is-active');
+    appendCreationMessage('system', '实验方案已生成，请检查清单后确认创建。');
   } catch (error) {
-    if (requestEpoch === createDialogEpoch && createDialog.classList.contains('is-open') && !requestController?.signal.aborted) {
+    if (requestEpoch === createDialogEpoch && !requestController?.signal.aborted) {
       showCreationMessage(error.message, true);
     }
   } finally {
     if (requestController) finishCreateRequest(requestController);
     if (ownsMaterialization) createMaterializationInFlight = false;
-    if (requestEpoch === createDialogEpoch && createDialog.classList.contains('is-open')) {
+    if (requestEpoch === createDialogEpoch) {
       createBusy = false;
       setCreateLoading(false);
       updateCreateStep();
+      if (!createDialog.classList.contains('is-open')) void loadCreationDrafts(routeResolutionEpoch);
     }
   }
 });
@@ -3921,7 +4265,13 @@ createStepButton.addEventListener('click', async () => {
 createExperimentButton.addEventListener('click', openCreateDialog);
 closeCreateDialog.addEventListener('click', closeCreateDialogPanel);
 createDialog.addEventListener('click', (event) => {
-  if (event.target === createDialog) closeCreateDialogPanel();
+  if (event.target === createDialog) event.stopPropagation();
+});
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && createDialog.classList.contains('is-open')) {
+    event.preventDefault();
+    closeCreateDialogPanel();
+  }
 });
 
 window.addEventListener('resize', () => {

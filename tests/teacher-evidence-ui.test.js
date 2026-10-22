@@ -12,6 +12,11 @@ const [app, html] = await Promise.all([
 const evidenceUi = app.slice(app.indexOf('async function openTeacherSnapshot'), app.indexOf('async function loadTeacherCourseDashboard'));
 const validatorStart = app.indexOf('async function verifyWorkspaceFileResponse');
 const validatorEnd = app.indexOf('\nfunction setLibraryState', validatorStart);
+const hashFallbackStart = app.indexOf('function sha256HexFallback(');
+const sha256HexFallback = runInNewContext(
+  `(${app.slice(hashFallbackStart, validatorStart).trim()})`,
+  { Uint8Array, DataView, Array, Math },
+);
 const studentDashboardStart = app.indexOf('async function renderStudentDashboard()');
 const studentDashboardEnd = app.indexOf('\nfunction validateDshLaunchUrl', studentDashboardStart);
 const clearStudentDashboardStart = app.indexOf('function clearStudentDashboard()');
@@ -27,7 +32,7 @@ const teacherRunDetailLoaderStart = app.indexOf('async function loadTeacherRunDe
 const teacherRunDashboardStart = app.indexOf('\nasync function loadTeacherCourseDashboard', teacherRunDetailLoaderStart);
 const verifyWorkspaceFileResponse = runInNewContext(
   `(${app.slice(validatorStart, validatorEnd).trim()})`,
-  { window: { crypto: webcrypto, TextEncoder }, Uint8Array, Array, Error },
+  { window: { crypto: webcrypto, TextEncoder }, sha256HexFallback, Uint8Array, Array, Error },
 );
 
 function createStudentDashboardHarness() {
@@ -364,6 +369,33 @@ test('workspace file validator accepts the selected file and rejects mismatched 
   );
   await assert.rejects(
     verifyWorkspaceFileResponse({ file: metadata, content: 'print("wrong language")' }, 9, { ...metadata }),
+    /文件内容校验失败/,
+  );
+});
+
+test('HTTP-compatible SHA-256 fallback preserves file integrity verification without Web Crypto', async () => {
+  assert.equal(
+    sha256HexFallback(new TextEncoder().encode('abc')),
+    'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  );
+  const content = '中文文件内容\n';
+  const contentHash = await testSha256(content);
+  const verifyWithoutWebCrypto = runInNewContext(
+    `(${app.slice(validatorStart, validatorEnd).trim()})`,
+    { window: { crypto: null, TextEncoder }, sha256HexFallback, Uint8Array, Array, Error },
+  );
+  const verified = await verifyWithoutWebCrypto(
+    { file: { workspaceId: 9, path: 'README.md', contentHash }, content },
+    9,
+    { workspaceId: 9, path: 'README.md', contentHash },
+  );
+  assert.equal(verified.content, content);
+  await assert.rejects(
+    verifyWithoutWebCrypto(
+      { file: { workspaceId: 9, path: 'README.md', contentHash }, content: '篡改内容' },
+      9,
+      { workspaceId: 9, path: 'README.md', contentHash },
+    ),
     /文件内容校验失败/,
   );
 });

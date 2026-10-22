@@ -2,6 +2,7 @@ package com.bmhs.experimentcreation;
 
 import com.bmhs.course.CourseRepository;
 import com.bmhs.experimentcreation.CreationModels.ConfigurationRequest;
+import com.bmhs.experimentcreation.CreationModels.ConversationMessage;
 import com.bmhs.experimentcreation.CreationModels.ConfirmedIntent;
 import com.bmhs.experimentcreation.CreationModels.CreateSessionResponse;
 import com.bmhs.experimentcreation.CreationModels.ExperimentTree;
@@ -10,6 +11,7 @@ import com.bmhs.experimentcreation.CreationModels.PlanResponse;
 import com.bmhs.experimentcreation.CreationModels.PositionedNode;
 import com.bmhs.experimentcreation.CreationModels.PositionedTask;
 import com.bmhs.experimentcreation.CreationModels.SessionView;
+import com.bmhs.experimentcreation.CreationModels.SessionDraft;
 import com.bmhs.experimentcreation.CreationModels.StudentIntentEnvelope;
 import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
@@ -65,6 +67,7 @@ public class ExperimentCreationService {
     public StudentIntentEnvelope sendDirectionMessage(String sessionId, long userId, String message) {
         var session = transactions.snapshot(sessionId, userId);
         requireStatus(session.status(), "direction_discussion", "direction_ready");
+        transactions.persistUserTurn(session, message);
         StudentIntentEnvelope result = harness.clarify(message, session.direction(), false);
         if (!List.of("needs_clarification", "ready_for_confirmation").contains(result.status())) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "HARNESS_ROLE_VIOLATION",
@@ -220,6 +223,30 @@ public class ExperimentCreationService {
 
     public SessionView get(String sessionId, long userId) {
         return view(repository.find(sessionId, userId));
+    }
+
+    public List<SessionDraft> listDrafts(long userId) {
+        return repository.findDrafts(userId).stream()
+                .map(draft -> {
+                    var session = draft.session();
+                    return new SessionDraft(session.id(), session.status(),
+                            draft.updatedAt(), draftTitle(session), session.durationMinutes(), session.difficulty());
+                })
+                .toList();
+    }
+
+    public List<ConversationMessage> getMessages(String sessionId, long userId) {
+        return repository.findMessages(sessionId, userId);
+    }
+
+    private String draftTitle(CreationRepository.SessionRecord session) {
+        if (session.plan() != null && session.plan().title() != null && !session.plan().title().isBlank()) {
+            return session.plan().title();
+        }
+        if (session.direction() == null || session.direction().intent() == null) return "未完成的实验规划";
+        Object title = session.direction().intent().get("observable_outcome");
+        if (title == null || title.toString().isBlank()) title = session.direction().intent().get("raw_request");
+        return title == null || title.toString().isBlank() ? "未完成的实验规划" : title.toString();
     }
 
     private SessionView view(CreationRepository.SessionRecord session) {
