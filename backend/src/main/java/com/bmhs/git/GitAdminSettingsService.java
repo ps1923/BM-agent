@@ -42,8 +42,8 @@ public class GitAdminSettingsService {
         if (request == null) throw badRequest("配置内容不能为空");
 
         String apiUrl = normalize(validateInternalApiUrl(request.apiBaseUrl()));
-        String publicUrl = normalize(validatePublicHttpsUrl(request.publicBaseUrl(), "公网克隆地址"));
-        String webhookUrl = validatePublicHttpsUrl(request.webhookTargetUrl(), "Webhook 地址");
+        String publicUrl = normalize(validatePublicUrl(request.publicBaseUrl(), "公网克隆地址"));
+        String webhookUrl = validatePublicUrl(request.webhookTargetUrl(), "Webhook 地址");
 
         String adminToken = request.clearAdminToken() ? "" : preserveOrReplace(request.adminToken(), config.adminToken());
         String webhookSecret = request.clearWebhookSecret() ? "" : preserveOrReplace(request.webhookSecret(), config.webhookSecret());
@@ -79,15 +79,18 @@ public class GitAdminSettingsService {
         return value.trim();
     }
 
-    private String validatePublicHttpsUrl(String value, String label) {
+    private String validatePublicUrl(String value, String label) {
         URI uri = parse(value, label);
-        if (!"https".equalsIgnoreCase(uri.getScheme())) throw badRequest(label + "必须使用 HTTPS");
+        String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
+        if (!scheme.equals("http") && !scheme.equals("https")) {
+            throw badRequest(label + "仅支持 HTTP 或 HTTPS");
+        }
         String host = uri.getHost().toLowerCase(Locale.ROOT);
         if (!isValidPublicHostname(host) || host.equals("gitea") || host.equals("localhost")
                 || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")
                 || host.endsWith(".intranet") || host.endsWith(".lan") || isNonPublicIpv4(host)
                 || host.equals("::1") || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:")) {
-            throw badRequest(label + "必须指向公网可访问的 HTTPS 主机");
+            throw badRequest(label + "必须指向公网可访问的主机");
         }
         return value.trim();
     }

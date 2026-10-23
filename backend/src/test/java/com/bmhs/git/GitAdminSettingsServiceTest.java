@@ -40,11 +40,23 @@ class GitAdminSettingsServiceTest {
     }
 
     @Test
-    void validatesHttpsPublicUrlsAndRestrictsInternalApiHosts() {
-        SettingsRequest httpClone = new SettingsRequest("http://gitea:3000", "http://git.example.test", "token-secret-123", false,
-                "w".repeat(40), false, "https://school.example/api/integrations/gitea/webhook");
-        assertEquals("GIT_SETTINGS_INVALID", assertThrows(ApiException.class, () -> service.save(user("admin"), httpClone)).code());
+    void acceptsHttpPublicUrlsForDevelopmentDemo() {
+        SettingsRequest request = new SettingsRequest("http://gitea:3000", "http://git.example.com", "token-secret-123", false,
+                "w".repeat(40), false, "http://school.example.com/api/integrations/gitea/webhook");
 
+        GitAdminSettingsModels.SettingsView view = service.save(user("admin"), request);
+
+        assertEquals("http://git.example.com", config.publicBaseUrl());
+        assertEquals("http://school.example.com/api/integrations/gitea/webhook", config.webhookTargetUrl());
+        assertTrue(view.configured());
+    }
+
+    @Test
+    void rejectsUnsupportedPublicUrlSchemesAndRestrictsInternalApiHosts() {
+        SettingsRequest unsupportedScheme = new SettingsRequest("http://gitea:3000", "ftp://git.example.com", "token-secret-123", false,
+                "w".repeat(40), false, "http://school.example.com/api/integrations/gitea/webhook");
+        assertEquals("GIT_SETTINGS_INVALID", assertThrows(ApiException.class,
+                () -> service.save(user("admin"), unsupportedScheme)).code());
         SettingsRequest externalApi = new SettingsRequest("http://169.254.169.254/latest/meta-data", "https://git.example.test", "token-secret-123", false,
                 "w".repeat(40), false, "https://school.example/api/integrations/gitea/webhook");
         assertEquals("GIT_SETTINGS_INVALID", assertThrows(ApiException.class, () -> service.save(user("admin"), externalApi)).code());
@@ -80,7 +92,7 @@ class GitAdminSettingsServiceTest {
         assertEquals(request.adminToken(), cipher.decrypt(row.adminTokenCiphertext()));
         assertEquals(request.webhookSecret(), cipher.decrypt(row.webhookSecretCiphertext()));
         assertEquals("http://gitea:3000", config.apiBaseUrl());
-        assertEquals("https://git.example.com", config.publicBaseUrl());
+        assertEquals("http://git.example.com", config.publicBaseUrl());
         assertEquals(request.adminToken(), config.adminToken());
         assertEquals(request.webhookSecret(), config.webhookSecret());
         assertEquals("database", view.source());
@@ -124,8 +136,8 @@ class GitAdminSettingsServiceTest {
     }
 
     private SettingsRequest validRequest() {
-        return new SettingsRequest("http://gitea:3000/", "https://git.example.com/", "gitea-admin-token-123", false,
-                "w".repeat(40), false, "https://school.example.com/api/integrations/gitea/webhook");
+        return new SettingsRequest("http://gitea:3000/", "http://git.example.com/", "gitea-admin-token-123", false,
+                "w".repeat(40), false, "http://school.example.com/api/integrations/gitea/webhook");
     }
 
     private AuthenticatedUser user(String role) { return new AuthenticatedUser(42, role + "@example.test", role, role); }

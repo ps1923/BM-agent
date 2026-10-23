@@ -28,4 +28,6 @@ test('admin personal center has a protected settings route and non-echoing secre
   assert.match(js, /\['admin', 'admin-personal-center'\]\.includes\(route\.type\) \? 'admin'/);
   assert.match(js, /apiRequest\('\/admin\/integrations\/gitea'/);
   assert.match(html, /留空表示保留当前令牌/);
+  assert.match(html, /支持 HTTP\/HTTPS；HTTP 仅适合开发演示/);
+  assert.match(html, /HTTP 下回调内容可能被截获/);
 });
