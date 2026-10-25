@@ -214,9 +214,10 @@ public class GiteaClient implements GiteaGateway {
     }
 
     private void requireConfigured() {
-        if (!config.configured() || !isHttps(config.publicBaseUrl()) || !isHttps(config.webhookTargetUrl())) {
+        if (!config.configured() || !isAllowedPublicUrl(config.publicBaseUrl())
+                || !isAllowedPublicUrl(config.webhookTargetUrl())) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "GIT_REPOSITORY_NOT_CONFIGURED",
-                    "Gitea 尚未安全配置；仓库地址与凭据未发放");
+                    "Gitea 尚未完成配置；仓库地址与凭据未发放");
         }
         URI api = URI.create(config.apiBaseUrl());
         // Compose deployments use http://gitea:3000 on the isolated gitea-net. Do not
@@ -233,8 +234,14 @@ public class GiteaClient implements GiteaGateway {
     }
 
     private boolean isLoopback(String host) { return host.equalsIgnoreCase("localhost") || host.equals("127.0.0.1") || host.equals("::1"); }
-    private boolean isHttps(String value) {
-        try { URI uri = URI.create(value); return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null && uri.getUserInfo() == null; }
+    static boolean isAllowedPublicUrl(String value) {
+        if (value == null) return false;
+        try {
+            URI uri = URI.create(value);
+            String scheme = uri.getScheme();
+            return ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    && uri.getHost() != null && uri.getUserInfo() == null;
+        }
         catch (IllegalArgumentException exception) { return false; }
     }
     private static String segment(String value) { return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20"); }

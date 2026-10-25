@@ -121,7 +121,7 @@ mvn -f backend/pom.xml spring-boot:run
 
 后端启动前必须通过环境变量提供数据库密码，不能把密码写入命令、日志或仓库。旧工作区 API 如需回归测试才配置 `WORKSPACE_ROOT`、`WORKSPACE_RUNTIME_IMAGE` 等参数；它们不是新 Git 提交流程的依赖。
 
-Git 验收还需配置 Gitea 管理员令牌、对外 HTTPS 地址、Gitea webhook 目标地址、至少 32 字节随机 webhook 密钥，以及 Base64 编码的 32 字节 `GIT_CREDENTIAL_ENCRYPTION_KEY`。这些值通过受保护的环境配置注入，不能提交到仓库。Gitea API 内部地址格式为 `http://gitea:3000`（不带 `/api/v1` 后缀）；对外仓库地址必须是学生能够访问的 HTTPS 地址。未配置完整时，创建仓库会返回明确的不可用错误，不会伪造克隆地址。
+Git 验收还需配置 Gitea 管理员令牌、对外 Gitea 地址、Webhook 接收地址、至少 32 字节随机 Webhook 密钥，以及 Base64 编码的 32 字节 `GIT_CREDENTIAL_ENCRYPTION_KEY`。密钥通过受保护的服务器环境配置注入，不能提交到仓库。`GITEA_API_BASE_URL` 是 BM-HS 后端访问 Gitea API 的地址（不带 `/api/v1` 后缀）；服务器上的反向代理将 `/gitea/` 转发到只监听本机的 Gitea 端口，并将 `GITEA_PUBLIC_URL` 与 `GITEA_PUBLIC_BASE_URL` 配置为 `http://<服务器地址>/gitea/`。Webhook 地址配置为 `http://<服务器地址>/bm-agent/api/integrations/gitea/webhook`。本项目个人演示阶段允许使用 HTTP，但 HTTP 不加密网络传输，学生 Git 凭据可能被同一网络上的观察者截获；只用于受控演示，不要用于真实课程或开放网络。未配置完整时，创建仓库会返回明确的不可用错误，不会伪造克隆地址。
 
 学生 Git 接口：`POST /api/student/experiments/{experimentId}/runs` 创建或复用 Git 运行实例；`GET /api/student/runs/{runId}/repository` 读取仓库；`POST /api/student/runs/{runId}/repository-credentials` 在认证后获取个人 Git 凭据；学生本地 push 后，调用 `POST /api/student/runs/{runId}/submissions` 提交完整 commit SHA 和 `nodeIds`；`GET /api/student/runs/{runId}/submissions` 查看异步检查历史，`GET /api/student/submissions/{submissionId}` 查看报告。Gitea 的签名 push webhook 接收入口为 `POST /api/integrations/gitea/webhook`。教师读取列表及差异分别使用 `GET /api/teacher/runs/{runId}/submissions` 和 `GET /api/teacher/submissions/{submissionId}`。提交只检查学生已 push 的 SHA；webhook 本身不接受学生身份或自行创建验收任务。
 
