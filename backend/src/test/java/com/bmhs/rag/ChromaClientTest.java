@@ -33,13 +33,15 @@ class ChromaClientTest {
             ChromaClient client = new ChromaClient("http://127.0.0.1:" + server.getAddress().getPort(),
                     "test_collection", "", Duration.ofSeconds(2));
 
-            List<RagModels.ChromaHit> hits = client.query(List.of(0.1), 4L, 2L, 8);
+            List<RagModels.ChromaHit> hits = client.query(List.of(0.1), 4L, 2L, 9L, null, 8);
 
             assertEquals(List.of(new RagModels.ChromaHit("bug-1", 0.2)), hits);
             assertTrue(queryBody.get().contains("\"$and\""));
             assertTrue(queryBody.get().contains("\"course_id\""));
             assertTrue(queryBody.get().contains("\"experiment_id\""));
             assertTrue(queryBody.get().contains("\"approved\""));
+            assertTrue(queryBody.get().contains("\"node_id\""));
+            assertTrue(queryBody.get().contains("\"$or\""));
         } finally {
             server.stop(0);
         }
@@ -66,9 +68,12 @@ class ChromaClientTest {
                     "test_collection", "", Duration.ofSeconds(2));
 
             assertEquals(List.of(new RagModels.ChromaHit("bug-1", 0.2)),
-                    client.queryByExperiment(List.of(0.1), null, 7L, null, 8));
+                    client.queryByExperiment(List.of(0.1), null, 7L, 8L, null, 8));
             assertTrue(queryBody.get().contains("\"experiment_id\""));
             assertTrue(queryBody.get().contains("\"approved\""));
+            assertTrue(queryBody.get().contains("\"node_id\""));
+            assertTrue(queryBody.get().contains("\"$or\""));
+            assertTrue(queryBody.get().contains("\"8\""));
             org.junit.jupiter.api.Assertions.assertFalse(queryBody.get().contains("\"course_id\""));
         } finally {
             server.stop(0);
@@ -102,6 +107,60 @@ class ChromaClientTest {
                     "Java/Spring Boot", "approved"), List.of(0.1, 0.2));
 
             assertTrue(upsertBody.get().contains("\"ids\":[\"bug-1\"]"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void deleteRemovesRejectedCaseDocumentByItsStableId() throws Exception {
+        AtomicReference<String> deleteBody = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/collections", exchange -> {
+            String path = exchange.getRequestURI().getPath();
+            if (path.endsWith("/delete")) {
+                deleteBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            }
+            String response = path.endsWith("/collections") ? "{\"id\":\"collection-1\"}" : "null";
+            byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ChromaClient client = new ChromaClient("http://127.0.0.1:" + server.getAddress().getPort(),
+                    "test_collection", "", Duration.ofSeconds(2));
+
+            client.delete("bug-21");
+
+            assertTrue(deleteBody.get().contains("\"ids\":[\"bug-21\"]"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void malformedChromaHitsAreReturnedAsUnusableDistancesInsteadOfThrowing() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/api/v1/collections", exchange -> {
+            String response = exchange.getRequestURI().getPath().endsWith("/query")
+                    ? "{\"ids\":[[\"bug-1\",null,7,\"bug-2\"]],\"distances\":[[0.2,\"bad\",0.4]]}"
+                    : "{\"id\":\"collection-1\"}";
+            byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ChromaClient client = new ChromaClient("http://127.0.0.1:" + server.getAddress().getPort(),
+                    "test_collection", "", Duration.ofSeconds(2));
+
+            List<RagModels.ChromaHit> hits = client.query(List.of(0.1), null, 5L, 8);
+
+            assertEquals(List.of(new RagModels.ChromaHit("bug-1", 0.2),
+                    new RagModels.ChromaHit("bug-2", Double.MAX_VALUE)), hits);
         } finally {
             server.stop(0);
         }

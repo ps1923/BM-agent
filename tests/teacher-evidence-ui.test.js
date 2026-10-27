@@ -18,7 +18,7 @@ const sha256HexFallback = runInNewContext(
   { Uint8Array, DataView, Array, Math },
 );
 const studentDashboardStart = app.indexOf('async function renderStudentDashboard()');
-const studentDashboardEnd = app.indexOf('\nasync function renderAdminDashboard', studentDashboardStart);
+const studentDashboardEnd = app.indexOf('\nlet personalProfileRequestEpoch', studentDashboardStart);
 const clearStudentDashboardStart = app.indexOf('function clearStudentDashboard()');
 const clearStudentDashboardEnd = app.indexOf('\nfunction formatTeacherDate', clearStudentDashboardStart);
 const renderSimpleRouteStart = app.indexOf('function renderSimpleRoute(route)');
@@ -57,8 +57,7 @@ function createStudentDashboardHarness() {
     loginView: { classList: { remove() {}, add() {} } },
     studentView: { classList: { remove() {}, add() {} } },
     teacherView: { classList: { remove() {}, add() {} } },
-    adminView: { classList: { remove() {}, add() {} } },
-    adminPersonalCenterView: { classList: { remove() {}, add() {} } },
+    personalCenterView: { classList: { remove() {}, add() {} } },
     hideProtectedViews() {},
     renderTeacherDashboard() {},
     document: { createElement: makeElement },

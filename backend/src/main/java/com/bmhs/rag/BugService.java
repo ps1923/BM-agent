@@ -42,6 +42,7 @@ public class BugService {
         requireRole(user, "teacher");
         RagModels.BugCaseView result = repository.review(bugCaseId, user.id(), request);
         if ("approved".equals(result.status())) ragService.indexApproved(result);
+        else if (result.chromaDocumentId() != null) ragService.removeRejectedIndex(result);
         return repository.findById(bugCaseId);
     }
 

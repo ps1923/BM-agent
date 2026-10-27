@@ -5,9 +5,12 @@ import com.bmhs.course.CourseModels.CourseView;
 import com.bmhs.course.CourseModels.ExperimentSummary;
 import com.bmhs.course.CourseModels.PublishedExperiment;
 import com.bmhs.experimentcreation.CreationModels.MaterializedExperiment;
+import com.bmhs.experimentcreation.CreationModels.AcceptanceCriterion;
 import com.bmhs.experimentcreation.CreationModels.PositionedTask;
 import com.bmhs.experimentcreation.CreationModels.PositionedNode;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.FieldNamingPolicy;
 import com.google.gson.reflect.TypeToken;
 import com.bmhs.experimentcreation.ApiException;
 import org.springframework.dao.DuplicateKeyException;
@@ -29,9 +32,11 @@ public class CourseRepository {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     public record CourseRow(long id, long teacherId, String name, String inviteCode) {}
+    private record CriteriaRow(int version, String source, List<AcceptanceCriterion> criteria) {}
 
     private final JdbcTemplate jdbc;
     private final Gson gson = new Gson();
+    private final Gson criteriaGson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create();
 
     public CourseRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -73,6 +78,17 @@ public class CourseRepository {
                         rs.getLong("id"), rs.getLong("teacher_id"), rs.getString("name"),
                         rs.getString("invite_code")), courseId);
         return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    public String findGitRepositoryUrl(long courseId) {
+        List<String> urls = jdbc.query("SELECT git_repository_url FROM courses WHERE id = ? AND status = 'active'",
+                (rs, rowNum) -> rs.getString("git_repository_url"), courseId);
+        return urls.isEmpty() ? null : urls.get(0);
+    }
+
+    public void updateGitRepositoryUrl(long courseId, String repositoryUrl) {
+        jdbc.update("UPDATE courses SET git_repository_url = ? WHERE id = ? AND status = 'active'",
+                repositoryUrl, courseId);
     }
 
     public CourseView join(long courseId, long studentId, String inviteCode) {
@@ -199,9 +215,31 @@ public class CourseRepository {
         }, experimentId);
         Map<String, NodeRow> byKey = new HashMap<>();
         rows.forEach(row -> byKey.put(row.key(), row));
-        List<PositionedNode> nodes = rows.stream().map(row -> new PositionedNode(row.key(), row.parentKey(),
+        Map<Long, CriteriaRow> criteriaByNode = new HashMap<>();
+        jdbc.query("""
+                SELECT current.node_id, current.version, current.source, current.criteria_json
+                FROM experiment_node_acceptance_criteria current
+                JOIN (SELECT node_id, MAX(version) AS version
+                      FROM experiment_node_acceptance_criteria WHERE experiment_id = ? GROUP BY node_id) latest
+                  ON latest.node_id = current.node_id AND latest.version = current.version
+                WHERE current.experiment_id = ?
+                """, rs -> {
+            while (rs.next()) {
+                List<AcceptanceCriterion> criteria = criteriaGson.fromJson(rs.getString("criteria_json"),
+                        new TypeToken<List<AcceptanceCriterion>>() {}.getType());
+                criteriaByNode.put(rs.getLong("node_id"), new CriteriaRow(rs.getInt("version"),
+                        rs.getString("source"), criteria == null ? List.of() : criteria));
+            }
+            return null;
+        }, experimentId, experimentId);
+        List<PositionedNode> nodes = rows.stream().map(row -> {
+            CriteriaRow criteria = criteriaByNode.get(row.id());
+            return new PositionedNode(row.key(), row.parentKey(),
                 depth(row, byKey), row.stageName(), row.name(), row.description(), row.estimatedMinutes(),
-                tasks.getOrDefault(row.key(), List.of()), row.canvasX(), row.canvasY(), row.id())).toList();
+                tasks.getOrDefault(row.key(), List.of()), row.canvasX(), row.canvasY(), row.id(),
+                criteria == null ? List.of() : criteria.criteria(), criteria == null ? null : criteria.version(),
+                criteria == null ? "legacy_inferred" : criteria.source());
+        }).toList();
         return new MaterializedExperiment(header.id(), header.name(), header.description(), header.difficulty(),
                 header.durationMinutes(), nodes);
     }

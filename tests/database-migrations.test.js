@@ -147,6 +147,98 @@ test('Git commit acceptance migration is additive, experiment-scoped, and preser
   assert.doesNotMatch(migration, /execution_mode IN \('dsh', 'git'\)|DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM/i);
 });
 
+test('teacher role and personal center migration preserves accounts and assignment data', async () => {
+  const migration = await read('../database/migrations/20261023_teacher_role_personal_center_course_git.sql');
+  const [schema, baseline, verifier] = await Promise.all([
+    read('../database/schema.sql'),
+    read('../database/migrations/20261021_add_dsh_plugin_baseline.sql'),
+    read('../database/verify.sql'),
+  ]);
+  assert.match(migration, /UPDATE `users` SET `role` = 'teacher' WHERE `role` = 'admin'/);
+  assert.match(migration, /ADD COLUMN `course_id` BIGINT UNSIGNED NULL/);
+  assert.match(migration, /SELECT MIN\(c\.id\)[\s\S]+WHERE e\.id = er\.experiment_id/);
+  assert.match(migration, /ADD COLUMN `assigned_by_teacher_id` BIGINT UNSIGNED NULL/);
+  assert.match(migration, /assigned_by_teacher_id` = `assigned_by_admin_id` WHERE `assigned_by_teacher_id` IS NULL/);
+  assert.match(migration, /MODIFY COLUMN `assigned_by_admin_id` BIGINT UNSIGNED NULL/);
+  assert.doesNotMatch(migration, /DROP COLUMN `assigned_by_admin_id`|DROP FOREIGN KEY `fk_experiment_reviewers_admin`/);
+  assert.match(migration, /CHECK \(`role` IN \(''student'', ''teacher''\)\)/);
+  assert.match(migration, /information_schema\.COLUMNS/);
+  assert.match(migration, /MODIFY COLUMN `assigned_by_teacher_id` BIGINT UNSIGNED NOT NULL/);
+  assert.match(migration, /git_author_name/);
+  assert.match(migration, /git_author_email/);
+  assert.match(migration, /git_repository_url/);
+  assert.doesNotMatch(migration, /DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM/i);
+  assert.match(schema, /CHECK \(`role` IN \('student', 'teacher'\)\)/);
+  assert.match(schema, /`assigned_by_teacher_id` BIGINT UNSIGNED NOT NULL/);
+  assert.match(baseline, /`assigned_by_admin_id` BIGINT UNSIGNED NOT NULL/);
+  assert.match(baseline, /`fk_experiment_reviewers_admin`/);
+  assert.match(verifier, /'users', 'git_author_name', 'varchar\(100\)', 'YES'/);
+  assert.match(verifier, /'courses', 'git_repository_url', 'varchar\(1000\)', 'YES'/);
+  assert.match(verifier, /fk_experiment_reviewers_assigned_by_teacher/);
+});
+
+test('node acceptance criteria migration is additive and stores immutable report snapshots', async () => {
+  const migration = await read('../database/migrations/20261027_node_acceptance_criteria.sql');
+  const repository = await read('../backend/src/main/java/com/bmhs/git/GitSubmissionRepository.java');
+  const [schema, verifier] = await Promise.all([
+    read('../database/schema.sql'),
+    read('../database/verify.sql'),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS `experiment_node_acceptance_criteria`/);
+  assert.match(migration, /UNIQUE KEY `uq_node_acceptance_criteria_version` \(`node_id`, `version`\)/);
+  assert.match(migration, /FOREIGN KEY \(`node_id`, `experiment_id`\)[\s\S]+REFERENCES `experiment_nodes`/);
+  assert.match(migration, /USE `BM-sql`/);
+  for (const column of ['criteria_version', 'criteria_source', 'criteria_snapshot_json']) {
+    assert.match(migration, new RegExp(`ADD COLUMN \\x60${column}\\x60`));
+    assert.match(schema, new RegExp(`\\x60${column}\\x60`));
+    assert.match(verifier, new RegExp(`'git_submission_nodes', '${column}'`));
+  }
+  assert.match(repository, /INSERT INTO git_submission_nodes[\s\S]+criteria_snapshot_json[\s\S]+criteriaGson\.toJson\(snapshot\.criteria\(\)\)/);
+  assert.match(repository, /sn\.criteria_snapshot_json AS criteria_json|COALESCE\(sn\.criteria_snapshot_json, c\.criteria_json\)/);
+  for (const column of ['criteria_version', 'criteria_source', 'criteria_snapshot_json', 'criterion_results_json']) {
+    assert.match(migration, new RegExp(`ADD COLUMN \\x60${column}\\x60`));
+    assert.match(schema, new RegExp(`\\x60${column}\\x60`));
+    assert.match(verifier, new RegExp(`'git_acceptance_results', '${column}'`));
+  }
+  assert.match(verifier, /fk_node_acceptance_criteria_node/);
+  assert.match(verifier, /fk_node_acceptance_criteria_editor/);
+  assert.match(verifier, /ck_node_acceptance_criteria_source/);
+  assert.doesNotMatch(migration, /DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM/i);
+});
+
+test('RAG index retry migration is additive and bounds scheduled retry state', async () => {
+  const migration = await read('../database/migrations/20261027_rag_index_retry.sql');
+  const [schema, verifier] = await Promise.all([
+    read('../database/schema.sql'),
+    read('../database/verify.sql'),
+  ]);
+  for (const column of ['vector_index_attempts', 'vector_index_retry_at']) {
+    assert.match(migration, new RegExp(`ADD COLUMN \\x60${column}\\x60`));
+    assert.match(schema, new RegExp(`\\x60${column}\\x60`));
+    assert.match(verifier, new RegExp(`'bug_cases', '${column}'`));
+  }
+  assert.match(migration, /CREATE INDEX `idx_bug_cases_vector_retry`/);
+  assert.match(migration, /USE `BM-sql`/);
+  assert.match(migration, /ck_bug_cases_vector_attempts/);
+  assert.match(schema, /CONSTRAINT `ck_bug_cases_vector_attempts` CHECK/);
+  assert.match(verifier, /ck_bug_cases_vector_attempts/);
+  assert.doesNotMatch(migration, /DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM/i);
+});
+
+test('fresh acceptance demo seed creates isolated teacher, student, course, and a 3-level experiment', async () => {
+  const seed = await read('../database/demo_seed_acceptance.sql');
+  assert.match(seed, /teacher\.demo@example\.com/);
+  assert.match(seed, /student\.demo@example\.com/);
+  assert.match(seed, /BMHSDEMO26/);
+  assert.match(seed, /bmhs-node-acceptance-demo-v1/);
+  assert.match(seed, /'1\.1\.1'/);
+  assert.match(seed, /experiment_node_acceptance_criteria/);
+  assert.match(seed, /verification_method/);
+  assert.match(seed, /expected_evidence/);
+  assert.match(seed, /WHERE NOT EXISTS/);
+  assert.doesNotMatch(seed, /DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM/i);
+});
+
 test('check-clause normalization removes MySQL formatting but preserves logical grouping', () => {
   const normalize = (clause) => {
     const source = clause;

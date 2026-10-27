@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin/experiments/{experimentId:\\d+}/reviewer")
+@RequestMapping("/api/teacher/experiments/{experimentId:\\d+}/reviewer")
 public class ExperimentReviewerController {
     private final ExperimentReviewerService service;
 

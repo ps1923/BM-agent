@@ -1,8 +1,11 @@
 package com.bmhs.git;
 
 import com.bmhs.experimentcreation.ApiException;
+import com.bmhs.experimentcreation.CreationModels.AcceptanceCriterion;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
+import com.google.gson.FieldNamingPolicy;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.dao.DuplicateKeyException;
@@ -23,8 +26,11 @@ import java.util.List;
 public class GitSubmissionRepository {
     private static final Type EVIDENCE_TYPE = new TypeToken<List<GitModels.Evidence>>() {}.getType();
     private static final Type STRING_LIST_TYPE = new TypeToken<List<String>>() {}.getType();
+    private static final Type CRITERIA_TYPE = new TypeToken<List<AcceptanceCriterion>>() {}.getType();
+    private static final Type CRITERION_RESULTS_TYPE = new TypeToken<List<GitModels.CriterionResult>>() {}.getType();
     private final JdbcTemplate jdbc;
     private final Gson gson = new Gson();
+    private final Gson criteriaGson = new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create();
 
     public GitSubmissionRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
@@ -141,8 +147,13 @@ public class GitSubmissionRepository {
         }
         long submissionId = requiredKey(keys);
         for (Long nodeId : nodeIds.stream().sorted().toList()) {
-            jdbc.update("INSERT INTO git_submission_nodes (submission_id, experiment_id, node_id) VALUES (?, ?, ?)",
-                    submissionId, run.experimentId(), nodeId);
+            CriteriaSnapshot snapshot = criteriaSnapshot(run.experimentId(), nodeId);
+            jdbc.update("""
+                    INSERT INTO git_submission_nodes
+                      (submission_id, experiment_id, node_id, criteria_version, criteria_source, criteria_snapshot_json)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """, submissionId, run.experimentId(), nodeId, snapshot.version(), snapshot.source(),
+                    criteriaGson.toJson(snapshot.criteria()));
         }
         jdbc.update("UPDATE experiment_runs SET status = 'in_progress', started_at = COALESCE(started_at, CURRENT_TIMESTAMP(6)), last_opened_at = CURRENT_TIMESTAMP(6) WHERE id = ?",
                 run.runId());
@@ -180,16 +191,24 @@ public class GitSubmissionRepository {
     }
 
     @Transactional
-    public void saveResults(long submissionId, long experimentId, List<GitModels.RawResult> results) {
+    public void saveResults(long submissionId, long experimentId, List<GitModels.NodeSpec> nodes,
+                            List<GitModels.RawResult> results) {
+        java.util.Map<Long, GitModels.NodeSpec> nodesById = nodes.stream()
+                .collect(java.util.stream.Collectors.toMap(GitModels.NodeSpec::nodeId, item -> item));
         for (GitModels.RawResult result : results) {
+            GitModels.NodeSpec node = nodesById.get(result.nodeId());
+            if (node == null) throw new IllegalStateException("验收结果没有匹配的节点准则快照");
             jdbc.update("""
                     INSERT INTO git_acceptance_results
                       (submission_id, experiment_id, node_id, decision, summary, evidence_json,
-                       suggestions_json, bug_draft_json, execution_check)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'not_run')
+                       suggestions_json, bug_draft_json, execution_check, criteria_version, criteria_source,
+                       criteria_snapshot_json, criterion_results_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'not_run', ?, ?, ?, ?)
                     """, submissionId, experimentId, result.nodeId(), result.decision(), result.summary(),
                     gson.toJson(result.evidence()), gson.toJson(result.suggestions()),
-                    result.bugDraft() == null ? null : gson.toJson(result.bugDraft()));
+                    result.bugDraft() == null ? null : gson.toJson(result.bugDraft()), node.criteriaVersion(),
+                    node.criteriaSource(), criteriaGson.toJson(node.acceptanceCriteria()),
+                    gson.toJson(result.criterionResults()));
         }
         jdbc.update("UPDATE git_submissions SET status = 'completed', error_code = NULL WHERE id = ?", submissionId);
     }
@@ -229,20 +248,61 @@ public class GitSubmissionRepository {
 
     public List<GitModels.NodeSpec> nodeSpecs(long submissionId) {
         List<GitModels.NodeSpec> nodes = jdbc.query("""
-                SELECT n.id, n.sequence_code, n.name, n.description
+                SELECT n.id, n.sequence_code, n.name, n.description,
+                       COALESCE(sn.criteria_version, c.version) AS criteria_version,
+                       COALESCE(sn.criteria_source, c.source) AS criteria_source,
+                       COALESCE(sn.criteria_snapshot_json, c.criteria_json) AS criteria_json
                 FROM git_submission_nodes sn JOIN experiment_nodes n
                   ON n.id = sn.node_id AND n.experiment_id = sn.experiment_id
+                LEFT JOIN experiment_node_acceptance_criteria c ON c.experiment_id = n.experiment_id
+                  AND c.node_id = n.id AND c.version = (
+                    SELECT MAX(latest.version) FROM experiment_node_acceptance_criteria latest
+                    WHERE latest.experiment_id = n.experiment_id AND latest.node_id = n.id)
                 WHERE sn.submission_id = ? ORDER BY n.sort_order, n.id
-                """, (rs, rowNum) -> new GitModels.NodeSpec(rs.getLong("id"), rs.getString("sequence_code"),
-                rs.getString("name"), rs.getString("description"), List.of()), submissionId);
+                """, (rs, rowNum) -> {
+            String json = rs.getString("criteria_json");
+            List<AcceptanceCriterion> criteria = json == null ? List.of() : criteriaGson.fromJson(json, CRITERIA_TYPE);
+            return new GitModels.NodeSpec(rs.getLong("id"), rs.getString("sequence_code"), rs.getString("name"),
+                    rs.getString("description"), List.of(), criteria == null ? List.of() : criteria,
+                    rs.getObject("criteria_version", Integer.class), rs.getString("criteria_source"));
+        }, submissionId);
         List<GitModels.NodeSpec> withTasks = new ArrayList<>();
         for (GitModels.NodeSpec node : nodes) {
             List<String> tasks = jdbc.query("SELECT CONCAT(title, IF(description IS NULL OR description = '', '', CONCAT(': ', description))) FROM node_tasks WHERE node_id = ? ORDER BY sort_order, id",
                     (rs, rowNum) -> rs.getString(1), node.nodeId());
-            withTasks.add(new GitModels.NodeSpec(node.nodeId(), node.code(), node.name(), node.description(), tasks));
+            List<AcceptanceCriterion> criteria = node.acceptanceCriteria();
+            if (criteria == null || criteria.isEmpty()) {
+                criteria = List.of(new AcceptanceCriterion(node.name(), "static_code",
+                        node.description() + (tasks.isEmpty() ? "" : "；" + String.join("；", tasks))));
+            }
+            withTasks.add(new GitModels.NodeSpec(node.nodeId(), node.code(), node.name(), node.description(), tasks,
+                    criteria, node.criteriaVersion(), node.criteriaSource() == null ? "legacy_inferred" : node.criteriaSource()));
         }
         return List.copyOf(withTasks);
     }
+
+    private CriteriaSnapshot criteriaSnapshot(long experimentId, long nodeId) {
+        List<CriteriaSnapshot> rows = jdbc.query("""
+                SELECT c.version, c.source, c.criteria_json
+                FROM experiment_nodes n
+                LEFT JOIN experiment_node_acceptance_criteria c ON c.experiment_id = n.experiment_id
+                  AND c.node_id = n.id AND c.version = (
+                    SELECT MAX(latest.version) FROM experiment_node_acceptance_criteria latest
+                    WHERE latest.experiment_id = n.experiment_id AND latest.node_id = n.id)
+                WHERE n.experiment_id = ? AND n.id = ?
+                """, (rs, rowNum) -> {
+            String json = rs.getString("criteria_json");
+            List<AcceptanceCriterion> criteria = json == null ? List.of() : criteriaGson.fromJson(json, CRITERIA_TYPE);
+            return new CriteriaSnapshot(rs.getObject("version", Integer.class), rs.getString("source"),
+                    criteria == null ? List.of() : criteria);
+        }, experimentId, nodeId);
+        if (rows.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "GIT_NODE_OUTSIDE_EXPERIMENT", "所选节点不属于当前实验");
+        CriteriaSnapshot snapshot = rows.get(0);
+        return snapshot.version() == null
+                ? new CriteriaSnapshot(null, "legacy_inferred", List.of()) : snapshot;
+    }
+
+    private record CriteriaSnapshot(Integer version, String source, List<AcceptanceCriterion> criteria) {}
 
     public GitModels.StudentSubmissionView studentSubmission(long id, long studentId) {
         GitModels.SubmissionRecord submission = findStudentSubmission(id, studentId);
@@ -297,21 +357,31 @@ public class GitSubmissionRepository {
                   EXISTS (SELECT 1 FROM course_experiment_assignments a JOIN courses c ON c.id = a.course_id
                     JOIN course_members m ON m.course_id = c.id AND m.student_id = r.student_id AND m.status = 'active'
                     WHERE a.experiment_id = r.experiment_id AND a.status = 'published' AND c.teacher_id = ? AND c.status = 'active')
-                  OR EXISTS (SELECT 1 FROM experiment_reviewers er WHERE er.experiment_id = r.experiment_id AND er.teacher_id = ?)
+                  OR EXISTS (SELECT 1 FROM experiment_reviewers er
+                             JOIN courses rc ON rc.id = er.course_id AND rc.teacher_id = ? AND rc.status = 'active'
+                             JOIN course_members rm ON rm.course_id = rc.id AND rm.student_id = r.student_id AND rm.status = 'active'
+                             JOIN experiments re ON re.id = er.experiment_id AND re.creator_id = rm.student_id
+                             WHERE er.experiment_id = r.experiment_id AND er.teacher_id = ?)
                 )
-                """, this::submissionRow, submissionId, teacherId, teacherId);
+                """, this::submissionRow, submissionId, teacherId, teacherId, teacherId);
         if (rows.isEmpty()) throw new ApiException(HttpStatus.FORBIDDEN, "SUBMISSION_FORBIDDEN", "无权查看该实验提交");
         return rows.get(0);
     }
 
     public List<GitModels.NodeResult> results(long submissionId) {
         return jdbc.query("""
-                SELECT node_id, decision, summary, evidence_json, suggestions_json, bug_draft_json
+                SELECT node_id, decision, summary, evidence_json, suggestions_json, bug_draft_json,
+                       criterion_results_json, criteria_version, criteria_source, criteria_snapshot_json
                 FROM git_acceptance_results WHERE submission_id = ? ORDER BY node_id
                 """, (rs, rowNum) -> new GitModels.NodeResult(rs.getLong("node_id"), rs.getString("decision"),
                 rs.getString("summary"), gson.fromJson(rs.getString("evidence_json"), EVIDENCE_TYPE),
                 gson.fromJson(rs.getString("suggestions_json"), STRING_LIST_TYPE),
-                rs.getString("bug_draft_json") == null ? null : gson.fromJson(rs.getString("bug_draft_json"), GitModels.BugDraft.class)),
+                rs.getString("bug_draft_json") == null ? null : gson.fromJson(rs.getString("bug_draft_json"), GitModels.BugDraft.class),
+                rs.getString("criterion_results_json") == null ? List.of()
+                        : gson.fromJson(rs.getString("criterion_results_json"), CRITERION_RESULTS_TYPE),
+                rs.getObject("criteria_version", Integer.class), rs.getString("criteria_source"),
+                rs.getString("criteria_snapshot_json") == null ? List.of()
+                        : criteriaGson.fromJson(rs.getString("criteria_snapshot_json"), CRITERIA_TYPE)),
                 submissionId);
     }
 
@@ -354,8 +424,12 @@ public class GitSubmissionRepository {
                   EXISTS (SELECT 1 FROM course_experiment_assignments a JOIN courses c ON c.id = a.course_id
                     JOIN course_members m ON m.course_id = c.id AND m.student_id = r.student_id AND m.status = 'active'
                     WHERE a.experiment_id = r.experiment_id AND a.status = 'published' AND c.teacher_id = ? AND c.status = 'active')
-                  OR EXISTS (SELECT 1 FROM experiment_reviewers er WHERE er.experiment_id = r.experiment_id AND er.teacher_id = ?))
-                """, rs -> rs.next() ? 1 : null, runId, teacherId, teacherId);
+                    OR EXISTS (SELECT 1 FROM experiment_reviewers er
+                               JOIN courses rc ON rc.id = er.course_id AND rc.teacher_id = ? AND rc.status = 'active'
+                               JOIN course_members rm ON rm.course_id = rc.id AND rm.student_id = r.student_id AND rm.status = 'active'
+                               JOIN experiments re ON re.id = er.experiment_id AND re.creator_id = rm.student_id
+                               WHERE er.experiment_id = r.experiment_id AND er.teacher_id = ?))
+                """, rs -> rs.next() ? 1 : null, runId, teacherId, teacherId, teacherId);
         if (allowed == null) throw new ApiException(HttpStatus.FORBIDDEN, "RUN_FORBIDDEN", "无权查看该学生 Git 运行实例");
     }
 

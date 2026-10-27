@@ -69,36 +69,21 @@ const loginError = document.querySelector('#loginError');
 const routeStatus = document.querySelector('#routeStatus');
 const studentView = document.querySelector('#studentView');
 const teacherView = document.querySelector('#teacherView');
-const adminView = document.querySelector('#adminView');
-const adminPersonalCenterView = document.querySelector('#adminPersonalCenterView');
-const adminIdentity = document.querySelector('#adminIdentity');
-const adminExperiment = document.querySelector('#adminExperiment');
-const adminReviewer = document.querySelector('#adminReviewer');
-const adminAssignReviewer = document.querySelector('#adminAssignReviewer');
-const adminReviewerMessage = document.querySelector('#adminReviewerMessage');
-const adminPersonalCenterIdentity = document.querySelector('#adminPersonalCenterIdentity');
-const adminPersonalCenterButton = document.querySelector('#adminPersonalCenterButton');
-const adminBackToDashboardButton = document.querySelector('#adminBackToDashboardButton');
-const adminGitSettingsForm = document.querySelector('#adminGitSettingsForm');
-const adminGitApiUrl = document.querySelector('#adminGitApiUrl');
-const adminGitPublicUrl = document.querySelector('#adminGitPublicUrl');
-const adminGitWebhookUrl = document.querySelector('#adminGitWebhookUrl');
-const adminGitAdminToken = document.querySelector('#adminGitAdminToken');
-const adminGitWebhookSecret = document.querySelector('#adminGitWebhookSecret');
-const adminGitClearAdminToken = document.querySelector('#adminGitClearAdminToken');
-const adminGitClearWebhookSecret = document.querySelector('#adminGitClearWebhookSecret');
-const adminGitAdminTokenState = document.querySelector('#adminGitAdminTokenState');
-const adminGitWebhookSecretState = document.querySelector('#adminGitWebhookSecretState');
-const adminGitSettingsSummary = document.querySelector('#adminGitSettingsSummary');
-const adminGitSettingsBadge = document.querySelector('#adminGitSettingsBadge');
-const adminGitSettingsMessage = document.querySelector('#adminGitSettingsMessage');
-const adminGitSettingsSave = document.querySelector('#adminGitSettingsSave');
-const adminGitSettingsReload = document.querySelector('#adminGitSettingsReload');
-const adminGitSettingsFields = [adminGitApiUrl, adminGitPublicUrl, adminGitWebhookUrl, adminGitAdminToken,
-  adminGitWebhookSecret, adminGitClearAdminToken, adminGitClearWebhookSecret];
-let adminGitSettingsRequestId = 0;
+const personalCenterView = document.querySelector('#personalCenterView');
+const personalCenterIdentity = document.querySelector('#personalCenterIdentity');
+const personalCenterBackButton = document.querySelector('#personalCenterBackButton');
+const personalCenterLogoutButton = document.querySelector('#personalCenterLogoutButton');
+const personalProfileForm = document.querySelector('#personalProfileForm');
+const profileDisplayName = document.querySelector('#profileDisplayName');
+const profileGitAuthorName = document.querySelector('#profileGitAuthorName');
+const profileGitAuthorEmail = document.querySelector('#profileGitAuthorEmail');
+const personalProfileMessage = document.querySelector('#personalProfileMessage');
+const personalProfileSave = document.querySelector('#personalProfileSave');
+const personalProfileReload = document.querySelector('#personalProfileReload');
 const studentIdentity = document.querySelector('#studentIdentity');
 const teacherIdentity = document.querySelector('#teacherIdentity');
+const studentPersonalCenterButton = document.querySelector('#studentPersonalCenterButton');
+const teacherPersonalCenterButton = document.querySelector('#teacherPersonalCenterButton');
 const studentLogoutButton = document.querySelector('#studentLogoutButton');
 const teacherLogoutButton = document.querySelector('#teacherLogoutButton');
 const studentLibraryButton = document.querySelector('#studentLibraryButton');
@@ -115,6 +100,8 @@ const courseName = document.querySelector('#courseName');
 const teacherMessage = document.querySelector('#teacherMessage');
 const teacherCourses = document.querySelector('#teacherCourses');
 const teacherCourseCount = document.querySelector('#teacherCourseCount');
+const teacherReviewableExperiments = document.querySelector('#teacherReviewableExperiments');
+const teacherReviewerMessage = document.querySelector('#teacherReviewerMessage');
 const publishForm = document.querySelector('#publishForm');
 const publishCourse = document.querySelector('#publishCourse');
 const publishExperiment = document.querySelector('#publishExperiment');
@@ -156,6 +143,7 @@ const teacherDshFeedback = document.querySelector('#teacherDshFeedback');
 const teacherDshReviewSave = document.querySelector('#teacherDshReviewSave');
 const teacherDshReviewMessage = document.querySelector('#teacherDshReviewMessage');
 const libraryDashboardButton = document.querySelector('#libraryDashboardButton');
+const libraryPersonalCenterButton = document.querySelector('#libraryPersonalCenterButton');
 const libraryLogoutButton = document.querySelector('#libraryLogoutButton');
 const libraryAccountLabel = document.querySelector('#libraryAccountLabel');
 const createExperimentButton = document.querySelector('#createExperimentButton');
@@ -179,6 +167,16 @@ const planDuration = document.querySelector('#planDuration');
 const planDifficulty = document.querySelector('#planDifficulty');
 const planPurpose = document.querySelector('#planPurpose');
 const planNodes = document.querySelector('#planNodes');
+const planDurationNotice = document.querySelector('#planDurationNotice');
+const nodeAcceptanceCriteria = document.querySelector('#nodeAcceptanceCriteria');
+const nodeAcceptanceSource = document.querySelector('#nodeAcceptanceSource');
+const teacherCriteriaPanel = document.querySelector('#teacherCriteriaPanel');
+const teacherCriteriaNode = document.querySelector('#teacherCriteriaNode');
+const teacherCriteriaHistory = document.querySelector('#teacherCriteriaHistory');
+const teacherCriteriaEditor = document.querySelector('#teacherCriteriaEditor');
+const teacherCriteriaMessage = document.querySelector('#teacherCriteriaMessage');
+const teacherAddCriterion = document.querySelector('#teacherAddCriterion');
+const teacherSaveCriteria = document.querySelector('#teacherSaveCriteria');
 const creationConversation = document.querySelector('#creationConversation');
 const directionReview = document.querySelector('#directionReview');
 const directionTitleReview = document.querySelector('#directionTitleReview');
@@ -290,7 +288,7 @@ function syncGuidanceControls() {
 }
 
 function setCurrentUser(user) {
-  const nextUser = user && ['student', 'teacher', 'admin'].includes(user.role)
+  const nextUser = user && ['student', 'teacher'].includes(user.role)
     ? { ...user, name: user.name || user.displayName || user.email }
     : null;
   if (currentUser?.id !== nextUser?.id) {
@@ -399,145 +397,85 @@ async function renderStudentDashboard() {
   }
 }
 
-async function renderAdminDashboard() {
-  const user = getCurrentUser();
-  if (!user || user.role !== 'admin') return;
-  adminIdentity.textContent = `${user.name} · ${user.email}`;
-  adminExperiment.replaceChildren();
-  adminReviewer.replaceChildren();
-  adminAssignReviewer.disabled = true;
-  setMessage(adminReviewerMessage, '正在加载个人实验和教师列表…');
-  try {
-    const [experiments, teachers] = await Promise.all([
-      apiRequest('/admin/reviewable-experiments', { method: 'GET' }),
-      apiRequest('/admin/teachers', { method: 'GET' }),
-    ]);
-    if (getCurrentUser()?.id !== user.id || getCurrentUser()?.role !== 'admin') return;
-    const experimentPlaceholder = document.createElement('option');
-    experimentPlaceholder.value = '';
-    experimentPlaceholder.textContent = experiments.length ? '请选择个人实验' : '暂无可绑定的个人实验';
-    adminExperiment.append(experimentPlaceholder);
-    experiments.forEach((experiment) => {
-      const option = document.createElement('option');
-      option.value = String(experiment.experimentId);
-      option.dataset.teacherId = experiment.teacherId == null ? '' : String(experiment.teacherId);
-      option.textContent = `${experiment.name} · ${experiment.teacherName || '未绑定'}`;
-      adminExperiment.append(option);
-    });
-    const teacherPlaceholder = document.createElement('option');
-    teacherPlaceholder.value = '';
-    teacherPlaceholder.textContent = teachers.length ? '请选择审核教师' : '暂无可用教师';
-    adminReviewer.append(teacherPlaceholder);
-    teachers.forEach((teacher) => {
-      const option = document.createElement('option');
-      option.value = String(teacher.teacherId);
-      option.textContent = `${teacher.displayName} · ${teacher.email}`;
-      adminReviewer.append(option);
-    });
-    adminAssignReviewer.disabled = !experiments.length || !teachers.length;
-    setMessage(adminReviewerMessage, '选择实验后可查看或更换其审核教师；课程已发布实验由课程教师负责审核。');
-  } catch (error) {
-    setMessage(adminReviewerMessage, error.message || '管理数据加载失败。', true);
-  }
-}
+let personalProfileRequestEpoch = 0;
 
-async function renderAdminGitSettings() {
+async function loadPersonalProfile() {
   const user = getCurrentUser();
-  if (!user || user.role !== 'admin') return false;
-  const requestId = ++adminGitSettingsRequestId;
-  adminGitSettingsFields.forEach((field) => { field.disabled = true; });
-  adminGitSettingsSave.disabled = true;
-  adminGitSettingsReload.disabled = true;
-  setMessage(adminGitSettingsMessage, '正在安全读取配置状态…');
+  if (!user || !['student', 'teacher'].includes(user.role)) return;
+  const requestEpoch = ++personalProfileRequestEpoch;
+  personalProfileSave.disabled = true;
+  personalProfileReload.disabled = true;
+  setMessage(personalProfileMessage, '正在读取个人资料…');
   try {
-    const settings = await apiRequest('/admin/integrations/gitea', { method: 'GET' });
-    if (requestId !== adminGitSettingsRequestId || getCurrentUser()?.id !== user.id
-      || getCurrentUser()?.role !== 'admin' || parseHashRoute().type !== 'admin-personal-center') return false;
-    adminGitApiUrl.value = settings.apiBaseUrl || '';
-    adminGitPublicUrl.value = settings.publicBaseUrl || '';
-    adminGitWebhookUrl.value = settings.webhookTargetUrl || '';
-    adminGitAdminToken.value = '';
-    adminGitWebhookSecret.value = '';
-    adminGitClearAdminToken.checked = false;
-    adminGitClearWebhookSecret.checked = false;
-    adminGitAdminToken.disabled = false;
-    adminGitWebhookSecret.disabled = false;
-    adminGitAdminTokenState.textContent = settings.adminTokenConfigured ? '当前已安全保存；不会显示原值。填写新值可轮换。' : '尚未配置管理令牌。';
-    adminGitWebhookSecretState.textContent = settings.webhookSecretConfigured ? '当前已安全保存；不会显示原值。填写新值可轮换。' : '尚未配置 Webhook 密钥。';
-    adminGitSettingsSummary.textContent = settings.source === 'database'
-      ? `当前使用数据库中的共享配置${settings.updatedAt ? ` · 最近更新 ${formatTeacherDate(settings.updatedAt)}` : ''}。`
-      : settings.source === 'environment'
-        ? '数据库尚无配置记录，当前沿用服务器环境变量；保存后数据库配置将优先生效。'
-        : '尚未配置 Gitea 连接信息。';
-    adminGitSettingsBadge.textContent = settings.configured ? '已配置' : '待配置';
-    adminGitSettingsBadge.classList.toggle('status-badge-incomplete', !settings.configured);
-    setMessage(adminGitSettingsMessage, '秘密字段留空会保留现有值；只有勾选“明确清除”才会删除凭据。');
-    adminGitSettingsSave.disabled = false;
-    adminGitSettingsFields.forEach((field) => { field.disabled = false; });
-    return true;
+    const profile = await apiRequest('/me/profile', { method: 'GET' });
+    if (requestEpoch !== personalProfileRequestEpoch || getCurrentUser()?.id !== user.id
+      || parseHashRoute().type !== 'personal-center') return;
+    profileDisplayName.value = profile.displayName || '';
+    profileGitAuthorName.value = profile.gitAuthorName || '';
+    profileGitAuthorEmail.value = profile.gitAuthorEmail || '';
+    personalCenterIdentity.textContent = `${profile.displayName || user.name} · ${user.email}`;
+    setMessage(personalProfileMessage, '资料已加载。');
   } catch (error) {
-    if (requestId !== adminGitSettingsRequestId || getCurrentUser()?.id !== user.id
-      || parseHashRoute().type !== 'admin-personal-center') return false;
-    adminGitSettingsBadge.textContent = '读取失败';
-    setMessage(adminGitSettingsMessage, error.message || '配置读取失败，请重试。', true);
-    adminGitSettingsSave.disabled = false;
-    adminGitSettingsFields.forEach((field) => { field.disabled = false; });
-    return false;
+    if (requestEpoch !== personalProfileRequestEpoch || getCurrentUser()?.id !== user.id) return;
+    setMessage(personalProfileMessage, error.message || '个人资料读取失败，请重试。', true);
   } finally {
-    if (requestId === adminGitSettingsRequestId && getCurrentUser()?.id === user.id
-      && parseHashRoute().type === 'admin-personal-center') adminGitSettingsReload.disabled = false;
+    if (requestEpoch === personalProfileRequestEpoch && getCurrentUser()?.id === user.id) {
+      personalProfileSave.disabled = false;
+      personalProfileReload.disabled = false;
+    }
   }
 }
 
-function syncAdminSecretClearState(input, checkbox) {
-  input.disabled = checkbox.checked;
-  if (checkbox.checked) input.value = '';
-}
-
-adminPersonalCenterButton.addEventListener('click', () => navigateTo({ type: 'admin-personal-center' }));
-adminBackToDashboardButton.addEventListener('click', () => navigateTo({ type: 'admin' }));
-adminGitSettingsReload.addEventListener('click', () => void renderAdminGitSettings());
-adminGitClearAdminToken.addEventListener('change', () => syncAdminSecretClearState(adminGitAdminToken, adminGitClearAdminToken));
-adminGitClearWebhookSecret.addEventListener('change', () => syncAdminSecretClearState(adminGitWebhookSecret, adminGitClearWebhookSecret));
-adminGitSettingsForm.addEventListener('submit', async (event) => {
+personalProfileReload.addEventListener('click', () => void loadPersonalProfile());
+personalProfileForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  adminGitSettingsSave.disabled = true;
-  adminGitSettingsReload.disabled = true;
-  setMessage(adminGitSettingsMessage, '正在加密并保存到服务器数据库…');
+  const displayName = profileDisplayName.value.trim();
+  const gitAuthorName = profileGitAuthorName.value.trim();
+  const gitAuthorEmail = profileGitAuthorEmail.value.trim();
+  if (!displayName) {
+    setMessage(personalProfileMessage, '显示名称不能为空。', true);
+    profileDisplayName.focus();
+    return;
+  }
+  if (gitAuthorEmail && !profileGitAuthorEmail.validity.valid) {
+    setMessage(personalProfileMessage, '请输入有效的 Git 提交邮箱。', true);
+    profileGitAuthorEmail.focus();
+    return;
+  }
+  const user = getCurrentUser();
+  const requestEpoch = ++personalProfileRequestEpoch;
+  personalProfileSave.disabled = true;
+  personalProfileReload.disabled = true;
+  setMessage(personalProfileMessage, '正在保存个人资料…');
   try {
-    await apiRequest('/admin/integrations/gitea', {
-      method: 'PUT',
-      body: JSON.stringify({
-        apiBaseUrl: adminGitApiUrl.value.trim(),
-        publicBaseUrl: adminGitPublicUrl.value.trim(),
-        webhookTargetUrl: adminGitWebhookUrl.value.trim(),
-        adminToken: adminGitAdminToken.value,
-        clearAdminToken: adminGitClearAdminToken.checked,
-        webhookSecret: adminGitWebhookSecret.value,
-        clearWebhookSecret: adminGitClearWebhookSecret.checked,
-      }),
+    const profile = await apiRequest('/me/profile', {
+      method: 'PUT', body: JSON.stringify({ displayName, gitAuthorName, gitAuthorEmail }),
     });
-    adminGitAdminToken.value = '';
-    adminGitWebhookSecret.value = '';
-    adminGitClearAdminToken.checked = false;
-    adminGitClearWebhookSecret.checked = false;
-    adminGitAdminToken.disabled = false;
-    adminGitWebhookSecret.disabled = false;
-    const refreshed = await renderAdminGitSettings();
-    if (refreshed) setMessage(adminGitSettingsMessage, '配置已安全保存并立即生效。');
+    if (requestEpoch !== personalProfileRequestEpoch || getCurrentUser()?.id !== user?.id) return;
+    profileDisplayName.value = profile.displayName || displayName;
+    profileGitAuthorName.value = profile.gitAuthorName || '';
+    profileGitAuthorEmail.value = profile.gitAuthorEmail || '';
+    currentUser = { ...currentUser, name: profile.displayName || displayName };
+    personalCenterIdentity.textContent = `${currentUser.name} · ${currentUser.email}`;
+    if (currentUser.role === 'student') studentIdentity.textContent = `${currentUser.name} · ${currentUser.email}`;
+    if (currentUser.role === 'teacher') teacherIdentity.textContent = `${currentUser.name} · ${currentUser.email}`;
+    setMessage(personalProfileMessage, '个人资料已保存。');
   } catch (error) {
-    setMessage(adminGitSettingsMessage, error.message || '配置保存失败；原配置保持不变。', true);
-    adminGitSettingsSave.disabled = false;
+    if (requestEpoch === personalProfileRequestEpoch && getCurrentUser()?.id === user?.id) {
+      setMessage(personalProfileMessage, error.message || '个人资料保存失败，请重试。', true);
+    }
   } finally {
-    adminGitSettingsReload.disabled = false;
+    if (requestEpoch === personalProfileRequestEpoch && getCurrentUser()?.id === user?.id) {
+      personalProfileSave.disabled = false;
+      personalProfileReload.disabled = false;
+    }
   }
 });
 
-function syncAdminReviewerSelection() {
-  const option = adminExperiment.selectedOptions?.[0];
-  if (option?.dataset?.teacherId) adminReviewer.value = option.dataset.teacherId;
-  else adminReviewer.value = '';
-}
+studentPersonalCenterButton.addEventListener('click', () => navigateTo({ type: 'personal-center' }));
+teacherPersonalCenterButton.addEventListener('click', () => navigateTo({ type: 'personal-center' }));
+libraryPersonalCenterButton.addEventListener('click', () => navigateTo({ type: 'personal-center' }));
+personalCenterBackButton.addEventListener('click', () => navigateTo({ type: getCurrentUser()?.role || 'login' }));
 
 function clearStudentDashboard() {
   studentDashboardEpoch += 1;
@@ -550,6 +488,155 @@ function formatTeacherDate(value) {
   if (!value) return '尚未开始';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '时间未知' : date.toLocaleString('zh-CN', { hour12: false });
+}
+
+async function loadCourseGitRepository(card, courseId, dashboardEpoch, ownerId) {
+  const status = card.querySelector('.course-repository-message');
+  const form = card.querySelector('.course-repository-form');
+  const input = form.querySelector('input[name="repositoryUrl"]');
+  const saveButton = form.querySelector('button[type="submit"]');
+  status.textContent = '正在读取课程仓库地址…';
+  saveButton.disabled = true;
+  try {
+    const result = await apiRequest(`/courses/${encodeURIComponent(courseId)}/git-repository`, { method: 'GET' });
+    if (dashboardEpoch !== teacherDashboardEpoch || getCurrentUser()?.id !== ownerId || !card.isConnected) return;
+    input.value = typeof result.repositoryUrl === 'string' ? result.repositoryUrl : '';
+    status.textContent = input.value ? '课程仓库地址已加载。' : '尚未配置课程仓库地址。';
+  } catch (error) {
+    if (dashboardEpoch !== teacherDashboardEpoch || getCurrentUser()?.id !== ownerId || !card.isConnected) return;
+    status.textContent = error.message || '课程仓库地址读取失败。';
+    status.classList.add('is-error');
+  } finally {
+    if (dashboardEpoch === teacherDashboardEpoch && getCurrentUser()?.id === ownerId && card.isConnected) {
+      saveButton.disabled = false;
+    }
+  }
+}
+
+function createCourseRepositorySettings(course, dashboardEpoch, ownerId) {
+  const section = document.createElement('section');
+  section.className = 'course-repository-settings';
+  const heading = document.createElement('h4');
+  heading.textContent = '课程 Git 仓库';
+  const note = document.createElement('p');
+  note.className = 'course-repository-note';
+  note.textContent = '仅作为课程仓库信息；学生提交和 AI 验收仍使用各自独立的实验仓库。';
+  const form = document.createElement('form');
+  form.className = 'course-repository-form';
+  form.noValidate = true;
+  const label = document.createElement('label');
+  label.textContent = 'Gitea 仓库地址';
+  const input = document.createElement('input');
+  input.name = 'repositoryUrl';
+  input.type = 'url';
+  input.maxLength = 1000;
+  input.required = true;
+  input.placeholder = 'http://服务器地址:端口/组织/仓库.git';
+  label.append(input);
+  const saveButton = document.createElement('button');
+  saveButton.className = 'secondary-action';
+  saveButton.type = 'submit';
+  saveButton.textContent = '保存地址';
+  const status = document.createElement('p');
+  status.className = 'form-message course-repository-message';
+  status.setAttribute('role', 'status');
+  status.setAttribute('aria-live', 'polite');
+  form.append(label, saveButton);
+  section.append(heading, note, form, status);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const repositoryUrl = input.value.trim();
+    if (!repositoryUrl || !input.validity.valid) {
+      status.classList.add('is-error');
+      status.textContent = '请输入有效的仓库 URL。';
+      input.focus();
+      return;
+    }
+    saveButton.disabled = true;
+    status.classList.remove('is-error');
+    status.textContent = '正在保存课程仓库地址…';
+    try {
+      const result = await apiRequest(`/courses/${encodeURIComponent(course.id)}/git-repository`, {
+        method: 'PUT', body: JSON.stringify({ repositoryUrl }),
+      });
+      if (dashboardEpoch !== teacherDashboardEpoch || getCurrentUser()?.id !== ownerId || !section.isConnected) return;
+      input.value = typeof result.repositoryUrl === 'string' ? result.repositoryUrl : repositoryUrl;
+      status.textContent = '课程仓库地址已保存。学生运行仓库不会因此合并。';
+    } catch (error) {
+      if (dashboardEpoch === teacherDashboardEpoch && getCurrentUser()?.id === ownerId && section.isConnected) {
+        status.classList.add('is-error');
+        status.textContent = error.message || '保存失败，请检查地址后重试。';
+      }
+    } finally {
+      if (dashboardEpoch === teacherDashboardEpoch && getCurrentUser()?.id === ownerId && section.isConnected) {
+        saveButton.disabled = false;
+      }
+    }
+  });
+  return section;
+}
+
+async function renderTeacherReviewableExperiments(user, dashboardEpoch) {
+  if (typeof teacherReviewableExperiments !== 'undefined' && teacherReviewableExperiments) {
+    teacherReviewableExperiments.replaceChildren();
+  }
+  setMessage(teacherReviewerMessage, '正在读取你负责课程内的个人实验…');
+  try {
+    const experiments = await apiRequest('/teacher/personal-experiments/reviewable', { method: 'GET' });
+    if (dashboardEpoch !== teacherDashboardEpoch || getCurrentUser()?.id !== user.id
+      || getCurrentUser()?.role !== 'teacher') return;
+    if (!Array.isArray(experiments)) throw new Error('个人实验数据格式无效。');
+    if (!experiments.length) {
+      const empty = document.createElement('p');
+      empty.className = 'course-empty';
+      empty.textContent = '目前没有你所负责课程学生的待审核个人实验。';
+      teacherReviewableExperiments.append(empty);
+      setMessage(teacherReviewerMessage, '');
+      return;
+    }
+    experiments.forEach((experiment) => {
+      const row = document.createElement('article');
+      row.className = 'teacher-reviewable-item';
+      const detail = document.createElement('div');
+      const title = document.createElement('strong');
+      title.textContent = experiment.name || `实验 ${experiment.experimentId}`;
+      const assignment = document.createElement('p');
+      const course = document.createElement('p');
+      course.textContent = `所属课程：${experiment.courseName || `课程 ${experiment.courseId}`}`;
+      assignment.textContent = experiment.teacherId == null || String(experiment.teacherId) !== String(user.id)
+        ? '尚未由本课程教师审核' : `当前审核教师：${experiment.teacherName || user.name}`;
+      detail.append(title, course, assignment);
+      const assignButton = document.createElement('button');
+      assignButton.className = 'secondary-action';
+      assignButton.type = 'button';
+      const assignedToMe = String(experiment.teacherId) === String(user.id);
+      assignButton.textContent = assignedToMe ? '已由我审核' : '设为我的审核实验';
+      assignButton.disabled = assignedToMe;
+      assignButton.addEventListener('click', async () => {
+        assignButton.disabled = true;
+        setMessage(teacherReviewerMessage, '正在保存审核关系…');
+        try {
+          await apiRequest(`/teacher/experiments/${encodeURIComponent(experiment.experimentId)}/reviewer`, {
+            method: 'PUT', body: JSON.stringify({ teacherId: Number(user.id), courseId: Number(experiment.courseId) }),
+          });
+          if (dashboardEpoch !== teacherDashboardEpoch || getCurrentUser()?.id !== user.id) return;
+          setMessage(teacherReviewerMessage, '审核关系已保存。');
+          await renderTeacherReviewableExperiments(user, dashboardEpoch);
+        } catch (error) {
+          if (dashboardEpoch === teacherDashboardEpoch && getCurrentUser()?.id === user.id) {
+            setMessage(teacherReviewerMessage, error.message || '保存失败，请重试。', true);
+            assignButton.disabled = false;
+          }
+        }
+      });
+      row.append(detail, assignButton);
+      teacherReviewableExperiments.append(row);
+    });
+    setMessage(teacherReviewerMessage, '只列出当前教师负责课程学生的个人实验。');
+  } catch (error) {
+    if (dashboardEpoch !== teacherDashboardEpoch || getCurrentUser()?.id !== user.id) return;
+    setMessage(teacherReviewerMessage, error.message || '个人实验读取失败。', true);
+  }
 }
 
 function resetTeacherRunDetail() {
@@ -686,6 +773,9 @@ let teacherDshRequestEpoch = 0;
 let teacherDshRunsRequestEpoch = 0;
 let teacherDshSubmissionsRequestEpoch = 0;
 let selectedTeacherDshRunId = null;
+let teacherCriteriaExperimentId = null;
+let teacherCriteriaRequestEpoch = 0;
+let teacherCriteriaFallback = new Map();
 
 async function loadTeacherDshExperiments() {
   const requestEpoch = ++teacherDshRequestEpoch;
@@ -746,11 +836,14 @@ async function loadTeacherDshRuns(experimentId) {
   teacherDshFeedback.value = '';
   teacherDshCode.textContent = '选择一条学生记录查看已提交快照。';
   if (!/^\d+$/.test(String(experimentId))) {
+    teacherCriteriaPanel.hidden = true;
+    teacherCriteriaExperimentId = null;
     ++teacherDshBugRequestEpoch;
     teacherDshBugs.replaceChildren();
     setMessage(teacherDshBugMessage, '请选择实验查看 Bug 案例。');
     return;
   }
+  void loadTeacherExperimentCriteria(experimentId);
   void loadTeacherDshBugs(experimentId);
   setMessage(teacherDshMessage, '正在加载学生学习进度…');
   try {
@@ -779,6 +872,32 @@ async function loadTeacherDshRuns(experimentId) {
   } catch (error) {
     if (requestEpoch !== teacherDshRunsRequestEpoch) return;
     setMessage(teacherDshMessage, error.message || '学生学习进度加载失败。', true);
+  }
+}
+
+async function loadTeacherExperimentCriteria(experimentId) {
+  const requestEpoch = ++teacherCriteriaRequestEpoch;
+  teacherCriteriaExperimentId = Number(experimentId);
+  teacherCriteriaPanel.hidden = true;
+  try {
+    const nodes = await apiRequest(`/teacher/experiments/${encodeURIComponent(experimentId)}/acceptance-criteria`, { method: 'GET' });
+    if (requestEpoch !== teacherCriteriaRequestEpoch || teacherDshExperiment.value !== String(experimentId)) return;
+    teacherCriteriaFallback = new Map((Array.isArray(nodes) ? nodes : []).map((node) => [String(node.nodeId), {
+      criteriaSnapshot: node.criteria, criteriaVersion: node.version, criteriaSource: node.source,
+    }]));
+    teacherCriteriaNode.replaceChildren();
+    (Array.isArray(nodes) ? nodes : []).forEach((node) => {
+      const option = document.createElement('option');
+      option.value = String(node.nodeId);
+      option.textContent = `${node.nodeCode || `节点 ${node.nodeId}`} · ${node.nodeName || ''}`;
+      teacherCriteriaNode.append(option);
+    });
+    teacherCriteriaPanel.hidden = !nodes?.length;
+    if (!teacherCriteriaPanel.hidden) void loadTeacherCriteriaHistory();
+  } catch (error) {
+    if (requestEpoch !== teacherCriteriaRequestEpoch) return;
+    teacherCriteriaPanel.hidden = true;
+    setMessage(teacherCriteriaMessage, error.message || '节点验收准则读取失败。', true);
   }
 }
 
@@ -919,18 +1038,150 @@ async function loadTeacherDshSubmission(runId, submissionId, requestEpoch) {
       sections.push(`--- ${file.path} (${file.status || 'modified'}, ${counts}) ---\n${file.patch || '没有可显示的文本差异。'}`);
     });
     (Array.isArray(detail.results) ? detail.results : []).forEach((result) => {
-      sections.push(`节点 ${result.nodeId} · ${gitDecisionLabel(result.decision)}\n${result.summary || ''}`);
+      const criteriaSource = result.criteriaSource === 'legacy_inferred' ? '旧数据推断' : result.criteriaSource || '历史准则';
+      sections.push(`节点 ${result.nodeId} · ${gitDecisionLabel(result.decision)} · 准则版本 ${result.criteriaVersion ?? '旧数据'}（${criteriaSource}）\n${result.summary || ''}`);
+      (Array.isArray(result.criterionResults) ? result.criterionResults : []).forEach((criterionResult) => {
+        const criterion = result.criteriaSnapshot?.[criterionResult.criterionIndex];
+        sections.push(`准则 ${criterionResult.criterionIndex + 1} · ${gitDecisionLabel(criterionResult.decision)}：${criterion?.criterion || ''}\n${criterionResult.summary || ''}`);
+        (Array.isArray(criterionResult.evidence) ? criterionResult.evidence : []).forEach((evidence) => {
+          sections.push(`准则证据：${evidence.path || ''}${evidence.lineStart ? `:${evidence.lineStart}` : ''}\n${evidence.excerpt || ''}`);
+        });
+      });
       (Array.isArray(result.evidence) ? result.evidence : []).forEach((evidence) => {
         sections.push(`证据：${evidence.path || ''}${evidence.lineStart ? `:${evidence.lineStart}` : ''}\n${evidence.excerpt || ''}`);
       });
       if (Array.isArray(result.suggestions) && result.suggestions.length) sections.push(`建议：${result.suggestions.join('；')}`);
     });
     teacherDshCode.textContent = sections.join('\n\n');
+    renderTeacherCriteriaPanel(detail);
   } catch (error) {
     if (requestEpoch !== teacherDshSubmissionsRequestEpoch) return;
     teacherDshCode.textContent = error.message || '代码快照读取失败。';
   }
 }
+
+function appendTeacherCriterionEditor(criterion = {}) {
+  const row = document.createElement('div');
+  row.className = 'teacher-criterion-row';
+  const criterionLabel = document.createElement('label');
+  criterionLabel.textContent = '通过条件';
+  const criterionInput = document.createElement('input');
+  criterionInput.className = 'teacher-criterion-text';
+  criterionInput.maxLength = 500;
+  criterionInput.value = criterion.criterion || '';
+  criterionInput.placeholder = '例如：提交有效请求时返回对应 JSON 字段';
+  criterionLabel.append(criterionInput);
+  const methodLabel = document.createElement('label');
+  methodLabel.textContent = '检查方式';
+  const methodSelect = document.createElement('select');
+  methodSelect.className = 'teacher-criterion-method';
+  [['static_code', '静态代码'], ['test_artifact', '测试材料'], ['manual_demo', '人工演示']].forEach(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    methodSelect.append(option);
+  });
+  methodSelect.value = criterion.verificationMethod || 'static_code';
+  methodLabel.append(methodSelect);
+  const evidenceLabel = document.createElement('label');
+  evidenceLabel.textContent = '预期证据';
+  const evidenceInput = document.createElement('textarea');
+  evidenceInput.className = 'teacher-criterion-evidence';
+  evidenceInput.maxLength = 1000;
+  evidenceInput.rows = 2;
+  evidenceInput.value = criterion.expectedEvidence || '';
+  evidenceInput.placeholder = '说明应查看的文件、测试材料或演示现象';
+  evidenceLabel.append(evidenceInput);
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'text-action teacher-criterion-remove';
+  remove.textContent = '移除此准则';
+  remove.addEventListener('click', () => row.remove());
+  row.append(criterionLabel, methodLabel, evidenceLabel, remove);
+  teacherCriteriaEditor.append(row);
+}
+
+function renderTeacherCriteriaPanel(detail) {
+  const results = Array.isArray(detail.results) ? detail.results : [];
+  results.forEach((result) => teacherCriteriaFallback.set(String(result.nodeId), result));
+  teacherCriteriaExperimentId = Number(detail.experimentId);
+  if (!teacherCriteriaNode.options.length) results.forEach((result) => {
+      const option = document.createElement('option');
+      option.value = String(result.nodeId);
+      option.textContent = `节点 ${result.nodeId} · ${gitDecisionLabel(result.decision)}`;
+      teacherCriteriaNode.append(option);
+    });
+  teacherCriteriaPanel.hidden = !Number.isSafeInteger(teacherCriteriaExperimentId) || !teacherCriteriaNode.options.length;
+  if (!teacherCriteriaPanel.hidden && results.length) void loadTeacherCriteriaHistory();
+}
+
+async function loadTeacherCriteriaHistory() {
+  const experimentId = teacherCriteriaExperimentId;
+  const nodeId = teacherCriteriaNode.value;
+  if (!experimentId || !/^\d+$/.test(nodeId)) return;
+  const requestEpoch = ++teacherCriteriaRequestEpoch;
+  teacherCriteriaEditor.replaceChildren();
+  teacherSaveCriteria.disabled = true;
+  setMessage(teacherCriteriaMessage, '正在读取准则版本…');
+  try {
+    const history = await apiRequest(`/teacher/experiments/${encodeURIComponent(experimentId)}/nodes/${encodeURIComponent(nodeId)}/acceptance-criteria/history`, { method: 'GET' });
+    if (requestEpoch !== teacherCriteriaRequestEpoch || Number(teacherCriteriaExperimentId) !== experimentId
+      || teacherCriteriaNode.value !== nodeId) return;
+    teacherCriteriaHistory.replaceChildren();
+    const revisions = Array.isArray(history) ? history : [];
+    revisions.forEach((revision) => {
+      const summary = document.createElement('p');
+      const criteriaText = (Array.isArray(revision.criteria) ? revision.criteria : [])
+        .map((criterion, index) => `${index + 1}. ${criterion.criterion}（${criterion.verificationMethod}：${criterion.expectedEvidence}）`)
+        .join('\n');
+      summary.textContent = `版本 ${revision.version} · ${revision.source === 'teacher' ? '教师修订' : '生成准则'} · ${formatTeacherDate(revision.updatedAt)}\n${criteriaText}`;
+      teacherCriteriaHistory.append(summary);
+    });
+    const fallback = teacherCriteriaFallback.get(nodeId);
+    const criteria = revisions[0]?.criteria || fallback?.criteriaSnapshot || [];
+    criteria.forEach((criterion) => appendTeacherCriterionEditor(criterion));
+    if (!criteria.length) appendTeacherCriterionEditor();
+    setMessage(teacherCriteriaMessage, revisions.length
+      ? `当前为版本 ${revisions[0].version}；保存将新增版本，既有验收报告不会改变。`
+      : '该节点是旧实验，当前准则由历史任务推断；保存后会建立正式准则版本。');
+    teacherSaveCriteria.disabled = false;
+  } catch (error) {
+    if (requestEpoch !== teacherCriteriaRequestEpoch) return;
+    teacherCriteriaHistory.replaceChildren();
+    const fallback = teacherCriteriaFallback.get(nodeId);
+    (fallback?.criteriaSnapshot || []).forEach((criterion) => appendTeacherCriterionEditor(criterion));
+    setMessage(teacherCriteriaMessage, error.message || '准则版本读取失败。', true);
+    teacherSaveCriteria.disabled = true;
+  }
+}
+
+teacherCriteriaNode.addEventListener('change', () => void loadTeacherCriteriaHistory());
+teacherAddCriterion.addEventListener('click', () => appendTeacherCriterionEditor());
+teacherSaveCriteria.addEventListener('click', async () => {
+  const experimentId = teacherCriteriaExperimentId;
+  const nodeId = teacherCriteriaNode.value;
+  const criteria = [...teacherCriteriaEditor.querySelectorAll('.teacher-criterion-row')].map((row) => ({
+    criterion: row.querySelector('.teacher-criterion-text').value.trim(),
+    verificationMethod: row.querySelector('.teacher-criterion-method').value,
+    expectedEvidence: row.querySelector('.teacher-criterion-evidence').value.trim(),
+  }));
+  if (!criteria.length || criteria.some((item) => !item.criterion || !item.expectedEvidence)) {
+    setMessage(teacherCriteriaMessage, '每条准则都要填写通过条件和预期证据。', true);
+    return;
+  }
+  teacherSaveCriteria.disabled = true;
+  setMessage(teacherCriteriaMessage, '正在保存准则新版本…');
+  try {
+    await apiRequest(`/teacher/experiments/${encodeURIComponent(experimentId)}/nodes/${encodeURIComponent(nodeId)}/acceptance-criteria`, {
+      method: 'PUT', body: JSON.stringify({ criteria }),
+    });
+    await loadTeacherCriteriaHistory();
+    setMessage(teacherCriteriaMessage, '已保存为新版本；已有验收报告保留原准则快照。');
+  } catch (error) {
+    setMessage(teacherCriteriaMessage, error.message || '准则保存失败，请重试。', true);
+    teacherSaveCriteria.disabled = false;
+  }
+});
 
 async function loadTeacherBugCases(courseId) {
   if (!/^\d+$/.test(String(courseId))) {
@@ -1009,8 +1260,56 @@ async function loadTeacherBugCases(courseId) {
       } else {
         const vector = document.createElement('small');
         vector.className = 'teacher-bug-vector';
-        vector.textContent = `RAG 索引：${bug.vectorStatus || '未建立'}`;
+        const vectorStatus = bug.status === 'rejected'
+          ? bug.chromaDocumentId ? '已拒绝，正在从实验记忆池清理' : '已拒绝，不在实验记忆池'
+          : bug.vectorStatus === 'indexed' ? '已进入实验记忆池'
+          : bug.vectorStatus === 'failed' ? '入库失败；自动重试次数有限，可手动重试'
+            : '等待建立实验记忆索引';
+        vector.textContent = `RAG 状态：${vectorStatus}`;
         card.append(vector);
+        if (bug.status === 'approved' && bug.vectorStatus === 'failed') {
+          const retry = document.createElement('button');
+          retry.className = 'secondary-action';
+          retry.type = 'button';
+          retry.textContent = '重新审核并重试入库';
+          retry.addEventListener('click', async () => {
+            retry.disabled = true;
+            setMessage(teacherBugMessage, '正在重新审核并建立向量索引…');
+            try {
+              await apiRequest(`/bugs/${bug.id}/approve`, {
+                method: 'POST', body: JSON.stringify({ decision: 'approved', feedback: '教师手动重试向量索引' }),
+                timeoutMs: 30000,
+              });
+              if (teacherDashboardCourse.value === String(courseId)) await loadTeacherBugCases(courseId);
+            } catch (error) {
+              if (teacherDashboardCourse.value !== String(courseId)) return;
+              retry.disabled = false;
+              setMessage(teacherBugMessage, error.message || '重试失败，请稍后再试。', true);
+            }
+          });
+          card.append(retry);
+        } else if (bug.status === 'rejected' && bug.chromaDocumentId) {
+          const retryCleanup = document.createElement('button');
+          retryCleanup.className = 'secondary-action';
+          retryCleanup.type = 'button';
+          retryCleanup.textContent = '重试清理记忆索引';
+          retryCleanup.addEventListener('click', async () => {
+            retryCleanup.disabled = true;
+            setMessage(teacherBugMessage, '正在从实验记忆池清理该案例…');
+            try {
+              await apiRequest(`/bugs/${bug.id}/approve`, {
+                method: 'POST', body: JSON.stringify({ decision: 'rejected', feedback: '教师手动重试向量清理' }),
+                timeoutMs: 30000,
+              });
+              if (teacherDashboardCourse.value === String(courseId)) await loadTeacherBugCases(courseId);
+            } catch (error) {
+              if (teacherDashboardCourse.value !== String(courseId)) return;
+              retryCleanup.disabled = false;
+              setMessage(teacherBugMessage, error.message || '清理重试失败，请稍后再试。', true);
+            }
+          });
+          card.append(retryCleanup);
+        }
       }
       teacherBugList.append(card);
     });
@@ -1241,6 +1540,9 @@ async function renderTeacherDashboard() {
   teacherIdentity.textContent = `${user.name} · ${user.email}`;
   teacherCourseCount.textContent = '加载中…';
   teacherCourses.replaceChildren();
+  if (typeof teacherReviewableExperiments !== 'undefined' && teacherReviewableExperiments) {
+    teacherReviewableExperiments.replaceChildren();
+  }
   publishCourse.replaceChildren();
   publishExperiment.replaceChildren();
   teacherDrafts.replaceChildren();
@@ -1254,6 +1556,9 @@ async function renderTeacherDashboard() {
   resetTeacherRunDetail();
   clearTeacherBugReview();
   void loadTeacherDshExperiments();
+  if (typeof teacherReviewableExperiments !== 'undefined' && teacherReviewableExperiments) {
+    void renderTeacherReviewableExperiments(user, requestEpoch);
+  }
   try {
     const [owned, drafts] = await Promise.all([
       apiRequest('/courses', { method: 'GET' }),
@@ -1284,7 +1589,13 @@ async function renderTeacherDashboard() {
       footer.className = 'course-card-footer';
       footer.textContent = `${course.memberCount || 0} 名学生 · ${(course.experiments || []).length} 个已发布实验`;
       card.append(header, footer);
+      if (typeof card.querySelector === 'function') {
+        card.append(createCourseRepositorySettings(course, requestEpoch, user.id));
+      }
       teacherCourses.append(card);
+      if (typeof card.querySelector === 'function') {
+        void loadCourseGitRepository(card, course.id, requestEpoch, user.id);
+      }
       const dashboardOption = document.createElement('option');
       dashboardOption.value = course.id;
       dashboardOption.textContent = course.name;
@@ -1359,7 +1670,7 @@ function setRouteStatus(message = '', isError = false) {
 function parseHashRoute(hash = window.location.hash) {
   const path = hash.replace(/^#\/?/, '').replace(/\/$/, '');
   if (!path) return { type: 'default' };
-  if (['login', 'student', 'teacher', 'admin', 'admin-personal-center', 'library'].includes(path)) return { type: path };
+  if (['login', 'student', 'teacher', 'personal-center', 'library'].includes(path)) return { type: path };
   const canvasMatch = path.match(/^experiments\/([^/]+)\/canvas$/);
   if (canvasMatch && /^[a-zA-Z0-9_-]+$/.test(canvasMatch[1])) {
     return { type: 'canvas', experimentId: decodeURIComponent(canvasMatch[1]) };
@@ -1726,7 +2037,7 @@ function clearCachedTerminalSessions() {
 }
 
 function persistPendingRoute(route) {
-  if (!['student', 'teacher', 'admin-personal-center', 'library', 'canvas', 'editor'].includes(route?.type)) return;
+  if (!['student', 'teacher', 'personal-center', 'library', 'canvas', 'editor'].includes(route?.type)) return;
   const serialized = routeHash(route);
   const parsed = parseHashRoute(serialized);
   if (!parsed || parsed.type !== route.type) return;
@@ -1737,7 +2048,7 @@ function readPendingRoute() {
   const serialized = readSessionValue(STORAGE_KEYS.pendingRoute);
   if (!serialized) return null;
   const route = parseHashRoute(serialized);
-  if (!['student', 'teacher', 'admin-personal-center', 'library', 'canvas', 'editor'].includes(route.type)) {
+  if (!['student', 'teacher', 'personal-center', 'library', 'canvas', 'editor'].includes(route.type)) {
     removeSessionValue(STORAGE_KEYS.pendingRoute);
     return null;
   }
@@ -1767,8 +2078,7 @@ function renderSimpleRoute(route) {
   loginView.classList.remove('is-visible');
   studentView.classList.remove('is-visible');
   teacherView.classList.remove('is-visible');
-  adminView.classList.remove('is-visible');
-  adminPersonalCenterView.classList.remove('is-visible');
+  personalCenterView.classList.remove('is-visible');
   hideProtectedViews();
   if (route === 'login') {
     loginView.classList.add('is-visible');
@@ -1784,15 +2094,10 @@ function renderSimpleRoute(route) {
     renderTeacherDashboard();
     return;
   }
-  if (route === 'admin' && user.role === 'admin') {
-    adminView.classList.add('is-visible');
-    renderAdminDashboard();
-    return;
-  }
-  if (route === 'admin-personal-center' && user.role === 'admin') {
-    adminPersonalCenterIdentity.textContent = `${user.name} · ${user.email}`;
-    adminPersonalCenterView.classList.add('is-visible');
-    void renderAdminGitSettings();
+  if (route === 'personal-center' && ['student', 'teacher'].includes(user?.role)) {
+    personalCenterIdentity.textContent = `${user.name} · ${user.email}`;
+    personalCenterView.classList.add('is-visible');
+    void loadPersonalProfile();
     return;
   }
   if (route === 'library') {
@@ -1805,7 +2110,7 @@ function renderSimpleRoute(route) {
 
 function redirectToRoleHome(message = '') {
   const role = getCurrentUser()?.role;
-  const fallback = role === 'teacher' ? 'teacher' : role === 'admin' ? 'admin' : role === 'student' ? 'student' : 'login';
+  const fallback = role === 'teacher' ? 'teacher' : role === 'student' ? 'student' : 'login';
   if (message) setRouteStatus(message, true);
   navigateTo({ type: fallback }, { replace: true });
 }
@@ -1836,7 +2141,6 @@ async function resolveCurrentRoute() {
     return;
   }
   const requiredRole = route.type === 'teacher' ? 'teacher'
-    : ['admin', 'admin-personal-center'].includes(route.type) ? 'admin'
     : ['student', 'canvas', 'editor'].includes(route.type) ? 'student' : null;
   if (requiredRole && user.role !== requiredRole) {
     redirectToRoleHome('当前账号无权访问此页面，已返回本角色工作台。');
@@ -1854,7 +2158,7 @@ async function resolveCurrentRoute() {
     renderSimpleRoute(route.type);
     return;
   }
-  if (route.type === 'admin' || route.type === 'admin-personal-center') {
+  if (route.type === 'personal-center') {
     renderSimpleRoute(route.type);
     return;
   }
@@ -1971,6 +2275,36 @@ function closeInspector() {
   inspector.classList.remove('is-open');
 }
 
+function renderNodeAcceptanceCriteria(node) {
+  if (!nodeAcceptanceCriteria || !nodeAcceptanceSource) return;
+  nodeAcceptanceCriteria.replaceChildren();
+  const criteria = Array.isArray(node?.acceptanceCriteria) ? node.acceptanceCriteria : [];
+  nodeAcceptanceSource.textContent = node?.acceptanceCriteriaSource === 'legacy_inferred'
+    ? '旧实验：根据原节点任务整理，仅供参考。'
+    : node?.acceptanceCriteriaVersion
+      ? `准则版本 ${node.acceptanceCriteriaVersion}`
+      : '根据本次实验方案生成';
+  if (!criteria.length) {
+    const empty = document.createElement('li');
+    empty.textContent = '该历史节点暂无独立验收准则，请结合节点任务检查。';
+    nodeAcceptanceCriteria.append(empty);
+    return;
+  }
+  const methodLabels = { static_code: '静态代码', test_artifact: '测试材料', manual_demo: '人工演示' };
+  criteria.forEach((criterion) => {
+    const item = document.createElement('li');
+    const title = document.createElement('strong');
+    title.textContent = criterion.criterion || '验收准则';
+    const method = document.createElement('span');
+    method.className = 'acceptance-method';
+    method.textContent = methodLabels[criterion.verificationMethod] || '待确认检查方式';
+    const evidence = document.createElement('p');
+    evidence.textContent = `检查证据：${criterion.expectedEvidence || '未提供'}`;
+    item.append(title, method, evidence);
+    nodeAcceptanceCriteria.append(item);
+  });
+}
+
 function selectTreeNode(element) {
   document.querySelectorAll('.bubble.is-selected').forEach((node) => node.classList.remove('is-selected'));
   element.classList.add('is-selected');
@@ -1987,6 +2321,7 @@ function selectTreeNode(element) {
     inspector.querySelector('.node-fact:nth-child(1) dd').textContent = `约 ${selectedTreeNode.estimatedMinutes} 分钟`;
     inspector.querySelector('.node-fact:nth-child(3) dd').textContent = '在本地 IDE 中创建和编辑项目';
     inspector.querySelector('.node-fact:nth-child(4) dd').textContent = selectedTreeNode.title;
+    renderNodeAcceptanceCriteria(selectedTreeNode);
     const taskList = editorView.querySelector('.task-list');
     taskList.replaceChildren();
     renderSelectedNodeTasks();
@@ -2186,6 +2521,7 @@ function renderExperimentCanvas(experimentId) {
   loginView.classList.remove('is-visible');
   studentView.classList.remove('is-visible');
   teacherView.classList.remove('is-visible');
+  personalCenterView.classList.remove('is-visible');
   [canvasView, editorView].forEach((view) => view.classList.remove('auth-hidden'));
   closePatchReview();
   activeExperimentId = String(experimentId);
@@ -2484,7 +2820,7 @@ async function refreshWorkspaceFilesAfterTerminal(runId, workspaceId, epoch) {
 }
 
 async function restoreExistingRun(runId, epoch) {
-  const run = await apiRequest(`/runs/${encodeURIComponent(runId)}`, { method: 'GET', timeoutMs: 15000 });
+  const run = await apiRequest(`/student/runs/${encodeURIComponent(runId)}`, { method: 'GET', timeoutMs: 15000 });
   if (epoch !== routeResolutionEpoch) return;
   if (String(run.runId) !== String(runId) || !/^\d+$/.test(String(run.experimentId))) {
     throw new Error('运行实例不存在或当前账号无权访问。');
@@ -2504,6 +2840,7 @@ async function restoreExistingRun(runId, epoch) {
   const nodeProgress = await apiRequest(`/runs/${encodeURIComponent(runId)}/progress`, { method: 'GET' });
   if (epoch !== routeResolutionEpoch) return;
   activeRunProgress = nodeProgress;
+  activeNodeId = nodeProgress.currentNodeId || activeNodeId;
   runProgressLoadFailed = false;
   if (activeNodeId) {
     const selected = activeTreeNodes.find((node) => Number(node.nodeId) === Number(activeNodeId));
@@ -2624,6 +2961,20 @@ function updateGitSubmitButton() {
   submitGitCommit.disabled = !activeRun || selectedCount === 0 || !gitCommitSha.value.trim();
 }
 
+function isAllowedGitRepositoryUrl(cloneUrl, pageUrl = window.location.href) {
+  try {
+    const parsed = new URL(cloneUrl);
+    const page = new URL(pageUrl);
+    const isHttps = parsed.protocol === 'https:';
+    const isSameHostHttpDemo = parsed.protocol === 'http:'
+      && page.protocol === 'http:'
+      && parsed.host === page.host;
+    return (isHttps || isSameHostHttpDemo) && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
 async function loadGitRepository(runId, epoch = routeResolutionEpoch) {
   gitRepositoryState.textContent = '正在读取仓库信息…';
   gitCloneCommand.textContent = '正在加载仓库地址…';
@@ -2635,9 +2986,7 @@ async function loadGitRepository(runId, epoch = routeResolutionEpoch) {
     if (epoch !== routeResolutionEpoch || String(activeRun?.runId) !== String(runId)) return;
     const cloneUrl = String(repository.cloneUrl || repository.repoUrl || '').trim();
     if (!cloneUrl) throw new Error('仓库服务尚未返回可用的克隆地址。');
-    let parsed;
-    try { parsed = new URL(cloneUrl); } catch { throw new Error('仓库克隆地址格式无效。'); }
-    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+    if (!isAllowedGitRepositoryUrl(cloneUrl)) {
       throw new Error('仓库地址包含不安全协议或嵌入式凭据，已阻止显示。');
     }
     activeGitRepository = { ...repository, cloneUrl };
@@ -4090,7 +4439,7 @@ function updateDurationPreview() {
   selectedDuration = `${days} 天 ${hours} 小时`;
   durationPreview.classList.toggle('is-invalid', durationTotalHours <= 0);
   durationPreview.textContent = durationTotalHours > 0
-    ? `当前周期：${selectedDuration} · 共 ${durationTotalHours} 小时`
+    ? `预计范围：${selectedDuration} · 约 ${durationTotalHours} 小时（供规划参考）`
     : '请输入大于 0 的整数小时数。';
 }
 
@@ -4359,7 +4708,14 @@ function renderPlanPreview(plan) {
   pendingPlan = plan;
   updateDurationPreview();
   planDirection.textContent = goal;
-  planDuration.textContent = selectedDuration;
+  const totalEstimatedMinutes = plan.nodes.reduce((sum, node) =>
+    sum + (Number.isInteger(node.estimatedMinutes) && node.estimatedMinutes > 0 ? node.estimatedMinutes : 0), 0);
+  planDuration.textContent = `${selectedDuration}（填写参考） · 节点估算约 ${formatDurationMinutes(totalEstimatedMinutes)}`;
+  const exceedsReference = totalEstimatedMinutes > durationTotalHours * 60;
+  planDurationNotice.classList.toggle('is-warning', exceedsReference);
+  planDurationNotice.textContent = exceedsReference
+    ? `节点预计合计约 ${formatDurationMinutes(totalEstimatedMinutes)}，高于填写的 ${durationTotalHours} 小时参考周期。方案仍保留全部已确认成果；可按自己的节奏完成。`
+    : `节点预计合计约 ${formatDurationMinutes(totalEstimatedMinutes)}。实际用时会因基础和进度不同而变化。`;
   planDifficulty.textContent = selectedDifficulty;
   planPurpose.textContent = plan.purpose.join('；');
   planNodes.replaceChildren();
@@ -4376,7 +4732,7 @@ function renderPlanPreview(plan) {
     branch.className = 'plan-tree-branch';
     const node = document.createElement('div');
     node.className = 'plan-node';
-    node.innerHTML = '<span class="plan-node-sequence"></span><div class="plan-node-content"><div class="plan-node-heading"><strong></strong><span class="plan-node-minutes"></span></div><p class="plan-node-description"></p><ol class="plan-task-list"></ol></div>';
+    node.innerHTML = '<span class="plan-node-sequence"></span><div class="plan-node-content"><div class="plan-node-heading"><strong></strong><span class="plan-node-minutes"></span></div><p class="plan-node-description"></p><ol class="plan-task-list"></ol><div class="plan-acceptance"><strong>验收准则</strong><ol class="plan-acceptance-list"></ol></div></div>';
     node.querySelector('.plan-node-sequence').textContent = nodeNumbers.get(planNode.key) || planNode.key;
     node.querySelector('strong').textContent = `${planNode.stage} · ${planNode.title}`;
     const estimatedMinutes = Number.isInteger(planNode.estimatedMinutes) && planNode.estimatedMinutes > 0
@@ -4408,6 +4764,22 @@ function renderPlanPreview(plan) {
       item.append(heading, description);
       taskList.append(item);
     });
+    const criteriaList = node.querySelector('.plan-acceptance-list');
+    const methodNames = { static_code: '静态代码', test_artifact: '测试材料', manual_demo: '人工演示' };
+    (Array.isArray(planNode.acceptanceCriteria) ? planNode.acceptanceCriteria : []).forEach((criterion) => {
+      const item = document.createElement('li');
+      const text = document.createElement('span');
+      text.textContent = criterion.criterion || '验收条件待确认';
+      const method = document.createElement('small');
+      method.textContent = `${methodNames[criterion.verificationMethod] || '检查方式待确认'} · ${criterion.expectedEvidence || '证据待确认'}`;
+      item.append(text, method);
+      criteriaList.append(item);
+    });
+    if (!criteriaList.children.length) {
+      const item = document.createElement('li');
+      item.textContent = '旧方案暂无独立验收准则';
+      criteriaList.append(item);
+    }
     branch.append(node);
     const descendants = children.get(planNode.key) || [];
     if (descendants.length) {
@@ -4698,6 +5070,7 @@ loginForm.addEventListener('submit', async (event) => {
     });
     setCurrentUser(session.user);
     loginPassword.value = '';
+    if (!getCurrentUser()) throw new Error('该账号角色尚未迁移到教师或学生，请联系课程教师。');
     setMessage(loginError, '');
     const destination = pendingProtectedRoute || readPendingRoute() || { type: getCurrentUser().role };
     pendingProtectedRoute = null;
@@ -4837,29 +5210,6 @@ teacherDshReviewForm.addEventListener('submit', async (event) => {
     if (selectedTeacherDshRunId === runId) teacherDshReviewSave.disabled = false;
   }
 });
-adminExperiment.addEventListener('change', syncAdminReviewerSelection);
-adminAssignReviewer.addEventListener('click', async () => {
-  const experimentId = adminExperiment.value;
-  const teacherId = adminReviewer.value;
-  if (!/^\d+$/.test(experimentId) || !/^\d+$/.test(teacherId)) {
-    setMessage(adminReviewerMessage, '请选择个人实验和审核教师。', true);
-    return;
-  }
-  adminAssignReviewer.disabled = true;
-  setMessage(adminReviewerMessage, '正在保存审核教师…');
-  try {
-    await apiRequest(`/admin/experiments/${encodeURIComponent(experimentId)}/reviewer`, {
-      method: 'PUT', body: JSON.stringify({ teacherId: Number(teacherId) }),
-    });
-    setMessage(adminReviewerMessage, '审核教师已保存。');
-    await renderAdminDashboard();
-    adminExperiment.value = experimentId;
-    syncAdminReviewerSelection();
-  } catch (error) {
-    setMessage(adminReviewerMessage, error.message || '审核教师保存失败。', true);
-    adminAssignReviewer.disabled = false;
-  }
-});
 teacherReviewForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!selectedTeacherRunId) {
@@ -4898,7 +5248,7 @@ async function logout() {
     await apiRequest('/auth/logout', { method: 'POST', timeoutMs: 10000 });
   } catch (error) {
     const role = getCurrentUser()?.role;
-    const messageTarget = role === 'teacher' ? teacherMessage : role === 'admin' ? adminReviewerMessage : studentMessage;
+    const messageTarget = role === 'teacher' ? teacherMessage : role === 'student' ? studentMessage : personalProfileMessage;
     if (messageTarget) setMessage(messageTarget, '退出请求失败，会话仍保持有效，请重试。', true);
     else setMessage(loginError, '退出请求失败，请重试。', true);
     return;
@@ -4921,7 +5271,7 @@ async function logout() {
   showRoute('login');
 }
 
-document.querySelectorAll('#studentLogoutButton, #teacherLogoutButton, #adminLogoutButton, #adminPersonalCenterLogoutButton, #libraryLogoutButton').forEach((button) => button.addEventListener('click', logout));
+document.querySelectorAll('#studentLogoutButton, #teacherLogoutButton, #personalCenterLogoutButton, #libraryLogoutButton').forEach((button) => button.addEventListener('click', logout));
 
 async function restoreSession() {
   renderCanvas();
@@ -4936,7 +5286,7 @@ async function restoreSession() {
   }
   if (sessionError && sessionError.status !== 401) {
     const currentRoute = parseHashRoute();
-    if (['student', 'teacher', 'admin-personal-center', 'library', 'canvas', 'editor'].includes(currentRoute.type)) {
+    if (['student', 'teacher', 'personal-center', 'library', 'canvas', 'editor'].includes(currentRoute.type)) {
       pendingProtectedRoute = currentRoute;
       persistPendingRoute(currentRoute);
     }

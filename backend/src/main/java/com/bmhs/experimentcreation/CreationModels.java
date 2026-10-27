@@ -69,6 +69,11 @@ public final class CreationModels {
             String validationType,
             Map<String, Object> validationConfig) {}
 
+    public record AcceptanceCriterion(
+            String criterion,
+            String verificationMethod,
+            String expectedEvidence) {}
+
     public record PositionedTask(
             Long taskId,
             String title,
@@ -87,20 +92,41 @@ public final class CreationModels {
             String title,
             String description,
             int estimatedMinutes,
-            List<PlanTask> tasks) {
+            List<PlanTask> tasks,
+            List<AcceptanceCriterion> acceptanceCriteria) {
         public PlanNode {
             prerequisiteKeys = prerequisiteKeys == null
                     ? (parentKey == null ? List.of() : List.of(parentKey))
                     : List.copyOf(prerequisiteKeys);
             unlockRule = unlockRule == null ? "all_prerequisites_completed" : unlockRule;
             completionRule = completionRule == null ? "all_tasks_completed" : completionRule;
+            acceptanceCriteria = acceptanceCriteria == null || acceptanceCriteria.isEmpty()
+                    ? inferredCriteria(tasks) : List.copyOf(acceptanceCriteria);
+        }
+
+        private static List<AcceptanceCriterion> inferredCriteria(List<PlanTask> tasks) {
+            if (tasks == null) return List.of();
+            return tasks.stream().filter(java.util.Objects::nonNull).map(task -> new AcceptanceCriterion(
+                    task.title() == null || task.title().isBlank() ? "检查节点成果" : task.title(),
+                    "manual".equals(task.validationType()) ? "manual_demo"
+                            : "static_code".equals(task.validationType()) || "agent".equals(task.validationType())
+                            ? "static_code" : "test_artifact",
+                    task.description() == null || task.description().isBlank() ? "核对节点成果" : task.description()
+            )).toList();
         }
 
         public PlanNode(String key, String parentKey, int depth, String stage, String title,
                         String description, int estimatedMinutes, List<PlanTask> tasks) {
             this(key, parentKey, parentKey == null ? List.of() : List.of(parentKey),
                     "all_prerequisites_completed", "all_tasks_completed", depth, stage, title,
-                    description, estimatedMinutes, tasks);
+                    description, estimatedMinutes, tasks, List.of());
+        }
+
+        public PlanNode(String key, String parentKey, List<String> prerequisiteKeys,
+                        String unlockRule, String completionRule, int depth, String stage, String title,
+                        String description, int estimatedMinutes, List<PlanTask> tasks) {
+            this(key, parentKey, prerequisiteKeys, unlockRule, completionRule, depth, stage, title,
+                    description, estimatedMinutes, tasks, List.of());
         }
     }
 
@@ -124,20 +150,40 @@ public final class CreationModels {
             List<PositionedTask> tasks,
             BigDecimal canvasX,
             BigDecimal canvasY,
-            Long nodeId) {
+            Long nodeId,
+            List<AcceptanceCriterion> acceptanceCriteria,
+            Integer acceptanceCriteriaVersion,
+            String acceptanceCriteriaSource) {
         public PositionedNode {
             prerequisiteKeys = prerequisiteKeys == null
                     ? (parentKey == null ? List.of() : List.of(parentKey))
                     : List.copyOf(prerequisiteKeys);
             unlockRule = unlockRule == null ? "all_prerequisites_completed" : unlockRule;
             completionRule = completionRule == null ? "all_tasks_completed" : completionRule;
+            acceptanceCriteria = acceptanceCriteria == null || acceptanceCriteria.isEmpty()
+                    ? inferPositionedCriteria(tasks) : List.copyOf(acceptanceCriteria);
+            if ((acceptanceCriteriaVersion == null || acceptanceCriteriaVersion <= 0)
+                    && (acceptanceCriteriaSource == null || acceptanceCriteriaSource.isBlank())) {
+                acceptanceCriteriaSource = "legacy_inferred";
+            }
+        }
+
+        private static List<AcceptanceCriterion> inferPositionedCriteria(List<PositionedTask> tasks) {
+            if (tasks == null) return List.of();
+            return tasks.stream().filter(java.util.Objects::nonNull).map(task -> new AcceptanceCriterion(
+                    task.title() == null || task.title().isBlank() ? "检查节点成果" : task.title(),
+                    "manual".equals(task.validationType()) ? "manual_demo"
+                            : "agent".equals(task.validationType()) ? "static_code" : "test_artifact",
+                    task.description() == null || task.description().isBlank() ? "核对节点成果" : task.description()
+            )).toList();
         }
 
         public PositionedNode(String key, String parentKey, int depth, String stage, String title,
                               String description, int estimatedMinutes, List<PositionedTask> tasks,
                               BigDecimal canvasX, BigDecimal canvasY) {
-            this(key, parentKey, depth, stage, title, description, estimatedMinutes, tasks,
-                    canvasX, canvasY, null);
+            this(key, parentKey, parentKey == null ? List.of() : List.of(parentKey),
+                    "all_prerequisites_completed", "all_tasks_completed", depth, stage, title,
+                    description, estimatedMinutes, tasks, canvasX, canvasY, null, List.of(), null, "legacy_inferred");
         }
 
         public PositionedNode(String key, String parentKey, int depth, String stage, String title,
@@ -145,7 +191,26 @@ public final class CreationModels {
                               BigDecimal canvasX, BigDecimal canvasY, Long nodeId) {
             this(key, parentKey, parentKey == null ? List.of() : List.of(parentKey),
                     "all_prerequisites_completed", "all_tasks_completed", depth, stage, title,
-                    description, estimatedMinutes, tasks, canvasX, canvasY, nodeId);
+                    description, estimatedMinutes, tasks, canvasX, canvasY, nodeId, List.of(), null, "legacy_inferred");
+        }
+
+        public PositionedNode(String key, String parentKey, List<String> prerequisiteKeys,
+                              String unlockRule, String completionRule, int depth, String stage, String title,
+                              String description, int estimatedMinutes, List<PositionedTask> tasks,
+                              BigDecimal canvasX, BigDecimal canvasY, Long nodeId) {
+            this(key, parentKey, prerequisiteKeys, unlockRule, completionRule, depth, stage, title,
+                    description, estimatedMinutes, tasks, canvasX, canvasY, nodeId, List.of(), null, "legacy_inferred");
+        }
+
+        public PositionedNode(String key, String parentKey, int depth, String stage, String title,
+                              String description, int estimatedMinutes, List<PositionedTask> tasks,
+                              BigDecimal canvasX, BigDecimal canvasY, Long nodeId,
+                              List<AcceptanceCriterion> acceptanceCriteria, Integer acceptanceCriteriaVersion,
+                              String acceptanceCriteriaSource) {
+            this(key, parentKey, parentKey == null ? List.of() : List.of(parentKey),
+                    "all_prerequisites_completed", "all_tasks_completed", depth, stage, title, description,
+                    estimatedMinutes, tasks, canvasX, canvasY, nodeId, acceptanceCriteria,
+                    acceptanceCriteriaVersion, acceptanceCriteriaSource);
         }
     }
 

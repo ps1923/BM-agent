@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `email` VARCHAR(320) NOT NULL,
   `display_name` VARCHAR(100) NOT NULL,
+  `git_author_name` VARCHAR(100) NULL,
+  `git_author_email` VARCHAR(320) NULL,
   `password_hash` VARCHAR(255) NULL,
   `role` VARCHAR(20) NOT NULL DEFAULT 'student',
   `status` VARCHAR(20) NOT NULL DEFAULT 'active',
@@ -18,7 +20,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_users_email` (`email`),
-  CONSTRAINT `ck_users_role` CHECK (`role` IN ('student', 'teacher', 'admin')),
+  CONSTRAINT `ck_users_role` CHECK (`role` IN ('student', 'teacher')),
   CONSTRAINT `ck_users_status` CHECK (`status` IN ('active', 'disabled'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -101,6 +103,7 @@ CREATE TABLE IF NOT EXISTS `courses` (
   `teacher_id` BIGINT UNSIGNED NOT NULL,
   `name` VARCHAR(150) NOT NULL,
   `invite_code` VARCHAR(16) NOT NULL,
+  `git_repository_url` VARCHAR(1000) NULL,
   `status` VARCHAR(20) NOT NULL DEFAULT 'active',
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
@@ -264,6 +267,25 @@ CREATE TABLE IF NOT EXISTS `experiment_nodes` (
     FOREIGN KEY (`parent_node_id`, `experiment_id`)
     REFERENCES `experiment_nodes` (`id`, `experiment_id`)
     ON UPDATE RESTRICT ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `experiment_node_acceptance_criteria` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `experiment_id` BIGINT UNSIGNED NOT NULL,
+  `node_id` BIGINT UNSIGNED NOT NULL,
+  `version` INT UNSIGNED NOT NULL,
+  `source` VARCHAR(20) NOT NULL,
+  `criteria_json` JSON NOT NULL,
+  `updated_by` BIGINT UNSIGNED NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_node_acceptance_criteria_version` (`node_id`, `version`),
+  KEY `idx_node_acceptance_criteria_current` (`experiment_id`, `node_id`, `version`),
+  CONSTRAINT `fk_node_acceptance_criteria_node` FOREIGN KEY (`node_id`, `experiment_id`)
+    REFERENCES `experiment_nodes` (`id`, `experiment_id`) ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_node_acceptance_criteria_editor` FOREIGN KEY (`updated_by`)
+    REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE SET NULL,
+  CONSTRAINT `ck_node_acceptance_criteria_source` CHECK (`source` IN ('generated', 'teacher'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `node_dependencies` (
@@ -588,12 +610,15 @@ CREATE TABLE IF NOT EXISTS `bug_cases` (
   `status` VARCHAR(20) NOT NULL DEFAULT 'pending',
   `visibility` VARCHAR(20) NOT NULL DEFAULT 'personal',
   `vector_status` VARCHAR(20) NOT NULL DEFAULT 'not_indexed',
+  `vector_index_attempts` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `vector_index_retry_at` DATETIME(6) NULL,
   `chroma_document_id` VARCHAR(120) NULL,
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
   KEY `idx_bug_cases_student_created` (`student_id`, `created_at`),
   KEY `idx_bug_cases_course_status` (`course_id`, `status`),
+  KEY `idx_bug_cases_vector_retry` (`status`, `vector_status`, `vector_index_retry_at`),
   CONSTRAINT `fk_bug_cases_run`
     FOREIGN KEY (`run_id`, `experiment_id`) REFERENCES `experiment_runs` (`id`, `experiment_id`)
     ON UPDATE RESTRICT ON DELETE CASCADE,
@@ -608,7 +633,8 @@ CREATE TABLE IF NOT EXISTS `bug_cases` (
     ON UPDATE RESTRICT ON DELETE RESTRICT,
   CONSTRAINT `ck_bug_cases_status` CHECK (`status` IN ('pending', 'approved', 'rejected')),
   CONSTRAINT `ck_bug_cases_visibility` CHECK (`visibility` IN ('personal', 'course')),
-  CONSTRAINT `ck_bug_cases_vector_status` CHECK (`vector_status` IN ('not_indexed', 'indexed', 'failed'))
+  CONSTRAINT `ck_bug_cases_vector_status` CHECK (`vector_status` IN ('not_indexed', 'indexed', 'failed')),
+  CONSTRAINT `ck_bug_cases_vector_attempts` CHECK (`vector_index_attempts` <= 6)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `bug_case_reviews` (
@@ -631,15 +657,17 @@ CREATE TABLE IF NOT EXISTS `bug_case_reviews` (
 
 CREATE TABLE IF NOT EXISTS `experiment_reviewers` (
   `experiment_id` BIGINT UNSIGNED NOT NULL,
+  `course_id` BIGINT UNSIGNED NULL COMMENT 'NULL indicates an untrusted legacy assignment that cannot grant access',
   `teacher_id` BIGINT UNSIGNED NOT NULL,
-  `assigned_by_admin_id` BIGINT UNSIGNED NOT NULL,
+  `assigned_by_teacher_id` BIGINT UNSIGNED NOT NULL,
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`experiment_id`),
   KEY `idx_experiment_reviewers_teacher` (`teacher_id`, `experiment_id`),
   CONSTRAINT `fk_experiment_reviewers_experiment` FOREIGN KEY (`experiment_id`) REFERENCES `experiments` (`id`) ON UPDATE RESTRICT ON DELETE CASCADE,
+  CONSTRAINT `fk_experiment_reviewers_course` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
   CONSTRAINT `fk_experiment_reviewers_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
-  CONSTRAINT `fk_experiment_reviewers_admin` FOREIGN KEY (`assigned_by_admin_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT
+  CONSTRAINT `fk_experiment_reviewers_assigned_by_teacher` FOREIGN KEY (`assigned_by_teacher_id`) REFERENCES `users` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `dsh_instances` (
@@ -810,6 +838,9 @@ CREATE TABLE IF NOT EXISTS `git_submission_nodes` (
   `submission_id` BIGINT UNSIGNED NOT NULL,
   `experiment_id` BIGINT UNSIGNED NOT NULL,
   `node_id` BIGINT UNSIGNED NOT NULL,
+  `criteria_version` INT UNSIGNED NULL,
+  `criteria_source` VARCHAR(20) NULL,
+  `criteria_snapshot_json` JSON NULL,
   PRIMARY KEY (`submission_id`, `node_id`),
   KEY `idx_git_submission_nodes_node` (`experiment_id`, `node_id`, `submission_id`),
   CONSTRAINT `fk_git_submission_nodes_submission` FOREIGN KEY (`submission_id`) REFERENCES `git_submissions` (`id`) ON UPDATE RESTRICT ON DELETE RESTRICT,
@@ -826,6 +857,10 @@ CREATE TABLE IF NOT EXISTS `git_acceptance_results` (
   `suggestions_json` JSON NOT NULL,
   `bug_draft_json` JSON NULL,
   `execution_check` VARCHAR(30) NOT NULL DEFAULT 'not_run',
+  `criteria_version` INT UNSIGNED NULL,
+  `criteria_source` VARCHAR(20) NULL,
+  `criteria_snapshot_json` JSON NULL,
+  `criterion_results_json` JSON NULL,
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`submission_id`, `node_id`),
   CONSTRAINT `fk_git_acceptance_results_node` FOREIGN KEY (`submission_id`, `node_id`) REFERENCES `git_submission_nodes` (`submission_id`, `node_id`) ON UPDATE RESTRICT ON DELETE RESTRICT,

@@ -15,25 +15,41 @@ class ExperimentReviewerServiceTest {
     private final ExperimentReviewerService service = new ExperimentReviewerService(repository);
 
     @Test
-    void reviewerAssignmentListsAreAdminOnly() {
-        AuthenticatedUser teacher = new AuthenticatedUser(7L, "t@example.test", "教师", "teacher");
+    void studentCannotReadCourseScopedReviewerAssignments() {
+        AuthenticatedUser student = new AuthenticatedUser(7L, "s@example.test", "学生", "student");
 
-        ApiException experiments = assertThrows(ApiException.class, () -> service.reviewableExperiments(teacher));
-        ApiException teachers = assertThrows(ApiException.class, () -> service.activeTeachers(teacher));
+        ApiException exception = assertThrows(ApiException.class, () -> service.reviewableExperiments(student));
 
-        assertEquals("ROLE_FORBIDDEN", experiments.code());
-        assertEquals("ROLE_FORBIDDEN", teachers.code());
+        assertEquals("ROLE_FORBIDDEN", exception.code());
         verifyNoInteractions(repository);
     }
 
     @Test
-    void adminCanReadAssignableExperimentsAndActiveTeachers() {
-        AuthenticatedUser admin = new AuthenticatedUser(1L, "a@example.test", "管理员", "admin");
+    void teacherCanReadOnlyRepositoryScopedToTheirIdentity() {
+        AuthenticatedUser teacher = new AuthenticatedUser(7L, "t@example.test", "教师", "teacher");
 
-        service.reviewableExperiments(admin);
-        service.activeTeachers(admin);
+        service.reviewableExperiments(teacher);
 
-        verify(repository).reviewableExperiments();
-        verify(repository).activeTeachers();
+        verify(repository).reviewableExperiments(7L);
+    }
+
+    @Test
+    void teacherCanOnlyAssignThemselvesAsReviewer() {
+        AuthenticatedUser teacher = new AuthenticatedUser(7L, "t@example.test", "教师", "teacher");
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> service.assign(teacher, 12, new ExperimentReviewerModels.AssignmentRequest(8, 2)));
+
+        assertEquals("EXPERIMENT_REVIEW_FORBIDDEN", exception.code());
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void teacherCanAssignThemselvesForTheirCourseStudentExperiment() {
+        AuthenticatedUser teacher = new AuthenticatedUser(7L, "t@example.test", "教师", "teacher");
+
+        service.assign(teacher, 12, new ExperimentReviewerModels.AssignmentRequest(7, 2));
+
+        verify(repository).assign(12, 7L, 2L);
     }
 }

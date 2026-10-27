@@ -39,19 +39,27 @@ public class GiteaClient implements GiteaGateway {
 
     @Override
     public GitModels.GiteaRepository ensureRepository(long runId, long studentId, String owner, String name,
-                                                       String webhookUrl, String webhookSecret) {
+                                                       String webhookUrl, String webhookSecret,
+                                                       boolean prepareCredential) {
         requireConfigured();
+        String bootstrapPassword = randomBootstrapPassword();
         JsonObject user = new JsonObject();
         user.addProperty("username", owner);
         user.addProperty("email", "bmhs-run-" + runId + "@users.invalid");
         user.addProperty("full_name", "BM-HS run " + runId);
-        user.addProperty("password", randomBootstrapPassword());
+        user.addProperty("password", bootstrapPassword);
         user.addProperty("must_change_password", false);
         user.addProperty("restricted", true);
         user.addProperty("visibility", "private");
         user.addProperty("send_notify", false);
         ApiResponse createUser = request("POST", "/admin/users", config.adminToken(), null, user);
-        if (createUser.status() != 201 && createUser.status() != 409) throw giteaUnavailable();
+        if (createUser.status() == 409 && prepareCredential) {
+            ApiResponse resetPassword = request("PATCH", "/admin/users/" + segment(owner),
+                    config.adminToken(), null, Map.of("password", bootstrapPassword));
+            if (resetPassword.status() != 200) throw giteaUnavailable();
+        } else if (createUser.status() != 201 && createUser.status() != 409) {
+            throw giteaUnavailable();
+        }
 
         ApiResponse repoResponse = request("POST", "/admin/users/" + segment(owner) + "/repos",
                 config.adminToken(), null, Map.of("name", name, "private", true,
@@ -67,18 +75,20 @@ public class GiteaClient implements GiteaGateway {
         long repoId = requiredLong(repo, "id");
         if (repoId < 1) throw giteaUnavailable();
         ensurePushWebhook(owner, name, webhookUrl, webhookSecret);
-        return new GitModels.GiteaRepository(repoId, owner, name);
+        return new GitModels.GiteaRepository(repoId, owner, name, prepareCredential ? bootstrapPassword : null);
     }
 
     @Override
-    public String createGitToken(String username, long runId) {
+    public String createGitToken(String username, long runId, String bootstrapPassword) {
+        if (bootstrapPassword == null || bootstrapPassword.isBlank()) throw giteaUnavailable();
         JsonObject body = new JsonObject();
         body.addProperty("name", "bmhs-run-" + runId + "-git-push");
         JsonArray scopes = new JsonArray();
         scopes.add("read:repository");
         scopes.add("write:repository");
         body.add("scopes", scopes);
-        ApiResponse response = request("POST", "/users/" + segment(username) + "/tokens", config.adminToken(), username, body);
+        ApiResponse response = requestBasic("POST", "/users/" + segment(username) + "/tokens",
+                username, bootstrapPassword, body);
         if (response.status() != 201) throw giteaUnavailable();
         JsonObject parsed = parseObject(response.body());
         String token = firstString(parsed, "sha1", "token");
@@ -189,9 +199,19 @@ public class GiteaClient implements GiteaGateway {
     }
 
     private ApiResponse request(String method, String path, String token, String sudo, Object body) {
+        return send(method, path, "token " + token, sudo, body);
+    }
+
+    private ApiResponse requestBasic(String method, String path, String username, String password, Object body) {
+        String credentials = Base64.getEncoder().encodeToString(
+                (username + ":" + password).getBytes(StandardCharsets.UTF_8));
+        return send(method, path, "Basic " + credentials, null, body);
+    }
+
+    private ApiResponse send(String method, String path, String authorization, String sudo, Object body) {
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(config.apiBaseUrl() + "/api/v1" + path))
-                    .timeout(Duration.ofSeconds(20)).header("Authorization", "token " + token)
+                    .timeout(Duration.ofSeconds(20)).header("Authorization", authorization)
                     .header("Accept", "application/json");
             if (sudo != null) builder.header("Sudo", sudo);
             if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody());

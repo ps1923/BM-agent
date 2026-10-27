@@ -40,7 +40,7 @@ class CourseServiceTest {
     @Test
     void personalExperimentListingRejectsUnsupportedRoles() {
         CourseRepository repository = mock(CourseRepository.class);
-        var user = new AuthenticatedUser(7L, "user@example.com", "用户", "admin");
+        var user = new AuthenticatedUser(7L, "user@example.com", "用户", "unknown");
 
         ApiException exception = assertThrows(ApiException.class,
                 () -> new CourseService(repository).myExperiments(user));

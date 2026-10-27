@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static com.bmhs.auth.AuthModels.AuthenticatedUser;
+import static com.bmhs.auth.AuthModels.ProfileView;
 
 @Repository
 public class AuthRepository {
@@ -57,5 +58,23 @@ public class AuthRepository {
     public void revokeByTokenHash(String tokenHash) {
         jdbc.update("UPDATE user_sessions SET revoked_at = CURRENT_TIMESTAMP(6) "
                 + "WHERE token_hash = ? AND revoked_at IS NULL", tokenHash);
+    }
+
+    public ProfileView findProfile(long userId) {
+        List<ProfileView> profiles = jdbc.query("""
+                SELECT id, email, display_name, git_author_name, git_author_email
+                FROM users WHERE id = ?
+                """, (rs, rowNum) -> new ProfileView(rs.getLong("id"), rs.getString("email"),
+                rs.getString("display_name"), rs.getString("git_author_name"),
+                rs.getString("git_author_email")), userId);
+        return profiles.isEmpty() ? null : profiles.get(0);
+    }
+
+    public ProfileView updateProfile(long userId, String displayName, String gitAuthorName, String gitAuthorEmail) {
+        int updated = jdbc.update("""
+                UPDATE users SET display_name = ?, git_author_name = ?, git_author_email = ?
+                WHERE id = ? AND status = 'active'
+                """, displayName, gitAuthorName, gitAuthorEmail, userId);
+        return updated == 0 ? null : findProfile(userId);
     }
 }

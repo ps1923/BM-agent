@@ -129,11 +129,15 @@ public class BugRepository {
                                   WHERE c.teacher_id = ? AND c.status = 'active'
                                     AND a.experiment_id = b.experiment_id AND a.status = 'published') OR
                   (b.course_id IS NULL AND EXISTS (SELECT 1 FROM experiment_reviewers er
-                                                    WHERE er.experiment_id = b.experiment_id AND er.teacher_id = ?)
+                                                    JOIN courses rc ON rc.id = er.course_id AND rc.status = 'active'
+                                                    JOIN course_members rm ON rm.course_id = rc.id AND rm.status = 'active'
+                                                    JOIN experiments re ON re.id = er.experiment_id AND re.creator_id = rm.student_id
+                                                    WHERE er.experiment_id = b.experiment_id AND er.teacher_id = ?
+                                                      AND rc.teacher_id = ?)
                    AND NOT EXISTS (SELECT 1 FROM course_experiment_assignments ca
                                    WHERE ca.experiment_id = b.experiment_id AND ca.status = 'published'))
                 ) ORDER BY b.updated_at DESC
-                """, this::toView, experimentId, teacherId, teacherId);
+                """, this::toView, experimentId, teacherId, teacherId, teacherId);
     }
 
     @Transactional
@@ -142,16 +146,97 @@ public class BugRepository {
         assertTeacherCanReviewExperiment(teacherId, bug.experimentId(), bug.courseId());
         String status = request.decision();
         String visibility = "approved".equals(status) ? "course" : "personal";
-        jdbc.update("UPDATE bug_cases SET status = ?, visibility = ?, vector_status = 'not_indexed', chroma_document_id = NULL WHERE id = ?",
-                status, visibility, bugCaseId);
+        // Delete by deterministic ID even when an upsert may have timed out before storing its ID in MySQL.
+        boolean cleanupRequired = "rejected".equals(status);
+        jdbc.update("""
+                UPDATE bug_cases SET status = ?, visibility = ?,
+                  chroma_document_id = IF(?, chroma_document_id, NULL),
+                  vector_status = IF(?, 'failed', 'not_indexed'),
+                  vector_index_attempts = 0, vector_index_retry_at = NULL
+                WHERE id = ?
+                """,
+                status, visibility, cleanupRequired, cleanupRequired, bugCaseId);
         jdbc.update("INSERT INTO bug_case_reviews (bug_case_id, teacher_id, decision, feedback) VALUES (?, ?, ?, ?)",
                 bugCaseId, teacherId, status, request.feedback());
         return findById(bugCaseId);
     }
 
-    public void updateVectorStatus(long bugCaseId, String status, String documentId) {
-        jdbc.update("UPDATE bug_cases SET vector_status = ?, chroma_document_id = ? WHERE id = ?",
-                status, documentId, bugCaseId);
+    public boolean markVectorIndexSucceeded(long bugCaseId, String documentId) {
+        return jdbc.update("""
+                UPDATE bug_cases SET vector_status = 'indexed', chroma_document_id = ?,
+                  vector_index_attempts = 0, vector_index_retry_at = NULL
+                WHERE id = ? AND status = 'approved'
+                """, documentId, bugCaseId) == 1;
+    }
+
+    public boolean markVectorIndexFailed(long bugCaseId) {
+        return jdbc.update("""
+                UPDATE bug_cases
+                SET vector_status = 'failed', chroma_document_id = NULL,
+                    vector_index_retry_at = CASE WHEN vector_index_attempts < 5
+                      THEN TIMESTAMPADD(SECOND, LEAST(300 * POW(2, vector_index_attempts), 86400), UTC_TIMESTAMP(6))
+                      ELSE NULL END,
+                    vector_index_attempts = vector_index_attempts + 1
+                WHERE id = ? AND status = 'approved' AND vector_index_attempts < 6
+                """, bugCaseId) == 1;
+    }
+
+    public List<RagModels.BugCaseView> findApprovedNeedingIndex(int limit) {
+        int boundedLimit = Math.max(1, Math.min(limit, 50));
+        return jdbc.query("""
+                SELECT id, experiment_id, run_id, node_id, course_id, student_id,
+                       title, problem, solution, technology_stack, status, visibility, vector_status,
+                       chroma_document_id, created_at, updated_at
+                FROM bug_cases
+                WHERE status = 'approved' AND vector_status <> 'indexed'
+                  AND vector_index_attempts < 6
+                  AND (vector_index_retry_at IS NULL OR vector_index_retry_at <= UTC_TIMESTAMP(6))
+                ORDER BY COALESCE(vector_index_retry_at, created_at), id
+                LIMIT ?
+                """, this::toView, boundedLimit);
+    }
+
+    public List<RagModels.BugCaseView> findRejectedNeedingVectorCleanup(int limit) {
+        int boundedLimit = Math.max(1, Math.min(limit, 50));
+        return jdbc.query("""
+                SELECT id, experiment_id, run_id, node_id, course_id, student_id,
+                       title, problem, solution, technology_stack, status, visibility, vector_status,
+                       chroma_document_id, created_at, updated_at
+                FROM bug_cases
+                WHERE status = 'rejected' AND vector_status = 'failed' AND chroma_document_id IS NOT NULL
+                  AND vector_index_attempts < 6
+                  AND (vector_index_retry_at IS NULL OR vector_index_retry_at <= UTC_TIMESTAMP(6))
+                ORDER BY COALESCE(vector_index_retry_at, updated_at), id
+                LIMIT ?
+                """, this::toView, boundedLimit);
+    }
+
+    public boolean markRejectedVectorCleanupSucceeded(long bugCaseId) {
+        return jdbc.update("""
+                UPDATE bug_cases SET vector_status = 'not_indexed', chroma_document_id = NULL,
+                  vector_index_attempts = 0, vector_index_retry_at = NULL
+                WHERE id = ? AND status = 'rejected' AND vector_status = 'failed'
+                """, bugCaseId) == 1;
+    }
+
+    public void markRejectedVectorPendingCleanup(long bugCaseId) {
+        jdbc.update("""
+                UPDATE bug_cases SET vector_status = 'failed', chroma_document_id = CONCAT('bug-', id),
+                  vector_index_attempts = 0, vector_index_retry_at = NULL
+                WHERE id = ? AND status = 'rejected'
+                """, bugCaseId);
+    }
+
+    public void markRejectedVectorCleanupFailed(long bugCaseId) {
+        jdbc.update("""
+                UPDATE bug_cases
+                SET vector_index_retry_at = CASE WHEN vector_index_attempts < 5
+                      THEN TIMESTAMPADD(SECOND, LEAST(300 * POW(2, vector_index_attempts), 86400), UTC_TIMESTAMP(6))
+                      ELSE NULL END,
+                    vector_index_attempts = vector_index_attempts + 1
+                WHERE id = ? AND status = 'rejected' AND vector_status = 'failed'
+                  AND chroma_document_id IS NOT NULL AND vector_index_attempts < 6
+                """, bugCaseId);
     }
 
     public Long findCourseIdForRun(long runId, long studentId) {
@@ -204,9 +289,12 @@ public class BugRepository {
                       NOT EXISTS (SELECT 1 FROM course_experiment_assignments a
                                   WHERE a.experiment_id = ? AND a.status = 'published') AND
                       EXISTS (SELECT 1 FROM experiment_reviewers er
-                              WHERE er.experiment_id = ? AND er.teacher_id = ?)
+                              JOIN courses rc ON rc.id = er.course_id AND rc.status = 'active'
+                              JOIN course_members rm ON rm.course_id = rc.id AND rm.status = 'active'
+                              JOIN experiments re ON re.id = er.experiment_id AND re.creator_id = rm.student_id
+                              WHERE er.experiment_id = ? AND er.teacher_id = ? AND rc.teacher_id = ?)
                     )
-                    """, rs -> rs.next() ? 1 : null, experimentId, teacherId, experimentId, experimentId, teacherId);
+                    """, rs -> rs.next() ? 1 : null, experimentId, teacherId, experimentId, experimentId, teacherId, teacherId);
         }
         if (found == null) throw new ApiException(HttpStatus.FORBIDDEN, "EXPERIMENT_REVIEW_FORBIDDEN", "无权审核该实验的 Bug 记忆");
     }

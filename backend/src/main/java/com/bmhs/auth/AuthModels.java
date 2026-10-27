@@ -15,6 +15,14 @@ public final class AuthModels {
 
     public record AuthenticatedUser(long id, String email, String displayName, String role) {}
 
+    public record ProfileView(long id, String email, String displayName,
+                              String gitAuthorName, String gitAuthorEmail) {}
+
+    public record ProfileUpdateRequest(
+            @NotBlank @Size(max = 100) String displayName,
+            @Size(max = 100) String gitAuthorName,
+            @Email @Size(max = 320) String gitAuthorEmail) {}
+
     public record LoginResponse(AuthenticatedUser user, Instant expiresAt) {}
 
     public record LoginResult(AuthenticatedUser user, String rawToken, Instant expiresAt) {}

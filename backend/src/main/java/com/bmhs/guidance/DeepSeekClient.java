@@ -44,6 +44,15 @@ public class DeepSeekClient implements GuidanceModelClient {
 
     @Override
     public GuidanceModels.ModelReply complete(String systemPrompt, String userPrompt) {
+        return complete(systemPrompt, userPrompt, false);
+    }
+
+    @Override
+    public GuidanceModels.ModelReply completeJson(String systemPrompt, String userPrompt) {
+        return complete(systemPrompt, userPrompt, true);
+    }
+
+    private GuidanceModels.ModelReply complete(String systemPrompt, String userPrompt, boolean jsonOutput) {
         if (baseUrl.isBlank() || apiKey.isBlank()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "MODEL_NOT_CONFIGURED", "DeepSeek 尚未配置");
         }
@@ -54,6 +63,7 @@ public class DeepSeekClient implements GuidanceModelClient {
                 Map.of("role", "user", "content", userPrompt)
         }));
         payload.addProperty("temperature", 0.2);
+        if (jsonOutput) payload.add("response_format", gson.toJsonTree(Map.of("type", "json_object")));
         HttpRequest request;
         try {
             request = HttpRequest.newBuilder(URI.create(baseUrl + "/chat/completions"))

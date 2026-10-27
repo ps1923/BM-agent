@@ -86,6 +86,12 @@ class PlanTask(ContractModel):
     validation_config: dict[str, Any] = Field(default_factory=dict)
 
 
+class AcceptanceCriterion(ContractModel):
+    criterion: str = Field(min_length=2, max_length=500)
+    verification_method: Literal["static_code", "test_artifact", "manual_demo"]
+    expected_evidence: str = Field(min_length=2, max_length=1000)
+
+
 class PlanNode(ContractModel):
     key: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,29}$")
     parent_key: str | None = None
@@ -96,8 +102,9 @@ class PlanNode(ContractModel):
     stage: str = Field(min_length=2, max_length=150)
     title: str = Field(min_length=2, max_length=150)
     description: str = Field(min_length=2)
-    estimated_minutes: int = Field(ge=15, le=1440)
-    tasks: list[PlanTask] = Field(min_length=3, max_length=7)
+    estimated_minutes: int = Field(ge=1, le=1440)
+    tasks: list[PlanTask] = Field(min_length=1)
+    acceptance_criteria: list[AcceptanceCriterion] = Field(default_factory=list)
 
 
 class ExperimentTree(ContractModel):

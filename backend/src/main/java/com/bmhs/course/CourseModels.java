@@ -16,6 +16,10 @@ public final class CourseModels {
 
     public record PublishExperimentRequest(@NotNull Long courseId) {}
 
+    public record CourseGitRepositoryRequest(@NotBlank @Size(max = 1000) String repositoryUrl) {}
+
+    public record CourseGitRepositoryView(long courseId, String repositoryUrl) {}
+
     public record PublishedExperiment(long experimentId, String name, String description,
                                       Instant publishedAt) {}
 

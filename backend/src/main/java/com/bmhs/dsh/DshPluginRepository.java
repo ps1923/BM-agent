@@ -239,13 +239,16 @@ public class DshPluginRepository {
                 JOIN course_experiment_assignments a ON a.experiment_id = e.id AND a.status = 'published'
                 JOIN courses c ON c.id = a.course_id AND c.teacher_id = ? AND c.status = 'active'
                 UNION
-                SELECT e.id, e.name, e.description, e.status, NULL AS course_name
+                SELECT e.id, e.name, e.description, e.status, c.name AS course_name
                 FROM experiments e JOIN experiment_reviewers er ON er.experiment_id = e.id AND er.teacher_id = ?
-                WHERE NOT EXISTS (SELECT 1 FROM course_experiment_assignments a
+                JOIN courses c ON c.id = er.course_id AND c.teacher_id = ? AND c.status = 'active'
+                JOIN course_members m ON m.course_id = c.id AND m.status = 'active'
+                WHERE e.creator_id = m.student_id
+                  AND NOT EXISTS (SELECT 1 FROM course_experiment_assignments a
                                   WHERE a.experiment_id = e.id AND a.status = 'published')
                 ORDER BY name, id
                 """, (rs, rowNum) -> new DshPluginModels.ExperimentView(rs.getLong("id"), rs.getString("name"),
-                rs.getString("description"), rs.getString("status"), rs.getString("course_name")), teacherId, teacherId);
+                rs.getString("description"), rs.getString("status"), rs.getString("course_name")), teacherId, teacherId, teacherId);
     }
 
     public List<DshPluginModels.CodeSubmissionView> submissionsForTeacher(long teacherId, long runId) {
@@ -278,6 +281,9 @@ public class DshPluginRepository {
                   (NOT EXISTS (SELECT 1 FROM course_experiment_assignments a
                                WHERE a.experiment_id = r.experiment_id AND a.status = 'published') AND
                    EXISTS (SELECT 1 FROM experiment_reviewers er
+                           JOIN courses rc ON rc.id = er.course_id AND rc.teacher_id = ? AND rc.status = 'active'
+                           JOIN course_members rm ON rm.course_id = rc.id AND rm.student_id = r.student_id AND rm.status = 'active'
+                           JOIN experiments re ON re.id = er.experiment_id AND re.creator_id = rm.student_id
                            WHERE er.experiment_id = r.experiment_id AND er.teacher_id = ?))
                 )
                 GROUP BY r.id, r.experiment_id, u.id, u.display_name, u.email, r.execution_mode, r.status, r.last_opened_at
@@ -288,7 +294,7 @@ public class DshPluginRepository {
                 rs.getInt("total_nodes"), rs.getInt("completed_tasks"), rs.getInt("total_tasks"),
                 rs.getTimestamp("last_opened_at") == null ? null : rs.getTimestamp("last_opened_at").toInstant(),
                 rs.getString("execution_mode")),
-                experimentId, teacherId, teacherId);
+                experimentId, teacherId, teacherId, teacherId);
     }
 
     public DshPluginModels.SubmissionDetail submissionForTeacher(long teacherId, long runId, long submissionId) {
@@ -370,10 +376,13 @@ public class DshPluginRepository {
                   (NOT EXISTS (SELECT 1 FROM course_experiment_assignments a
                                WHERE a.experiment_id = r.experiment_id AND a.status = 'published') AND
                    EXISTS (SELECT 1 FROM experiment_reviewers er
+                          JOIN courses rc ON rc.id = er.course_id AND rc.teacher_id = ? AND rc.status = 'active'
+                          JOIN course_members rm ON rm.course_id = rc.id AND rm.student_id = r.student_id AND rm.status = 'active'
+                          JOIN experiments re ON re.id = er.experiment_id AND re.creator_id = rm.student_id
                           WHERE er.experiment_id = r.experiment_id AND er.teacher_id = ?)
                   )
                 )
-                """, (rs, rowNum) -> new Run(rs.getLong("id"), rs.getLong("experiment_id"), rs.getLong("student_id")), runId, teacherId, teacherId);
+                """, (rs, rowNum) -> new Run(rs.getLong("id"), rs.getLong("experiment_id"), rs.getLong("student_id")), runId, teacherId, teacherId, teacherId);
         if (rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", "DSH 实验运行不存在或无权访问");
         return rows.get(0);
     }
@@ -387,9 +396,12 @@ public class DshPluginRepository {
                   NOT EXISTS (SELECT 1 FROM course_experiment_assignments a
                               WHERE a.experiment_id = ? AND a.status = 'published') AND
                   EXISTS (SELECT 1 FROM experiment_reviewers er
+                          JOIN courses rc ON rc.id = er.course_id AND rc.teacher_id = ? AND rc.status = 'active'
+                          JOIN experiments re ON re.id = er.experiment_id
+                          JOIN course_members rm ON rm.course_id = rc.id AND rm.student_id = re.creator_id AND rm.status = 'active'
                           WHERE er.experiment_id = ? AND er.teacher_id = ?)
                 )
-                """, rs -> rs.next() ? 1 : null, experimentId, teacherId, experimentId, experimentId, teacherId);
+                """, rs -> rs.next() ? 1 : null, experimentId, teacherId, experimentId, teacherId, experimentId, teacherId);
         if (allowed == null) throw new ApiException(HttpStatus.NOT_FOUND, "EXPERIMENT_FORBIDDEN", "无权查看该实验的 DSH 学习记录");
     }
 

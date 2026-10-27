@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>编程实验学习平台</title>
-    <link rel="stylesheet" href="styles.css?v=34" />
+    <link rel="stylesheet" href="styles.css?v=35" />
   </head>
   <body>
     <div id="routeStatus" class="route-status" role="status" aria-live="polite" aria-atomic="true" hidden></div>
@@ -15,7 +15,7 @@
         <form id="loginForm" class="auth-form" novalidate>
           <label for="loginEmail">邮箱<input id="loginEmail" name="email" type="email" autocomplete="username" placeholder="请输入登录邮箱" /></label>
           <label for="loginPassword">密码<input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" /></label>
-          <p class="auth-demo-hint">账号由系统管理员提供，登录身份由服务器返回。</p>
+          <p class="auth-demo-hint">账号由教师或平台负责人员提供，登录身份由服务器返回。</p>
           <p id="loginError" class="form-message is-error" role="alert" aria-live="polite"></p>
           <button class="primary-action auth-submit" type="submit">登录工作台 <span>→</span></button>
         </form>
@@ -23,7 +23,7 @@
     </main>
 
     <main id="studentView" class="route-view dashboard-view" aria-labelledby="studentTitle">
-      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>学生工作台</small></div></div><div class="dashboard-user"><span id="studentIdentity"></span><button id="studentLogoutButton" class="text-action" type="button">退出</button></div></header>
+      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>学生工作台</small></div></div><div class="dashboard-user"><span id="studentIdentity"></span><button id="studentPersonalCenterButton" class="secondary-action" type="button">个人中心</button><button id="studentLogoutButton" class="text-action" type="button">退出</button></div></header>
       <section class="dashboard-content">
         <div class="dashboard-heading"><div><p class="dashboard-eyebrow">STUDENT SPACE</p><h1 id="studentTitle">我的课程</h1><p>加入课程后查看教师发布的学习实验。</p></div><button id="studentLibraryButton" class="secondary-action" type="button">打开实验库</button></div>
         <section class="join-course-card" aria-labelledby="joinCourseTitle"><div><p class="dashboard-eyebrow">JOIN A COURSE</p><h2 id="joinCourseTitle">使用邀请码加入课程</h2><p>向教师获取 8 位邀请码，例如 <code>SPRING01</code>。</p></div><form id="joinCourseForm" class="inline-form" novalidate><label class="visually-hidden" for="joinCode">课程邀请码</label><input id="joinCode" type="text" maxlength="16" autocomplete="off" placeholder="输入邀请码" /><button class="primary-action" type="submit">加入课程</button></form></section>
@@ -34,19 +34,20 @@
     </main>
 
     <main id="teacherView" class="route-view dashboard-view" aria-labelledby="teacherTitle">
-      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>教师工作台</small></div></div><div class="dashboard-user"><span id="teacherIdentity"></span><button id="teacherLogoutButton" class="text-action" type="button">退出</button></div></header>
+      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>教师工作台</small></div></div><div class="dashboard-user"><span id="teacherIdentity"></span><button id="teacherPersonalCenterButton" class="secondary-action" type="button">个人中心</button><button id="teacherLogoutButton" class="text-action" type="button">退出</button></div></header>
       <section class="dashboard-content">
         <div class="dashboard-heading"><div><p class="dashboard-eyebrow">TEACHER SPACE</p><h1 id="teacherTitle">课程与实验发布</h1><p>创建课程，选择实验草稿并发布给学生。</p></div><button id="teacherLibraryButton" class="secondary-action" type="button">打开实验库</button></div>
         <section class="teacher-create-card" aria-labelledby="createCourseTitle"><div><p class="dashboard-eyebrow">NEW COURSE</p><h2 id="createCourseTitle">创建课程</h2><p>创建后会生成一个可分享的邀请码。</p></div><form id="createCourseForm" class="inline-form" novalidate><label class="visually-hidden" for="courseName">课程名称</label><input id="courseName" type="text" maxlength="80" placeholder="例如：Spring Boot 进阶实践" /><button class="primary-action" type="submit">创建课程</button></form></section>
         <p id="teacherMessage" class="form-message" role="status" aria-live="polite"></p>
         <div class="teacher-dashboard-grid">
-          <section aria-labelledby="teacherCoursesTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">YOUR COURSES</p><h2 id="teacherCoursesTitle">我的课程</h2></div><span id="teacherCourseCount" class="section-count"></span></div><div id="teacherCourses" class="course-grid course-grid-compact"></div></section>
+          <section aria-labelledby="teacherCoursesTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">YOUR COURSES</p><h2 id="teacherCoursesTitle">我的课程</h2><p class="publish-description">每门课程可关联一个仓库地址；学生实验代码仍保存在各自独立仓库中。</p></div><span id="teacherCourseCount" class="section-count"></span></div><div id="teacherCourses" class="course-grid course-grid-compact"></div></section>
           <section class="publish-card" aria-labelledby="publishTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">PUBLISH EXPERIMENT</p><h2 id="publishTitle">发布实验草稿</h2></div></div><p class="publish-description">选择课程和实验草稿，发布后学生即可在对应课程中看到。</p><form id="publishForm" class="publish-form" novalidate><label for="publishCourse">发布到课程<select id="publishCourse"><option value="">请选择课程</option></select></label><label for="publishExperiment">实验草稿<select id="publishExperiment"><option value="">请选择实验</option></select></label><button class="primary-action" type="submit">发布实验</button></form><div id="teacherDrafts" class="draft-list" aria-live="polite"></div></section>
         </div>
+        <section class="teacher-reviewer-card" aria-labelledby="teacherReviewerTitle"><div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">PERSONAL EXPERIMENT REVIEW</p><h2 id="teacherReviewerTitle">我负责课程中学生的个人实验</h2><p class="publish-description">仅显示你所负责课程学生创建、尚未发布到课程的个人实验。你可以将自己设为审核教师，不会看到其他课程。</p></div></div><p id="teacherReviewerMessage" class="form-message" role="status" aria-live="polite"></p><div id="teacherReviewableExperiments" class="teacher-reviewable-list" aria-live="polite"></div></section>
         <section class="teacher-dsh-card" aria-labelledby="teacherDshTitle">
           <div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">GIT COMMIT · AI NODE REVIEW</p><h2 id="teacherDshTitle">学生提交与节点验收</h2><p class="publish-description">只查看学生 push 后提交检查的 commit、代码差异和逐节点 AI 报告，不读取本地未提交代码。</p></div><label class="monitor-course-picker" for="teacherDshExperiment">授权实验<select id="teacherDshExperiment"><option value="">正在加载…</option></select></label></div>
           <p id="teacherDshMessage" class="form-message" role="status" aria-live="polite"></p>
-          <div class="teacher-dsh-layout"><div id="teacherDshRuns" class="teacher-dsh-runs"></div><div class="teacher-dsh-submissions"><div id="teacherDshSubmissions" class="teacher-dsh-submission-list"></div><pre id="teacherDshCode" class="teacher-evidence-code" tabindex="0" aria-label="学生 Git commit 差异与 AI 验收证据">选择一条提交查看 commit 差异和验收结果。</pre></div></div>
+          <div class="teacher-dsh-layout"><div id="teacherDshRuns" class="teacher-dsh-runs"></div><div class="teacher-dsh-submissions"><div id="teacherDshSubmissions" class="teacher-dsh-submission-list"></div><div class="teacher-submission-detail"><pre id="teacherDshCode" class="teacher-evidence-code" tabindex="0" aria-label="学生 Git commit 差异与 AI 验收证据">选择一条提交查看 commit 差异和验收结果。</pre><section id="teacherCriteriaPanel" class="teacher-criteria-panel" hidden><h3>节点验收准则版本管理</h3><label for="teacherCriteriaNode">本次提交关联节点</label><select id="teacherCriteriaNode"></select><div id="teacherCriteriaHistory" class="teacher-criteria-history"></div><div id="teacherCriteriaEditor" class="teacher-criteria-editor"></div><div class="teacher-criteria-actions"><button id="teacherAddCriterion" class="secondary-action" type="button">添加准则</button><button id="teacherSaveCriteria" class="primary-action" type="button">保存为新版本</button></div><p id="teacherCriteriaMessage" class="form-message" role="status" aria-live="polite"></p></section></div></div></div>
           <form id="teacherDshReviewForm" class="teacher-review-form" novalidate><label for="teacherDshRating">阶段性评分（0–100）<input id="teacherDshRating" type="number" min="0" max="100" step="1" disabled /></label><label for="teacherDshFeedback">教师评价<textarea id="teacherDshFeedback" rows="3" maxlength="2000" placeholder="选择学生后填写评价" disabled></textarea></label><button id="teacherDshReviewSave" class="primary-action" type="submit" disabled>保存阶段评价</button><p id="teacherDshReviewMessage" class="form-message" role="status" aria-live="polite"></p></form>
           <section class="teacher-dsh-bug-review" aria-labelledby="teacherDshBugsTitle"><h3 id="teacherDshBugsTitle">当前实验 Bug 记忆审核</h3><p id="teacherDshBugMessage" class="form-message" role="status" aria-live="polite"></p><div id="teacherDshBugs" class="teacher-bug-list"></div></section>
         </section>
@@ -64,7 +65,7 @@
             </aside>
           </div>
           <section class="teacher-bug-review" aria-labelledby="teacherBugReviewTitle">
-            <div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">RAG KNOWLEDGE REVIEW</p><h3 id="teacherBugReviewTitle">Bug 案例审核</h3><p class="publish-description">审核通过后，案例才会进入当前课程的 RAG 知识库。</p></div></div>
+            <div class="dashboard-section-heading"><div><p class="dashboard-eyebrow">RAG KNOWLEDGE REVIEW</p><h3 id="teacherBugReviewTitle">Bug 案例审核</h3><p class="publish-description">审核通过后，案例进入所属实验的记忆池；不同实验之间不会共享。</p></div></div>
             <p id="teacherBugMessage" class="form-message" role="status" aria-live="polite"></p>
             <div id="teacherBugList" class="teacher-bug-list"></div>
           </section>
@@ -72,32 +73,10 @@
       </section>
     </main>
 
-    <main id="adminView" class="route-view dashboard-view" aria-labelledby="adminTitle">
-      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>系统管理</small></div></div><div class="dashboard-user"><span id="adminIdentity"></span><button id="adminPersonalCenterButton" class="secondary-action" type="button">个人中心</button><button id="adminLogoutButton" class="text-action" type="button">退出</button></div></header>
-      <section class="dashboard-content"><div class="dashboard-heading"><div><p class="dashboard-eyebrow">ADMINISTRATION</p><h1 id="adminTitle">个人实验审核教师</h1><p>为未纳入课程发布的个人实验指定唯一审核教师。</p></div></div>
-        <section class="teacher-create-card admin-reviewer-card"><label for="adminExperiment">个人实验<select id="adminExperiment"><option value="">正在加载…</option></select></label><label for="adminReviewer">审核教师<select id="adminReviewer"><option value="">请选择教师</option></select></label><button id="adminAssignReviewer" class="primary-action" type="button" disabled>保存审核教师</button></section>
-        <p id="adminReviewerMessage" class="form-message" role="status" aria-live="polite"></p>
-      </section>
-    </main>
-
-    <main id="adminPersonalCenterView" class="route-view dashboard-view" aria-labelledby="adminPersonalCenterTitle">
-      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>个人中心</small></div></div><div class="dashboard-user"><span id="adminPersonalCenterIdentity"></span><button id="adminBackToDashboardButton" class="secondary-action" type="button">管理工作台</button><button id="adminPersonalCenterLogoutButton" class="text-action" type="button">退出</button></div></header>
-      <section class="dashboard-content">
-        <div class="dashboard-heading"><div><p class="dashboard-eyebrow">ADMIN PERSONAL CENTER</p><h1 id="adminPersonalCenterTitle">Git 仓库连接配置</h1><p>配置全站共享的 Gitea 服务。只有管理员可查看和修改；凭据加密保存在服务器数据库中。</p></div></div>
-        <section class="teacher-create-card admin-settings-card" aria-labelledby="adminGitSettingsTitle">
-          <div class="admin-settings-status"><div><p class="dashboard-eyebrow">GITEA INTEGRATION</p><h2 id="adminGitSettingsTitle">仓库服务设置</h2><p id="adminGitSettingsSummary" class="publish-description">正在读取配置状态…</p></div><span id="adminGitSettingsBadge" class="status-badge">读取中</span></div>
-          <form id="adminGitSettingsForm" class="admin-git-settings-form" novalidate>
-            <label for="adminGitApiUrl">Gitea 内部 API 地址<input id="adminGitApiUrl" name="apiBaseUrl" maxlength="500" placeholder="http://gitea:3000" required /><small>仅允许 localhost、127.0.0.1、::1 或隔离服务名 gitea。</small></label>
-            <label for="adminGitPublicUrl">公网克隆地址<input id="adminGitPublicUrl" name="publicBaseUrl" type="url" maxlength="500" placeholder="http://git.example.edu" required /><small>支持 HTTP/HTTPS；HTTP 仅适合开发演示，Git 凭据可能以明文传输。</small></label>
-            <label for="adminGitWebhookUrl">Gitea Webhook 回调地址<input id="adminGitWebhookUrl" name="webhookTargetUrl" type="url" maxlength="1000" placeholder="http://example.edu/api/integrations/gitea/webhook" required /><small>支持 HTTP/HTTPS；HTTP 下回调内容可能被截获。系统不会向该地址发起探测请求。</small></label>
-            <label for="adminGitAdminToken">Gitea 管理令牌<input id="adminGitAdminToken" name="adminToken" type="password" maxlength="4096" autocomplete="new-password" placeholder="留空表示保留当前令牌" /><small id="adminGitAdminTokenState">正在读取凭据状态…</small></label>
-            <label class="admin-secret-clear"><input id="adminGitClearAdminToken" type="checkbox" />明确清除已保存的管理令牌</label>
-            <label for="adminGitWebhookSecret">Webhook 签名密钥<input id="adminGitWebhookSecret" name="webhookSecret" type="password" maxlength="4096" autocomplete="new-password" placeholder="至少 32 个字符；留空表示保留当前密钥" /><small id="adminGitWebhookSecretState">正在读取凭据状态…</small></label>
-            <label class="admin-secret-clear"><input id="adminGitClearWebhookSecret" type="checkbox" />明确清除已保存的 Webhook 密钥</label>
-            <p id="adminGitSettingsMessage" class="form-message" role="status" aria-live="polite"></p>
-            <div class="admin-settings-actions"><button id="adminGitSettingsReload" class="secondary-action" type="button">重新读取</button><button id="adminGitSettingsSave" class="primary-action" type="submit">保存配置</button></div>
-          </form>
-        </section>
+    <main id="personalCenterView" class="route-view dashboard-view" aria-labelledby="personalCenterTitle">
+      <header class="dashboard-topbar"><div class="dashboard-brand"><span class="auth-brand-mark">⌘</span><div><strong>学习实验</strong><small>个人中心</small></div></div><div class="dashboard-user"><span id="personalCenterIdentity"></span><button id="personalCenterBackButton" class="secondary-action" type="button">返回工作台</button><button id="personalCenterLogoutButton" class="text-action" type="button">退出</button></div></header>
+      <section class="dashboard-content personal-center-content"><div class="dashboard-heading"><div><p class="dashboard-eyebrow">MY PROFILE</p><h1 id="personalCenterTitle">个人中心</h1><p>维护个人资料和 Git 提交署名信息；这里不会保存密码或访问令牌。</p></div></div>
+        <section class="personal-profile-card" aria-labelledby="personalProfileTitle"><h2 id="personalProfileTitle">基本资料</h2><form id="personalProfileForm" class="personal-profile-form" novalidate><label for="profileDisplayName">显示名称<input id="profileDisplayName" name="displayName" type="text" maxlength="100" autocomplete="name" required /></label><label for="profileGitAuthorName">Git 提交用户名<input id="profileGitAuthorName" name="gitAuthorName" type="text" maxlength="100" autocomplete="off" /></label><label for="profileGitAuthorEmail">Git 提交邮箱<input id="profileGitAuthorEmail" name="gitAuthorEmail" type="email" maxlength="320" autocomplete="email" /></label><p class="publish-description">Git 用户名和邮箱用于提交署名，不用于登录。</p><p id="personalProfileMessage" class="form-message" role="status" aria-live="polite"></p><div class="personal-profile-actions"><button id="personalProfileReload" class="secondary-action" type="button">重新读取</button><button id="personalProfileSave" class="primary-action" type="submit">保存资料</button></div></form></section>
       </section>
     </main>
 
@@ -126,7 +105,7 @@
             <div class="library-workflow" aria-label="当前：创建实验，之后进入画布和实验">
               <span class="library-workflow-step is-current"><i>01</i>创建实验</span><span class="library-workflow-line"></span><span class="library-workflow-step"><i>02</i>画布</span><span class="library-workflow-line"></span><span class="library-workflow-step"><i>03</i>实验</span>
             </div>
-            <div class="library-account"><span class="account-dot"></span><span id="libraryAccountLabel">我的工作区</span><button id="libraryDashboardButton" class="topbar-action" type="button">课程工作台</button><button id="libraryLogoutButton" class="topbar-action is-quiet" type="button">退出</button></div>
+            <div class="library-account"><span class="account-dot"></span><span id="libraryAccountLabel">我的工作区</span><button id="libraryDashboardButton" class="topbar-action" type="button">课程工作台</button><button id="libraryPersonalCenterButton" class="topbar-action" type="button">个人中心</button><button id="libraryLogoutButton" class="topbar-action is-quiet" type="button">退出</button></div>
           </header>
 
           <section class="library-content" id="libraryContent">
@@ -180,9 +159,9 @@
             <div id="creationConversation" class="creation-conversation" role="log" aria-live="polite" aria-label="实验创建对话"></div>
             <div class="create-dialog-scroll">
               <section class="create-step is-active" data-step="1"><p class="step-eyebrow">STEP 01 · 方向对话</p><h3>你想做什么或学什么？</h3><p class="step-description">先说说你的目标；需要补充时，Harness 会在对话中继续询问。</p><div class="direction-compose"><textarea id="learningGoal" rows="3" aria-label="描述你想学习或完成的实验方向" placeholder="例如：我想学习 Spring Boot，并完成一个用户登录接口…"></textarea><div class="direction-compose-hint"><span>Enter 发送 · Shift + Enter 换行</span><span>只讨论实验方向</span></div></div><div id="directionReview" class="direction-review" hidden><span class="direction-summary-label">方向摘要</span><strong id="directionTitleReview"></strong><p id="directionDetailReview"></p></div></section>
-              <section class="create-step" data-step="2"><p class="step-eyebrow">STEP 02 · 学习周期</p><h3>你准备投入多久？</h3><p class="step-description">填写总小时数，系统会换算为天和小时，并用于安排节点节奏。</p><div id="directionSummary" class="direction-summary"><span class="direction-summary-label">已识别的实验方向</span><strong id="directionTitle">等待第一段对话</strong><p id="directionDetail">完成方向描述后，这里会显示方向摘要。</p></div><div class="duration-fields"><label for="durationHoursInput"><span>投入总时长</span><span class="duration-input-control"><input id="durationHoursInput" type="number" min="1" max="87600" step="1" value="24" inputmode="numeric" /><span class="duration-input-unit">小时</span></span></label></div><p id="durationPreview" class="duration-preview">当前周期：1 天 0 小时 · 共 24 小时</p></section>
+              <section class="create-step" data-step="2"><p class="step-eyebrow">STEP 02 · 学习周期</p><h3>你准备投入多久？</h3><p class="step-description">填写预计投入时间，用于引导实验范围；最终用时会因基础和进度而异。</p><div id="directionSummary" class="direction-summary"><span class="direction-summary-label">已识别的实验方向</span><strong id="directionTitle">等待第一段对话</strong><p id="directionDetail">完成方向描述后，这里会显示方向摘要。</p></div><div class="duration-fields"><label for="durationHoursInput"><span>预计投入总时长</span><span class="duration-input-control"><input id="durationHoursInput" type="number" min="1" max="87600" step="1" value="24" inputmode="numeric" /><span class="duration-input-unit">小时</span></span></label></div><p id="durationPreview" class="duration-preview">预计范围：1 天 0 小时 · 约 24 小时（供规划参考）</p></section>
               <section class="create-step" data-step="3"><p class="step-eyebrow">STEP 03 · 节点难度</p><h3>选择这次实验的难度</h3><p class="step-description">选择适合当前基础的练习强度，确认后生成可检查的实验清单。</p><div class="choice-list difficulty-list"><button class="choice-item is-selected" type="button" data-choice-group="difficulty" data-value="入门"><strong>入门</strong><small>更多解释，代码从骨架开始</small></button><button class="choice-item" type="button" data-choice-group="difficulty" data-value="简单"><strong>简单</strong><small>保留少量空白，跟着提示完成</small></button><button class="choice-item" type="button" data-choice-group="difficulty" data-value="普通"><strong>普通</strong><small>完成关键代码，提示适度出现</small></button><button class="choice-item" type="button" data-choice-group="difficulty" data-value="困难"><strong>困难</strong><small>只保留必要上下文，独立解决问题</small></button><button class="choice-item" type="button" data-choice-group="difficulty" data-value="挑战"><strong>挑战</strong><small>只给目标和验收标准，尽可能独立完成</small></button></div></section>
-              <section id="createPlan" class="create-plan"><div class="plan-topline"><div><p class="step-eyebrow">HARNESS PLAN</p><h3>实验方案已生成</h3></div><span class="plan-confirm-mark">待确认</span></div><p class="step-description">请检查方向、周期、难度和节点任务。确认后才会创建实验。</p><div class="plan-facts"><div><span>实验方向</span><strong id="planDirection"></strong></div><div><span>学习周期</span><strong id="planDuration"></strong></div><div><span>节点难度</span><strong id="planDifficulty"></strong></div></div><div class="plan-section"><span class="plan-section-label">实验目的</span><p id="planPurpose"></p></div><div class="plan-section"><span class="plan-section-label">节点分布与阶段性任务</span><div id="planNodes" class="plan-node-list"></div></div></section>
+              <section id="createPlan" class="create-plan"><div class="plan-topline"><div><p class="step-eyebrow">HARNESS PLAN</p><h3>实验方案已生成</h3></div><span class="plan-confirm-mark">待确认</span></div><p class="step-description">请检查节点任务与验收准则。预计时长用于参考，确认后才会创建实验。</p><div class="plan-facts"><div><span>实验方向</span><strong id="planDirection"></strong></div><div><span>预计周期</span><strong id="planDuration"></strong></div><div><span>节点难度</span><strong id="planDifficulty"></strong></div></div><p id="planDurationNotice" class="plan-duration-notice" role="status"></p><div class="plan-section"><span class="plan-section-label">实验目的</span><p id="planPurpose"></p></div><div class="plan-section"><span class="plan-section-label">节点分布、任务与验收准则</span><div id="planNodes" class="plan-node-list"></div></div></section>
             </div>
             <div class="create-dialog-actions"><button id="createStepButton" class="create-step-button" type="button">下一步 <span>→</span></button></div>
           </div>
@@ -213,6 +192,7 @@
             <div class="node-fact"><dt>文件位置</dt><dd class="file-location">src/main/java/com/example/demo/DemoApplication.java</dd></div>
             <div class="node-fact"><dt>名称</dt><dd>Spring Boot 项目初始化</dd></div>
           </dl>
+          <section class="node-acceptance-section"><h3>本节点验收准则</h3><p class="node-acceptance-source" id="nodeAcceptanceSource"></p><ol id="nodeAcceptanceCriteria" class="node-acceptance-list"></ol></section>
         </div>
         <div class="inspector-footer"><p class="node-order-hint">节点树是学习建议和验收清单，不限制先后；你可以自由选择节点或一次检查多个节点。</p><p id="startNodeStatus" class="start-node-status" role="status" aria-live="polite" hidden></p><button id="startNodeButton" class="start-node-button" type="button"><span class="start-node-icon" aria-hidden="true"></span><span>查看节点并提交代码</span></button></div>
       </aside>
@@ -261,7 +241,7 @@
     <div id="bugDialog" class="folder-dialog" role="dialog" aria-modal="true" aria-labelledby="bugDialogTitle" aria-hidden="true">
       <div class="bug-dialog-card">
         <div class="folder-dialog-header"><div><p class="library-eyebrow">KNOWLEDGE CASE</p><h2 id="bugDialogTitle">记录一个已解决 Bug</h2></div><button id="closeBugDialog" class="dialog-close" type="button" aria-label="关闭 Bug 记录">×</button></div>
-        <p class="folder-dialog-description">先保存为个人案例，教师审核通过后才会进入课程 RAG 知识库。</p>
+        <p class="folder-dialog-description">先保存为个人案例，教师审核通过后才会进入本实验记忆池。</p>
         <form id="bugCaseForm" class="bug-dialog-form" novalidate>
           <label for="bugTitle">案例标题<input id="bugTitle" maxlength="200" placeholder="例如：依赖版本冲突导致启动失败" /></label>
           <label for="bugTechnologyStack">技术栈<select id="bugTechnologyStack"><option value="">通用案例</option><option value="Java/Spring Boot">Java / Spring Boot</option><option value="Python">Python</option><option value="JavaScript/Node.js">JavaScript / Node.js</option></select></label>
@@ -282,6 +262,6 @@
       </div>
     </div>
     <script src="api-config.js?v=1"></script>
-    <script src="app.js?v=46"></script>
+    <script src="app.js?v=47"></script>
   </body>
 </html>

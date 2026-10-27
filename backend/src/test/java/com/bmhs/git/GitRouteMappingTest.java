@@ -3,6 +3,8 @@ package com.bmhs.git;
 import com.bmhs.dsh.DshPluginService;
 import com.bmhs.dsh.TeacherDshController;
 import com.bmhs.experimentcreation.ApiException;
+import com.bmhs.teacher.NodeAcceptanceCriteriaController;
+import com.bmhs.teacher.NodeAcceptanceCriteriaService;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -18,8 +20,8 @@ class GitRouteMappingTest {
     void gitAndLegacyDshTeacherRoutesRegisterTogetherWithoutAmbiguity() {
         MockMvcBuilders.standaloneSetup(
                 new GitAcceptanceController(mock(GitAcceptanceService.class)),
-                new GitAdminSettingsController(mock(GitAdminSettingsService.class)),
-                new TeacherDshController(mock(DshPluginService.class)))
+                new TeacherDshController(mock(DshPluginService.class)),
+                new NodeAcceptanceCriteriaController(mock(NodeAcceptanceCriteriaService.class)))
                 .build();
     }
 

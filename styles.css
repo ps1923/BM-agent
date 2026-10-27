@@ -323,6 +323,13 @@ button { cursor: pointer; }
 .plan-node-minutes { flex: 0 0 auto; color: #64748b; font-size: 8px; line-height: 1.6; }
 .plan-node-description, .plan-task-description { margin: 4px 0 0; color: #64748b; font-size: 9px; line-height: 1.6; overflow-wrap: anywhere; }
 .plan-task-list { display: grid; gap: 7px; margin: 9px 0 0; padding: 8px 0 0 17px; border-top: 1px solid #f1f5f9; }
+.plan-acceptance { margin-top: 10px; padding: 10px 11px; border: 1px solid #dbeafe; border-radius: 9px; background: #f8fbff; }
+.plan-acceptance > strong { color: #1d4ed8; font-size: 11px; }
+.plan-acceptance-list, .node-acceptance-list { display: grid; gap: 8px; margin: 7px 0 0; padding-left: 19px; }
+.plan-acceptance-list li, .node-acceptance-list li { color: #334155; font-size: 11px; line-height: 1.5; }
+.plan-acceptance-list small { display: block; margin-top: 3px; color: #64748b; font-size: 10px; }
+.plan-duration-notice { margin: 12px 0 0; padding: 9px 11px; border-radius: 8px; color: #475569; background: #f1f5f9; font-size: 11px; line-height: 1.6; }
+.plan-duration-notice.is-warning { color: #92400e; background: #fffbeb; }
 .plan-task-item { padding-left: 2px; color: #334155; }
 .plan-task-heading strong { min-width: 0; color: #475569; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
 .plan-task-validation { flex: 0 0 auto; padding: 2px 5px; border-radius: 999px; color: #475569; background: #f1f5f9; font-size: 7px; line-height: 1.4; }
@@ -405,6 +412,13 @@ button { cursor: pointer; }
 .inspector-kicker { color: #94a3b8; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
 .inspector-body { flex: 1; overflow-y: auto; padding: 24px 20px; }
 .inspector-body h2 { margin: 0; color: #0f172a; font-size: 17px; line-height: 1.35; }
+.node-acceptance-section { margin-top: 18px; padding: 13px; border: 1px solid #dbeafe; border-radius: 12px; background: #f8fbff; }
+.node-acceptance-section h3 { margin: 0; color: #1e3a8a; font-size: 12px; }
+.node-acceptance-source { margin: 5px 0 0; color: #64748b; font-size: 10px; }
+.node-acceptance-list { padding-left: 16px; }
+.node-acceptance-list li strong { display: block; }
+.node-acceptance-list li p { margin: 3px 0 0; color: #64748b; font-size: 10px; }
+.acceptance-method { display: inline-block; margin-top: 3px; padding: 2px 6px; border-radius: 999px; color: #1d4ed8; background: #dbeafe; font-size: 9px; }
 .inspector-intro { margin: 10px 0 26px; color: #64748b; font-size: 12px; line-height: 1.75; }
 .node-facts { display: grid; gap: 18px; margin: 0; }
 .node-fact { padding-bottom: 16px; border-bottom: 1px solid #f1f5f9; }
@@ -647,6 +661,32 @@ button { cursor: pointer; }
 .course-empty { grid-column: 1 / -1; padding: 27px; border: 1px dashed #cbd5e1; border-radius: 10px; color: #94a3b8; background: rgba(255, 255, 255, .5); font-size: 11px; text-align: center; }
 .teacher-dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: 22px; align-items: start; }
 .course-grid-compact { grid-template-columns: 1fr; }
+.course-repository-settings { display: grid; gap: 8px; margin-top: 15px; padding-top: 13px; border-top: 1px solid #eef2f6; }
+.course-repository-settings h4 { margin: 0; color: #334155; font-size: 11px; }
+.course-repository-note { margin: 0 !important; color: #8491a2 !important; font-size: 9px !important; }
+.course-repository-form { display: flex; align-items: end; gap: 8px; }
+.course-repository-form label { display: grid; flex: 1; gap: 5px; color: #64748b; font-size: 9px; }
+.course-repository-form input, .personal-profile-form input { width: 100%; min-width: 0; min-height: 38px; padding: 0 10px; border: 1px solid #dbe2ea; border-radius: 7px; color: #253247; background: #fff; font: inherit; font-size: 10px; }
+.course-repository-form input:focus, .personal-profile-form input:focus { border-color: #6b9df2; outline: 3px solid rgb(59 130 246 / 12%); }
+.course-repository-form .secondary-action { min-height: 38px; padding: 0 12px; white-space: nowrap; }
+.course-repository-message { margin: 0; font-size: 9px; }
+.teacher-reviewer-card { margin-top: 24px; padding: 22px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 2px 7px rgb(18 31 51 / 2.5%); }
+.teacher-reviewer-card .dashboard-section-heading { margin-top: 0; }
+.teacher-reviewable-list { display: grid; gap: 8px; }
+.teacher-reviewable-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border: 1px solid #edf1f5; border-radius: 8px; background: #f8fafc; }
+.teacher-reviewable-item strong { color: #344256; font-size: 11px; }
+.teacher-reviewable-item p { margin: 5px 0 0; color: #8793a3; font-size: 9px; }
+.teacher-reviewable-item .secondary-action { min-height: 34px; padding: 0 11px; font-size: 9px; white-space: nowrap; }
+.teacher-reviewable-item .secondary-action:disabled { cursor: default; opacity: .65; }
+.personal-center-content { max-width: 840px; }
+.personal-profile-card { padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 2px 7px rgb(18 31 51 / 2.5%); }
+.personal-profile-card h2 { margin: 0; color: #2a3546; font-size: 16px; }
+.personal-profile-form { display: grid; gap: 13px; margin-top: 20px; }
+.personal-profile-form label { display: grid; gap: 7px; color: #536176; font-size: 11px; font-weight: 650; }
+.personal-profile-form input { min-height: 42px; padding: 0 12px; font-size: 12px; }
+.personal-profile-form .publish-description { margin: 0; }
+.personal-profile-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.personal-profile-actions .primary-action, .personal-profile-actions .secondary-action { min-height: 38px; padding: 0 14px; }
 .publish-card { min-width: 0; }
 .publish-card .dashboard-section-heading { margin-top: 0; }
 .publish-description { margin-bottom: 19px; }
@@ -665,27 +705,20 @@ button { cursor: pointer; }
 .teacher-dsh-run small { color: #778497; font-size: 9px; }
 .teacher-dsh-run .secondary-action { justify-self: start; min-height: 28px; padding: 0 10px; font-size: 9px; }
 .teacher-dsh-submissions { display: grid; grid-template-columns: minmax(170px, .65fr) minmax(0, 1.5fr); gap: 9px; min-width: 0; }
+.teacher-submission-detail { display: grid; align-content: start; gap: 10px; min-width: 0; }
+.teacher-criteria-panel { display: grid; gap: 9px; padding: 14px; border: 1px solid #dbeafe; border-radius: 12px; background: #f8fbff; }
+.teacher-criteria-panel h3 { margin: 0; color: #1e3a8a; font-size: 13px; }
+.teacher-criteria-panel > label, .teacher-criterion-row label { display: grid; gap: 5px; color: #475569; font-size: 10px; font-weight: 700; }
+.teacher-criteria-panel input, .teacher-criteria-panel select, .teacher-criteria-panel textarea { width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid #cbd5e1; border-radius: 7px; color: #1e293b; background: #fff; font: inherit; font-size: 11px; }
+.teacher-criteria-history { display: grid; gap: 3px; padding: 7px 9px; border-radius: 7px; background: #eef2ff; }
+.teacher-criteria-history p { margin: 0; color: #475569; font-size: 10px; line-height: 1.6; white-space: pre-line; }
+.teacher-criteria-editor { display: grid; gap: 8px; }
+.teacher-criterion-row { display: grid; gap: 8px; padding: 10px; border: 1px solid #dbe3ef; border-radius: 9px; background: #fff; }
+.teacher-criterion-remove { justify-self: start; color: #b91c1c; }
+.teacher-criteria-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.teacher-criteria-actions .primary-action, .teacher-criteria-actions .secondary-action { min-height: 34px; padding: 0 11px; font-size: 10px; }
 .teacher-dsh-submission { padding: 8px; overflow-wrap: anywhere; border: 1px solid #e3eaf2; border-radius: 7px; color: #475569; background: #fff; font: inherit; font-size: 9px; text-align: left; cursor: pointer; }
 .teacher-dsh-submission:hover { border-color: #93c5fd; background: #eff6ff; }
-.admin-reviewer-card { align-items: end; margin-top: 26px; }
-.admin-reviewer-card label { display: grid; flex: 1; gap: 7px; color: #64748b; font-size: 10px; }
-.admin-reviewer-card select { min-height: 40px; padding: 0 11px; border: 1px solid #dbe2ea; border-radius: 7px; color: #334155; background: #fff; font: inherit; }
-.admin-settings-card { display: block; max-width: 820px; margin-top: 24px; padding: 24px; }
-.admin-settings-status { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
-.admin-settings-status h2 { margin: 2px 0 7px; color: #253247; font-size: 17px; }
-.admin-settings-status .publish-description { margin-bottom: 0; }
-.status-badge-incomplete { color: #92400e; background: #fef3c7; }
-.admin-git-settings-form { display: grid; gap: 14px; margin-top: 20px; }
-.admin-git-settings-form > label:not(.admin-secret-clear) { display: grid; gap: 7px; color: #536176; font-size: 11px; font-weight: 650; }
-.admin-git-settings-form input:not([type="checkbox"]) { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid #dbe2ea; border-radius: 7px; color: #253247; background: #fff; font: inherit; font-weight: 450; }
-.admin-git-settings-form input:focus { border-color: #6b9df2; outline: 3px solid rgba(59, 130, 246, .12); }
-.admin-git-settings-form input:disabled { color: #94a3b8; background: #f8fafc; }
-.admin-git-settings-form small { color: #8793a3; font-size: 10px; font-weight: 400; line-height: 1.5; }
-.admin-git-settings-form .admin-secret-clear { display: flex; align-items: center; gap: 8px; margin-top: -8px; color: #8a4b35; font-size: 10px; font-weight: 500; }
-.admin-secret-clear input { accent-color: #c2410c; }
-.admin-settings-actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 5px; }
-.admin-settings-actions .primary-action, .admin-settings-actions .secondary-action { min-height: 38px; padding: 0 14px; }
-.admin-git-settings-form .form-message { min-height: 18px; margin: 0; }
 .teacher-monitor-heading { align-items: flex-end; margin-top: 0; }
 .monitor-course-picker { display: grid; flex: 0 0 min(250px, 35%); gap: 6px; color: #64748b; font-size: 10px; }
 .monitor-course-picker select { width: 100%; }
@@ -752,17 +785,17 @@ button { cursor: pointer; }
 .topbar-action.is-quiet { color: #94a3b8; }
 
 @media (max-width: 900px) {
-  .admin-settings-card { padding: 18px; }
   .editor-workspace { grid-template-columns: 190px minmax(300px, 1fr) 318px; }
   .code-location { display: none; }
   .editor-node-tag { display: none; }
 }
 
 @media (max-width: 600px) {
-  .admin-settings-status { align-items: flex-start; flex-direction: column; gap: 8px; }
-  .admin-settings-actions { justify-content: stretch; }
-  .admin-settings-actions > button { flex: 1; }
   .dashboard-user { flex-wrap: wrap; }
+  .teacher-reviewable-item { align-items: flex-start; flex-direction: column; }
+  .teacher-reviewable-item .secondary-action { align-self: stretch; }
+  .course-repository-form { align-items: stretch; flex-direction: column; }
+  .personal-profile-card { padding: 18px; }
 }
 
 @media (max-width: 820px) {

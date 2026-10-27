@@ -254,7 +254,13 @@ public class CreationRepository {
             statement.setInt(10, sortOrder);
             return statement;
         }, keys);
-        return requiredKey(keys);
+        long nodeId = requiredKey(keys);
+        jdbc.update("""
+                INSERT INTO experiment_node_acceptance_criteria
+                  (experiment_id, node_id, version, source, criteria_json)
+                VALUES (?, ?, 1, 'generated', ?)
+                """, experimentId, nodeId, gson.toJson(node.acceptanceCriteria()));
+        return nodeId;
     }
 
     public void insertDependency(long experimentId, long parentId, long childId) {

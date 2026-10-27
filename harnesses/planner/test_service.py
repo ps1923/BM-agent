@@ -31,11 +31,25 @@ def test_planner_builds_dependency_flow_with_tasks():
     widths = {}
     for node in tree.nodes:
         widths[node.depth] = widths.get(node.depth, 0) + 1
-        assert 3 <= len(node.tasks) <= 7
+        assert node.tasks
+        assert node.acceptance_criteria
         assert node.unlock_rule == "all_prerequisites_completed"
         assert node.completion_rule == "all_tasks_completed"
         assert node.prerequisite_keys == ([] if node.parent_key is None else [node.parent_key])
     assert widths == {0: 1, 1: 2}
+
+
+def test_planner_accepts_adaptive_task_count_and_backfills_legacy_model_criteria():
+    intent = sample_intent()
+    plan = deterministic_tree(intent, 90, "normal").model_dump(mode="json")
+    plan["nodes"][0]["tasks"] = plan["nodes"][0]["tasks"][:1]
+    plan["nodes"][0].pop("acceptance_criteria")
+
+    validated = service._validate_model_tree(plan, 15, intent)
+
+    assert len(validated.nodes[0].tasks) == 1
+    assert len(validated.nodes[0].acceptance_criteria) == 1
+    assert validated.nodes[0].acceptance_criteria[0].criterion == validated.nodes[0].tasks[0].title
 
 
 def test_deterministic_fallback_uses_confirmed_goal_instead_of_fixed_web_template():
@@ -64,7 +78,7 @@ def test_deterministic_fallback_uses_confirmed_goal_instead_of_fixed_web_templat
     assert "网页界面" in rendered
     assert "创建可拖动气泡" not in rendered
     assert "MySQL" not in rendered
-    assert all(3 <= len(node.tasks) <= 7 for node in tree.nodes)
+    assert all(node.tasks and node.acceptance_criteria for node in tree.nodes)
     criteria_nodes = [node for node in tree.nodes if node.key.startswith("criterion-")]
     assert [node.key for node in criteria_nodes] == ["criterion-1", "criterion-2"]
     assert all(node.parent_key == "setup" for node in criteria_nodes)
@@ -187,7 +201,7 @@ def test_explicit_nested_outcomes_become_multilevel_learning_nodes():
     assert "密码过短有提示" in by_key["criterion-1-2-2"].title
     assert "验收清单" in by_key["criterion-1"].tasks[0].title
     assert "本节点完成不代表下级成果已完成" in by_key["criterion-1"].description
-    assert all(3 <= len(node.tasks) <= 7 for node in tree.nodes)
+    assert all(node.tasks and node.acceptance_criteria for node in tree.nodes)
     assert sum(node.estimated_minutes for node in tree.nodes) <= 180
     assert tree == deterministic_tree(intent, 180, "normal")
 
@@ -206,21 +220,24 @@ def test_compound_outcome_cost_is_included_before_selecting_criteria():
 
     tree = deterministic_tree(intent, 45, "normal")
 
-    assert [node.key for node in tree.nodes] == ["goal", "criterion-2"]
-    assert intent.intent.success_criteria[0] in " ".join(tree.purpose)
-    assert "未覆盖 1 项" in " ".join(tree.purpose)
+    assert {node.key for node in tree.nodes} >= {"goal", "criterion-1", "criterion-2"}
+    assert all(any(criterion in " ".join(
+        [node.title, node.description, *(task.description for task in node.tasks)]
+    ) for node in tree.nodes) for criterion in intent.intent.success_criteria)
+    assert all(node.acceptance_criteria for node in tree.nodes)
 
 
-def test_short_compound_outcome_covers_only_one_confirmed_leaf():
+def test_short_reference_duration_does_not_drop_confirmed_compound_outcomes():
     intent = sample_intent()
     intent.intent.success_criteria = ["邮箱为空有提示；密码为空有提示"]
 
     tree = deterministic_tree(intent, 20, "normal")
 
-    assert len(tree.nodes) == 1
-    assert "邮箱为空有提示" in tree.nodes[0].tasks[1].description
-    assert "密码为空有提示" not in tree.nodes[0].tasks[1].description
-    assert "未完整覆盖 1 项" in " ".join(tree.purpose)
+    rendered = " ".join(f"{node.title} {node.description}" for node in tree.nodes)
+    assert "邮箱为空有提示" in rendered
+    assert "密码为空有提示" in rendered
+    assert len(tree.nodes) > 1
+    assert all(node.acceptance_criteria for node in tree.nodes)
 
 
 @pytest.mark.parametrize("criterion", [
@@ -360,23 +377,34 @@ def test_depth_limited_chain_does_not_consume_capacity_for_independent_criterion
     assert "未覆盖 1 项" in " ".join(tree.purpose)
 
 
-def test_fallback_collapses_stages_for_short_durations_and_preserves_end_to_end_work():
-    expected_node_counts = {15: 1, 29: 1, 30: 2, 44: 2, 45: 3, 59: 3, 60: 3}
+def test_fallback_keeps_learning_path_across_different_reference_durations():
+    expected_keys = None
 
-    for minutes, expected_count in expected_node_counts.items():
+    for minutes in (15, 29, 30, 44, 45, 59, 60):
         tree = deterministic_tree(sample_intent(), minutes, "normal")
 
-        assert len(tree.nodes) == expected_count
+        keys = [node.key for node in tree.nodes]
+        expected_keys = keys if expected_keys is None else expected_keys
+        assert keys == expected_keys
         assert sum(node.estimated_minutes for node in tree.nodes) == minutes
         assert tree.nodes[0].parent_key is None
-        assert all(node.estimated_minutes >= 15 for node in tree.nodes)
-        assert all(3 <= len(node.tasks) <= 7 for node in tree.nodes)
+        assert all(node.estimated_minutes >= 1 for node in tree.nodes)
+        assert all(node.tasks for node in tree.nodes)
+        assert all(node.acceptance_criteria for node in tree.nodes)
 
     with pytest.raises(ValueError, match="at least 15"):
         deterministic_tree(sample_intent(), 14, "normal")
 
 
-def test_short_fallback_selects_the_first_available_confirmed_prerequisite():
+def test_node_estimates_remain_complete_when_tree_exceeds_reference_duration():
+    estimates = service._allocate_node_minutes(15, 20)
+
+    assert len(estimates) == 20
+    assert all(minutes >= 1 for minutes in estimates)
+    assert sum(estimates) > 15
+
+
+def test_reference_duration_does_not_drop_confirmed_prerequisite_outcomes():
     intent = sample_intent()
     intent.intent.success_criteria = [
         "程序能够启动，依赖配置 Python 环境",
@@ -386,11 +414,11 @@ def test_short_fallback_selects_the_first_available_confirmed_prerequisite():
     short_tree = deterministic_tree(intent, 20, "normal")
     tight_tree = deterministic_tree(intent, 30, "normal")
 
-    assert "配置 Python 环境" in " ".join(task.description for task in short_tree.nodes[0].tasks)
-    assert intent.intent.success_criteria[0] in " ".join(short_tree.purpose)
-    assert [node.key for node in tight_tree.nodes] == ["goal", "criterion-2"]
-    assert tight_tree.nodes[1].parent_key == "goal"
-    assert intent.intent.success_criteria[0] in " ".join(tight_tree.purpose)
+    short_rendered = " ".join(f"{node.title} {node.description}" for node in short_tree.nodes)
+    tight_rendered = " ".join(f"{node.title} {node.description}" for node in tight_tree.nodes)
+    assert "配置 Python 环境" in short_rendered
+    assert intent.intent.success_criteria[0] in tight_rendered
+    assert [node.key for node in short_tree.nodes] == [node.key for node in tight_tree.nodes]
 
 
 def test_fallback_prepares_stack_only_when_no_existing_starting_point_is_confirmed():
@@ -410,7 +438,7 @@ def test_fallback_prepares_stack_only_when_no_existing_starting_point_is_confirm
     assert len(prepared.nodes) == 3
 
 
-def test_short_unprepared_stack_is_preserved_in_plan_when_a_setup_node_will_not_fit():
+def test_unprepared_stack_gets_a_setup_node_even_when_reference_period_is_short():
     intent = sample_intent()
     intent.intent.constraints.required_stack = ["Python"]
     intent.intent.constraints.excluded_scope = ["网页界面"]
@@ -426,8 +454,7 @@ def test_short_unprepared_stack_is_preserved_in_plan_when_a_setup_node_will_not_
         assert "网页界面" in rendered
         assert len(tree.nodes[0].tasks) == 3
         assert sum(node.estimated_minutes for node in tree.nodes) <= minutes
-        if minutes in (30, 44):
-            assert tree.nodes[0].tasks[0].title == "检查现有环境与素材"
+        assert any(node.key == "setup" for node in tree.nodes)
 
 
 def test_general_environment_note_does_not_claim_required_stack_is_ready():
@@ -571,12 +598,12 @@ def test_fallback_rejects_intents_without_a_verifiable_outcome():
         deterministic_tree(intent, 60, "normal")
 
 
-def test_model_plan_must_fit_exact_duration_budget():
+def test_model_plan_may_exceed_reference_duration():
     plan = deterministic_tree(sample_intent(), 1_440, "normal").model_dump(mode="json")
     plan["nodes"][0]["estimated_minutes"] += 1
 
-    with pytest.raises(ValueError, match="exceeds duration budget"):
-        service._validate_model_tree(plan, 1_440, sample_intent())
+    validated = service._validate_model_tree(plan, 1_440, sample_intent())
+    assert sum(node.estimated_minutes for node in validated.nodes) > 1_440
 
 
 def test_model_plan_rejects_a_criterion_silently_omitted_from_nodes_and_purpose():
@@ -726,7 +753,9 @@ def test_planner_prompt_loads_recursive_learner_centered_skill():
 
     assert "继续递归拆成子节点" in prompt
     assert "3.1.1" in prompt
-    assert "父节点自身也必须有真实的 3–7 项任务" in prompt
+    assert "不设固定最小或最大数量" in prompt
+    assert "acceptance_criteria" in prompt
+    assert "expected_evidence" in prompt
     assert "当前合同只支持单父节点和单一父依赖" in prompt
     assert "不得静默漏项" in prompt
     assert "明确列出的子成果应分别落入不同后代节点" in prompt
@@ -865,7 +894,7 @@ def test_planner_returns_safe_tree_after_two_invalid_model_outputs(monkeypatch):
     assert {node.depth for node in result.nodes} == {0, 1}
 
 
-def test_planner_recovers_from_budget_violation_after_repair_fails(monkeypatch):
+def test_planner_accepts_node_estimates_over_reference_duration(monkeypatch):
     calls = 0
     over_budget = deterministic_tree(sample_intent(), 1_440, "normal").model_dump(mode="json")
     for node in over_budget["nodes"]:
@@ -882,11 +911,11 @@ def test_planner_recovers_from_budget_violation_after_repair_fails(monkeypatch):
     result = asyncio.run(service.generate_experiment_tree(
         sample_intent().model_dump(mode="json"), 1_440, "normal"))
 
-    assert calls == 2
-    assert sum(node.estimated_minutes for node in result.nodes) <= 1_440
+    assert calls == 1
+    assert sum(node.estimated_minutes for node in result.nodes) > 1_440
 
 
-def test_planner_repairs_output_that_exceeds_budget_within_old_tolerance(monkeypatch):
+def test_planner_does_not_repair_only_because_estimates_exceed_reference(monkeypatch):
     calls = 0
     over_budget = deterministic_tree(sample_intent(), 1_440, "normal").model_dump(mode="json")
     over_budget["nodes"][0]["estimated_minutes"] += 30
@@ -903,8 +932,8 @@ def test_planner_repairs_output_that_exceeds_budget_within_old_tolerance(monkeyp
     result = asyncio.run(service.generate_experiment_tree(
         sample_intent().model_dump(mode="json"), 1_440, "normal"))
 
-    assert calls == 2
-    assert sum(node.estimated_minutes for node in result.nodes) == 1_440
+    assert calls == 1
+    assert sum(node.estimated_minutes for node in result.nodes) > 1_440
 
 
 def test_openai_planner_rejects_non_positive_duration_before_model_call(monkeypatch):
@@ -931,8 +960,8 @@ def test_openai_planner_accepts_a_meaningful_fifteen_minute_plan(monkeypatch):
     result = asyncio.run(service.generate_experiment_tree(
         sample_intent().model_dump(mode="json"), 15, "normal"))
 
-    assert len(result.nodes) == 1
-    assert result.nodes[0].estimated_minutes == 15
+    assert len(result.nodes) > 1
+    assert sum(node.estimated_minutes for node in result.nodes) == 15
 
 
 @pytest.mark.parametrize("provider", ["deterministic", "openai-compatible"])

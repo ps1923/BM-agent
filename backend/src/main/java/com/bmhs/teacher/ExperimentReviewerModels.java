@@ -7,13 +7,13 @@ import java.time.Instant;
 public final class ExperimentReviewerModels {
     private ExperimentReviewerModels() {}
 
-    public record AssignmentRequest(@Positive long teacherId) {}
+    public record AssignmentRequest(@Positive long teacherId, @Positive long courseId) {}
 
-    public record AssignmentView(long experimentId, long teacherId, String teacherName,
-                                 long assignedByAdminId, Instant assignedAt, Instant updatedAt) {}
+    public record AssignmentView(long experimentId, long courseId, long teacherId, String teacherName,
+                                 long assignedByTeacherId, Instant assignedAt, Instant updatedAt) {}
 
-    public record ReviewableExperimentView(long experimentId, String name, String status,
+    public record ReviewableExperimentView(long experimentId, long courseId, String courseName,
+                                            String name, String status,
                                             Long teacherId, String teacherName) {}
 
-    public record TeacherOption(long teacherId, String displayName, String email) {}
 }

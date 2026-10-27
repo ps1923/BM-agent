@@ -41,6 +41,7 @@ FROM (
   UNION ALL SELECT 'experiment_plan_drafts'
   UNION ALL SELECT 'experiment_stages'
   UNION ALL SELECT 'experiment_nodes'
+  UNION ALL SELECT 'experiment_node_acceptance_criteria'
   UNION ALL SELECT 'node_dependencies'
   UNION ALL SELECT 'node_tasks'
   UNION ALL SELECT 'experiment_runs'
@@ -95,6 +96,8 @@ FROM (
   SELECT 'fk_folders_owner' AS `constraint_name`, 'experiment_folders' AS `table_name`, 'users' AS `referenced_table_name`, 'RESTRICT' AS `delete_rule`
   UNION ALL SELECT 'fk_user_sessions_user', 'user_sessions', 'users', 'CASCADE'
   UNION ALL SELECT 'fk_courses_teacher', 'courses', 'users', 'RESTRICT'
+  UNION ALL SELECT 'fk_experiment_reviewers_assigned_by_teacher', 'experiment_reviewers', 'users', 'RESTRICT'
+  UNION ALL SELECT 'fk_experiment_reviewers_course', 'experiment_reviewers', 'courses', 'RESTRICT'
   UNION ALL SELECT 'fk_course_members_course', 'course_members', 'courses', 'CASCADE'
   UNION ALL SELECT 'fk_course_members_student', 'course_members', 'users', 'RESTRICT'
   UNION ALL SELECT 'fk_assignments_course', 'course_experiment_assignments', 'courses', 'CASCADE'
@@ -141,6 +144,8 @@ FROM (
   UNION ALL SELECT 'fk_git_submission_nodes_submission', 'git_submission_nodes', 'git_submissions', 'RESTRICT'
   UNION ALL SELECT 'fk_git_submission_nodes_node', 'git_submission_nodes', 'experiment_nodes', 'RESTRICT'
   UNION ALL SELECT 'fk_git_acceptance_results_node', 'git_acceptance_results', 'git_submission_nodes', 'RESTRICT'
+  UNION ALL SELECT 'fk_node_acceptance_criteria_node', 'experiment_node_acceptance_criteria', 'experiment_nodes', 'CASCADE'
+  UNION ALL SELECT 'fk_node_acceptance_criteria_editor', 'experiment_node_acceptance_criteria', 'users', 'SET NULL'
   UNION ALL SELECT 'fk_diagnosis_tasks_run', 'diagnosis_tasks', 'experiment_runs', 'CASCADE'
   UNION ALL SELECT 'fk_diagnosis_tasks_workspace', 'diagnosis_tasks', 'coding_workspaces', 'CASCADE'
   UNION ALL SELECT 'fk_diagnosis_tasks_student', 'diagnosis_tasks', 'users', 'RESTRICT'
@@ -190,15 +195,27 @@ SELECT
   END AS `status`
 FROM (
   SELECT 'users' AS `table_name`, 'password_hash' AS `column_name`, 'varchar(255)' AS `column_type`, 'YES' AS `is_nullable`
+  UNION ALL SELECT 'users', 'git_author_name', 'varchar(100)', 'YES'
+  UNION ALL SELECT 'users', 'git_author_email', 'varchar(320)', 'YES'
   UNION ALL SELECT 'users', 'role', 'varchar(20)', 'NO'
   UNION ALL SELECT 'users', 'status', 'varchar(20)', 'NO'
   UNION ALL SELECT 'courses', 'invite_code', 'varchar(16)', 'NO'
+  UNION ALL SELECT 'courses', 'git_repository_url', 'varchar(1000)', 'YES'
   UNION ALL SELECT 'course_members', 'status', 'varchar(20)', 'NO'
   UNION ALL SELECT 'bug_cases', 'technology_stack', 'varchar(100)', 'YES'
+  UNION ALL SELECT 'bug_cases', 'vector_index_attempts', 'smallint unsigned', 'NO'
+  UNION ALL SELECT 'bug_cases', 'vector_index_retry_at', 'datetime(6)', 'YES'
   UNION ALL SELECT 'course_experiment_assignments', 'published_at', 'datetime(6)', 'NO'
   UNION ALL SELECT 'experiments' AS `table_name`, 'duration_minutes' AS `column_name`, 'int unsigned' AS `column_type`, 'NO' AS `is_nullable`
   UNION ALL SELECT 'experiment_nodes', 'stage_id', 'bigint unsigned', 'YES'
   UNION ALL SELECT 'experiment_nodes', 'parent_node_id', 'bigint unsigned', 'YES'
+  UNION ALL SELECT 'git_submission_nodes', 'criteria_version', 'int unsigned', 'YES'
+  UNION ALL SELECT 'git_submission_nodes', 'criteria_source', 'varchar(20)', 'YES'
+  UNION ALL SELECT 'git_submission_nodes', 'criteria_snapshot_json', 'json', 'YES'
+  UNION ALL SELECT 'git_acceptance_results', 'criteria_version', 'int unsigned', 'YES'
+  UNION ALL SELECT 'git_acceptance_results', 'criteria_source', 'varchar(20)', 'YES'
+  UNION ALL SELECT 'git_acceptance_results', 'criteria_snapshot_json', 'json', 'YES'
+  UNION ALL SELECT 'git_acceptance_results', 'criterion_results_json', 'json', 'YES'
   UNION ALL SELECT 'experiment_creation_sessions', 'direction_envelope', 'json', 'YES'
   UNION ALL SELECT 'experiment_creation_sessions', 'confirmed_intent', 'json', 'YES'
   UNION ALL SELECT 'experiment_creation_sessions', 'intent_hash', 'char(64)', 'YES'
@@ -355,6 +372,9 @@ SELECT expected.`constraint_name`,
 FROM (
   SELECT 'fk_courses_teacher' AS `constraint_name`, 'courses' AS `table_name`, 'teacher_id' AS `column_list`,
          'users' AS `referenced_table_name`, 'id' AS `referenced_column_list`, 'RESTRICT' AS `delete_rule`
+  UNION ALL SELECT 'fk_experiment_reviewers_teacher', 'experiment_reviewers', 'teacher_id', 'users', 'id', 'RESTRICT'
+  UNION ALL SELECT 'fk_experiment_reviewers_course', 'experiment_reviewers', 'course_id', 'courses', 'id', 'RESTRICT'
+  UNION ALL SELECT 'fk_experiment_reviewers_assigned_by_teacher', 'experiment_reviewers', 'assigned_by_teacher_id', 'users', 'id', 'RESTRICT'
   UNION ALL SELECT 'fk_user_sessions_user', 'user_sessions', 'user_id', 'users', 'id', 'CASCADE'
   UNION ALL SELECT 'fk_course_members_course', 'course_members', 'course_id', 'courses', 'id', 'CASCADE'
   UNION ALL SELECT 'fk_course_members_student', 'course_members', 'student_id', 'users', 'id', 'RESTRICT'
@@ -386,6 +406,8 @@ FROM (
   UNION ALL SELECT 'fk_git_submission_nodes_submission', 'git_submission_nodes', 'submission_id', 'git_submissions', 'id', 'RESTRICT'
   UNION ALL SELECT 'fk_git_submission_nodes_node', 'git_submission_nodes', 'node_id,experiment_id', 'experiment_nodes', 'id,experiment_id', 'RESTRICT'
   UNION ALL SELECT 'fk_git_acceptance_results_node', 'git_acceptance_results', 'submission_id,node_id', 'git_submission_nodes', 'submission_id,node_id', 'RESTRICT'
+  UNION ALL SELECT 'fk_node_acceptance_criteria_node', 'experiment_node_acceptance_criteria', 'node_id,experiment_id', 'experiment_nodes', 'id,experiment_id', 'CASCADE'
+  UNION ALL SELECT 'fk_node_acceptance_criteria_editor', 'experiment_node_acceptance_criteria', 'updated_by', 'users', 'id', 'SET NULL'
 ) AS expected
 LEFT JOIN (
   SELECT rc.`CONSTRAINT_NAME` AS `constraint_name`, rc.`TABLE_NAME`,
@@ -425,6 +447,7 @@ FROM (
   UNION ALL SELECT 'bug_cases', 'ck_bug_cases_status'
   UNION ALL SELECT 'bug_cases', 'ck_bug_cases_visibility'
   UNION ALL SELECT 'bug_cases', 'ck_bug_cases_vector_status'
+  UNION ALL SELECT 'bug_cases', 'ck_bug_cases_vector_attempts'
   UNION ALL SELECT 'bug_case_reviews', 'ck_bug_case_reviews_decision'
   UNION ALL SELECT 'diagnosis_tasks', 'ck_diagnosis_tasks_status'
   UNION ALL SELECT 'code_patches', 'ck_code_patches_status'
@@ -434,6 +457,7 @@ FROM (
   UNION ALL SELECT 'git_submissions', 'ck_git_submissions_status'
   UNION ALL SELECT 'git_acceptance_results', 'ck_git_acceptance_decision'
   UNION ALL SELECT 'git_acceptance_results', 'ck_git_acceptance_execution'
+  UNION ALL SELECT 'experiment_node_acceptance_criteria', 'ck_node_acceptance_criteria_source'
 ) AS expected
 LEFT JOIN `information_schema`.`TABLE_CONSTRAINTS` AS actual
   ON actual.`CONSTRAINT_SCHEMA` = 'BM-sql'
@@ -455,6 +479,10 @@ SELECT expected.`table_name`, expected.`constraint_name`,
              AND REGEXP_LIKE(actual.`CHECK_CLAUSE`, expected.`literal_pattern`, 'cn') THEN 'OK'
             ELSE 'MISMATCH' END AS `definition_status`
 FROM (
+  SELECT 'users' AS `table_name`, 'ck_users_role' AS `constraint_name`,
+    '(rolein(''student'',''teacher''))' AS `normalized_clause`,
+    '.*''student''.*''teacher''.*' AS `literal_pattern`
+  UNION ALL
   SELECT 'coding_workspaces' AS `table_name`, 'ck_coding_workspaces_status' AS `constraint_name`,
     '(statusin(''provisioning'',''starting'',''running'',''stopped'',''error'',''expired''))' AS `normalized_clause`,
     '.*''provisioning''.*''starting''.*''running''.*''stopped''.*''error''.*''expired''.*' AS `literal_pattern`
@@ -467,6 +495,7 @@ FROM (
   UNION ALL SELECT 'bug_cases', 'ck_bug_cases_status', '(statusin(''pending'',''approved'',''rejected''))', '.*''pending''.*''approved''.*''rejected''.*'
   UNION ALL SELECT 'bug_cases', 'ck_bug_cases_visibility', '(visibilityin(''personal'',''course''))', '.*''personal''.*''course''.*'
   UNION ALL SELECT 'bug_cases', 'ck_bug_cases_vector_status', '(vector_statusin(''not_indexed'',''indexed'',''failed''))', '.*''not_indexed''.*''indexed''.*''failed''.*'
+  UNION ALL SELECT 'bug_cases', 'ck_bug_cases_vector_attempts', '(vector_index_attempts<=6)', '.*vector_index_attempts.*6.*'
   UNION ALL SELECT 'bug_case_reviews', 'ck_bug_case_reviews_decision', '(decisionin(''approved'',''rejected''))', '.*''approved''.*''rejected''.*'
   UNION ALL SELECT 'diagnosis_tasks', 'ck_diagnosis_tasks_status', '(statusin(''queued'',''running'',''completed'',''failed'',''cancelled''))', '.*''queued''.*''running''.*''completed''.*''failed''.*''cancelled''.*'
   UNION ALL SELECT 'code_patches', 'ck_code_patches_status', '(statusin(''pending'',''applied'',''rejected''))', '.*''pending''.*''applied''.*''rejected''.*'
@@ -476,6 +505,7 @@ FROM (
   UNION ALL SELECT 'git_submissions', 'ck_git_submissions_status', '(statusin(''queued'',''running'',''completed'',''failed''))', '.*''queued''.*''running''.*''completed''.*''failed''.*'
   UNION ALL SELECT 'git_acceptance_results', 'ck_git_acceptance_decision', '(decisionin(''meets'',''partially_meets'',''does_not_meet'',''unable_to_verify''))', '.*''meets''.*''partially_meets''.*''does_not_meet''.*''unable_to_verify''.*'
   UNION ALL SELECT 'git_acceptance_results', 'ck_git_acceptance_execution', '(execution_checkin(''not_run'',''not_safe'',''not_configured''))', '.*''not_run''.*''not_safe''.*''not_configured''.*'
+  UNION ALL SELECT 'experiment_node_acceptance_criteria', 'ck_node_acceptance_criteria_source', '(sourcein(''generated'',''teacher''))', '.*''generated''.*''teacher''.*'
 ) AS expected
 LEFT JOIN `information_schema`.`CHECK_CONSTRAINTS` AS actual
   ON actual.`CONSTRAINT_SCHEMA` = 'BM-sql'

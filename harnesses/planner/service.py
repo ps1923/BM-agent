@@ -16,7 +16,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from harnesses.common.contracts import ConfirmedIntent, ExperimentTree, PlanNode, PlanTask
+from harnesses.common.contracts import AcceptanceCriterion, ConfirmedIntent, ExperimentTree, PlanNode, PlanTask
 from harnesses.common.provider import ProviderError, generate_json
 
 
@@ -39,12 +39,12 @@ def load_node_planning_skill() -> str:
 
 SYSTEM_PROMPT = """
 你是实验流程规划 Harness。你只能把已经确认的 ConfirmedIntent 转换成实验流程节点，不能与学生对话、追问、修改需求或访问原始消息。
-节点数量、递归细分、学生视角的粒度、分支和任务设计必须遵循随后附带的 Planner Skill；该 Skill 是实验创建时的一次性规划规范，不是让你再次向学生追问。
+节点数量、递归细分、学生视角的粒度、分支、任务和节点验收准则必须遵循随后附带的 Planner Skill；该 Skill 是实验创建时的一次性规划规范，不是让你再次向学生追问。
 每条已确认 success_criteria 必须在可执行成果节点中按原文可追溯；若本次预算或单父节点结构无法覆盖，必须在 purpose 中原文列出并明确标注“未覆盖”，不得静默漏项或将准备清单说成成果已完成。
 包含多个可独立验收结果或明显跨能力的 success_criteria 必须有保留原文的父节点并继续细分；明确列出的子成果分别落入独立后代节点。预算不足时明确标注未覆盖，不得把宽泛复合结果留作叶节点。
 每个非根节点只有一个 parent_key，并且 prerequisite_keys 必须只包含该 parent_key；父节点完成全部任务后才解锁子节点。
 unlock_rule 必须为 all_prerequisites_completed，completion_rule 必须为 all_tasks_completed；所有 key 稳定且唯一；父节点必须真实存在；不得成环。
-每节点预计至少 15 分钟、至多 1440 分钟；所有节点时间总和不得超过给定 duration_minutes。difficulty 决定提示与独立完成程度。
+每节点预计时间是学习量级估算，duration_minutes 是范围与节奏参考；不得因整树估算用时超出该值而拒绝计划或删减已确认成果。单节点预计时间须为 1–1440 分钟。difficulty 决定提示与独立完成程度。
 不要输出数据库 ID、SQL、画布坐标、聊天内容或额外文字。严格返回 ExperimentTree JSON。
 """.strip()
 
@@ -66,17 +66,44 @@ def task(title: str, description: str, validation_type: str = "manual") -> PlanT
     )
 
 
+def _criteria_for_tasks(tasks: list[PlanTask]) -> list[AcceptanceCriterion]:
+    methods = {
+        "command": "test_artifact",
+        "test": "test_artifact",
+        "agent": "static_code",
+        "manual": "manual_demo",
+    }
+    return [
+        AcceptanceCriterion(
+            criterion=item.title,
+            verification_method=methods.get(item.validation_type, "manual_demo"),
+            expected_evidence=item.description,
+        )
+        for item in tasks
+    ]
+
+
+def _ensure_node_acceptance_criteria(tree: ExperimentTree) -> ExperimentTree:
+    """Backfill explicit criteria for older planner responses and deterministic fallback nodes."""
+    nodes = [
+        node if node.acceptance_criteria else node.model_copy(
+            update={"acceptance_criteria": _criteria_for_tasks(node.tasks)}
+        )
+        for node in tree.nodes
+    ]
+    return tree.model_copy(update={"nodes": nodes})
+
+
 def _allocate_node_minutes(duration_minutes: int, node_count: int) -> list[int]:
     """Allocate a positive integer budget deterministically without exceeding node caps."""
     if duration_minutes <= 0 or node_count <= 0:
         raise ValueError("duration and node count must be positive")
-    count = min(node_count, duration_minutes)
-    base = min(MAX_NODE_MINUTES, duration_minutes // count)
-    remainder = min(duration_minutes - base * count, (MAX_NODE_MINUTES - base) * count)
-    extra_per_node, extra_remainder = divmod(remainder, count)
+    base = max(1, min(MAX_NODE_MINUTES, duration_minutes // node_count))
+    remainder = min(max(0, duration_minutes - base * node_count), (MAX_NODE_MINUTES - base) * node_count)
+    extra_per_node, extra_remainder = divmod(remainder, node_count)
     return [
         base + extra_per_node + (1 if index < extra_remainder else 0)
-        for index in range(count)
+        for index in range(node_count)
     ]
 
 
@@ -283,11 +310,6 @@ def deterministic_tree(intent: ConfirmedIntent, duration_minutes: int, difficult
     short_candidates = [index for index in criterion_order if index in eligible and not all_dependencies[index]]
     if not short_candidates:
         raise ValueError("目前没有可安全生成的单项验收成果；请先将复合标准拆成可独立检查的子成果，或恢复规划模型后重试")
-    short_criterion_index = short_candidates[0]
-    short_outcome = outcomes[short_criterion_index]
-    while short_outcome.children:
-        short_outcome = short_outcome.children[0]
-    short_criterion = short_outcome.text
     constraints = intent.intent.constraints
     current_state = intent.intent.current_state
     known_skills = "、".join(item.strip() for item in current_state.known_skills if item.strip()) or "未记录"
@@ -318,19 +340,10 @@ def deterministic_tree(intent: ConfirmedIntent, duration_minutes: int, difficult
         task("整理可检查标准", f"记录已确认的检查项及明确先后关系：{criteria_text}；未确认的依赖不得自行添加，用清单供后续成果节点对照"),
         task("记录约束与已有基础", f"注明已确认技术栈：{required_stack}；环境：{environment_text}；排除范围：{excluded_scope}；能力：{known_skills}；经验：{experience_text}；素材：{starting_assets}"),
     ]
-    if duration_minutes < 30:
-        root_title = "端到端最小成果"
-        root_description = f"周期不足 30 分钟，本兜底计划只覆盖最先可完成的标准“{short_criterion}”，其余标准不得标记为已完成；遵守技术栈“{required_stack}”和排除范围“{excluded_scope}”。"
-        root_tasks = [
-            task("选择本轮可验证标准", f"仅将最先可完成的确认标准“{short_criterion}”作为本轮范围；其余标准留待扩展周期", "manual"),
-            task("完成最小可检查成果", f"围绕该标准产出“{artifact}”的一项可观察结果：{short_criterion}；不得添加未确认技术或功能"),
-            task("验证并保存证据", f"通过测试、运行输出或人工观察记录该标准的结果；未覆盖标准仍保持未完成：{criteria_text}", "manual"),
-        ]
-    else:
-        root_title = "目标与验收"
-        root_description = f"先确定交付物“{artifact}”及验收清单；预算允许范围内为已确认标准安排成果节点。"
+    root_title = "目标与验收"
+    root_description = f"先确定交付物“{artifact}”及验收清单；填写周期“{duration_minutes} 分钟”作为节奏参考，为已确认标准安排成果节点。"
 
-    stage_capacity = min(MAX_FALLBACK_NODE_COUNT, duration_minutes // MIN_USEFUL_STAGE_MINUTES)
+    stage_capacity = MAX_FALLBACK_NODE_COUNT
     environment_items = [item.strip() for item in constraints.environment if item.strip()]
     environment_ready = has_required_stack and all(
         _environment_confirms_stack(stack, environment_items) for stack in stack_items
@@ -338,7 +351,6 @@ def deterministic_tree(intent: ConfirmedIntent, duration_minutes: int, difficult
     setup_needed = (
         has_required_stack
         and not environment_ready
-        and stage_capacity >= 3
     )
     node_specs = [("goal", None, 0, "目标与验收", root_title, root_description, root_tasks)]
     shared_parent = "goal"
@@ -352,20 +364,6 @@ def deterministic_tree(intent: ConfirmedIntent, duration_minutes: int, difficult
         node_specs.append(("setup", "goal", 1, "准备工作环境", "准备并验证最小环境", f"复用已有项目与能力，仅补齐目标“{goal}”明确需要的运行条件。", setup_tasks))
         shared_parent = "setup"
         shared_depth = 2
-    elif has_required_stack and not environment_ready and duration_minutes < 30:
-        root_description += f" 可用时间有限，先确认并准备必要运行条件“{required_stack}”，本轮只完成最小成果。"
-        root_tasks = [
-            task("检查最小运行条件", f"核对已掌握能力和现有素材“{known_skills}；{starting_assets}”；只补齐必要的“{required_stack}”，不重复安装可用组件", "command"),
-            task("完成一项最小成果", f"在必要环境可运行后，仅围绕标准“{short_criterion}”完成交付物“{artifact}”的最小结果；不添加未确认功能"),
-            task("验证成果并保存证据", f"检查运行条件和标准“{short_criterion}”；保存测试、运行或人工观察结果，其余标准保持未完成", "manual"),
-        ]
-    elif has_required_stack and not environment_ready and duration_minutes < 45:
-        root_description += f" 可用时间仅够准备最小环境和一个成果节点；本节点必须先确认“{required_stack}”可运行。"
-        root_tasks = [
-            task("检查现有环境与素材", f"核对已掌握能力和素材“{known_skills}；{starting_assets}”，只识别缺少的必要运行条件"),
-            task("准备必要运行条件", f"仅补齐明确要求的“{required_stack}”，不得安装未确认组件", "command"),
-            task("验证环境并保存证据", f"执行最小运行检查并记录结果；环境通过后再进入成果节点", "test"),
-        ]
     elif has_required_stack and not environment_ready:
         root_description += f" 技术栈准备时间有限，须在本阶段先确认并准备“{required_stack}”，再实施验收标准；排除范围：{excluded_scope}。"
         root_tasks.extend([
@@ -399,10 +397,8 @@ def deterministic_tree(intent: ConfirmedIntent, duration_minutes: int, difficult
         additional = closure - selected_indices
         if sum(outcomes[index].node_count for index in selected_indices | additional) <= max(0, criterion_capacity):
             selected_indices.update(additional)
-    if stage_capacity == 1:
-        selected_indices = set()
-    elif not selected_indices:
-        raise ValueError("当前周期预算不足以保留一项完整可验证成果及其必要子节点；请延长周期或缩小本次成果范围")
+    if not selected_indices:
+        raise ValueError("确认的成果因节点数量、深度或依赖结构限制无法安全表达；请减少目标数量或简化依赖关系")
 
     def append_outcome(outcome: _ConfirmedOutcome, key: str, parent: str, depth: int, context: str) -> None:
         criterion = outcome.text
@@ -450,18 +446,12 @@ def deterministic_tree(intent: ConfirmedIntent, duration_minutes: int, difficult
         append_outcome(outcomes[zero_index], key, parent, depth, criteria[zero_index])
 
     included_indices = set(criterion_keys)
-    covered_indices = (
-        {short_criterion_index} if not outcomes[short_criterion_index].children else set()
-    ) if stage_capacity == 1 else included_indices
+    covered_indices = included_indices
     omitted_criteria = [criteria[index] for index in range(len(criteria)) if index not in covered_indices]
     omitted_count = len(omitted_criteria)
     purpose = [goal]
-    if stage_capacity == 1 and omitted_count > 0:
-        purpose.append(f"短周期兜底仅覆盖子成果“{short_criterion}”；未完整覆盖 {omitted_count} 项：{'；'.join(omitted_criteria)}")
-    elif stage_capacity == 1:
-        purpose.append("短周期使用单一端到端节点覆盖唯一验收标准")
-    elif omitted_count > 0:
-        purpose.append(f"因周期、树深度、单父节点结构限制或需要模型细分而未覆盖 {omitted_count} 项：{'；'.join(omitted_criteria)}")
+    if omitted_count > 0:
+        purpose.append(f"因节点数量、树深度、单父节点结构限制或需要进一步澄清而未覆盖 {omitted_count} 项：{'；'.join(omitted_criteria)}")
     else:
         purpose.append("每条确认的验收标准均有对应成果节点与验证步骤")
 
@@ -496,6 +486,7 @@ def deterministic_tree(intent: ConfirmedIntent, duration_minutes: int, difficult
             description=f"{description}；{personalized_guidance}",
             estimated_minutes=minute_allocations[index],
             tasks=guided_tasks,
+            acceptance_criteria=_criteria_for_tasks(guided_tasks),
         ))
     return ExperimentTree(title=title, purpose=purpose, nodes=nodes)
 
@@ -631,9 +622,7 @@ def _validate_criterion_coverage(tree: ExperimentTree, intent: ConfirmedIntent) 
 
 
 def _validate_model_tree(result: Any, duration_minutes: int, intent: ConfirmedIntent) -> ExperimentTree:
-    tree = ExperimentTree.model_validate(result)
-    if sum(node.estimated_minutes for node in tree.nodes) > duration_minutes:
-        raise ValueError("generated plan exceeds duration budget")
+    tree = _ensure_node_acceptance_criteria(ExperimentTree.model_validate(result))
     _validate_criterion_coverage(tree, intent)
     return tree
 

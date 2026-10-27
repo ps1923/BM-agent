@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 import java.util.List;
+import com.bmhs.experimentcreation.CreationModels.AcceptanceCriterion;
 
 public final class GitModels {
     private GitModels() {}
@@ -34,8 +35,17 @@ public final class GitModels {
 
     public record BugDraft(String title, String problem, String solution, String technologyStack) {}
 
+    public record CriterionResult(int criterionIndex, String decision, String summary, List<Evidence> evidence) {}
+
     public record NodeResult(long nodeId, String decision, String summary, List<Evidence> evidence,
-                             List<String> suggestions, BugDraft bugDraft) {}
+                             List<String> suggestions, BugDraft bugDraft, List<CriterionResult> criterionResults,
+                             Integer criteriaVersion, String criteriaSource, List<AcceptanceCriterion> criteriaSnapshot) {
+        public NodeResult(long nodeId, String decision, String summary, List<Evidence> evidence,
+                          List<String> suggestions, BugDraft bugDraft) {
+            this(nodeId, decision, summary, evidence, suggestions, bugDraft, List.of(), null,
+                    "legacy_inferred", List.of());
+        }
+    }
 
     public record BugDraftConfirmRequest(@NotBlank @Size(max = 200) String title,
                                          @NotBlank @Size(max = 20000) String problem,
@@ -71,15 +81,29 @@ public final class GitModels {
                                    String branch, String credentialUsername, String credentialCiphertext,
                                    String status) {}
 
-    public record GiteaRepository(long id, String owner, String name) {}
+    public record GiteaRepository(long id, String owner, String name, String bootstrapPassword) {
+        public GiteaRepository(long id, String owner, String name) {
+            this(id, owner, name, null);
+        }
+    }
 
     public record SubmissionRecord(long id, long runId, long experimentId, long studentId, String commitSha,
                                    String parentSha, String message, String author, Instant committedAt,
                                    String description, String status, Instant createdAt) {}
 
-    public record NodeSpec(long nodeId, String code, String name, String description,
-                           List<String> tasks) {}
+    public record NodeSpec(long nodeId, String code, String name, String description, List<String> tasks,
+                           List<AcceptanceCriterion> acceptanceCriteria, Integer criteriaVersion,
+                           String criteriaSource) {
+        public NodeSpec(long nodeId, String code, String name, String description, List<String> tasks) {
+            this(nodeId, code, name, description, tasks, List.of(), null, "legacy_inferred");
+        }
+    }
 
     public record RawResult(long nodeId, String decision, String summary, List<Evidence> evidence,
-                            List<String> suggestions, BugDraft bugDraft) {}
+                            List<String> suggestions, BugDraft bugDraft, List<CriterionResult> criterionResults) {
+        public RawResult(long nodeId, String decision, String summary, List<Evidence> evidence,
+                         List<String> suggestions, BugDraft bugDraft) {
+            this(nodeId, decision, summary, evidence, suggestions, bugDraft, List.of());
+        }
+    }
 }

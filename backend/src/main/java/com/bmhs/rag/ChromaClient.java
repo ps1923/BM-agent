@@ -3,6 +3,7 @@ package com.bmhs.rag;
 import com.bmhs.experimentcreation.ApiException;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -59,25 +60,42 @@ public class ChromaClient {
         send("/api/v1/collections/" + collection + "/upsert", payload, true);
     }
 
+    public void delete(String documentId) {
+        String collection = collection();
+        JsonObject payload = new JsonObject();
+        payload.add("ids", gson.toJsonTree(List.of(documentId)));
+        send("/api/v1/collections/" + collection + "/delete", payload, true);
+    }
+
     public List<RagModels.ChromaHit> query(List<Double> embedding, Long courseId, int limit) {
-        return query(embedding, courseId, null, limit);
+        return query(embedding, courseId, null, null, null, limit, false);
     }
 
     public List<RagModels.ChromaHit> query(List<Double> embedding, Long courseId, Long experimentId, int limit) {
-        return query(embedding, courseId, experimentId, null, limit);
+        return query(embedding, courseId, experimentId, null, null, limit, false);
     }
 
     public List<RagModels.ChromaHit> query(List<Double> embedding, Long courseId, Long experimentId,
                                            String technologyStack, int limit) {
-        return query(embedding, courseId, experimentId, technologyStack, limit, false);
+        return query(embedding, courseId, experimentId, null, technologyStack, limit);
+    }
+
+    public List<RagModels.ChromaHit> query(List<Double> embedding, Long courseId, Long experimentId,
+                                           Long nodeId, String technologyStack, int limit) {
+        return query(embedding, courseId, experimentId, nodeId, technologyStack, limit, false);
     }
 
     public List<RagModels.ChromaHit> queryByExperiment(List<Double> embedding, Long courseId, long experimentId,
                                                         String technologyStack, int limit) {
-        return query(embedding, courseId, experimentId, technologyStack, limit, true);
+        return queryByExperiment(embedding, courseId, experimentId, null, technologyStack, limit);
     }
 
-    private List<RagModels.ChromaHit> query(List<Double> embedding, Long courseId, Long experimentId,
+    public List<RagModels.ChromaHit> queryByExperiment(List<Double> embedding, Long courseId, long experimentId,
+                                                        Long nodeId, String technologyStack, int limit) {
+        return query(embedding, courseId, experimentId, nodeId, technologyStack, limit, true);
+    }
+
+    private List<RagModels.ChromaHit> query(List<Double> embedding, Long courseId, Long experimentId, Long nodeId,
                                             String technologyStack, int limit, boolean experimentScoped) {
         String collection = collection();
         JsonObject payload = new JsonObject();
@@ -90,6 +108,14 @@ public class ChromaClient {
             throw new IllegalArgumentException("实验记忆检索必须指定实验");
         }
         conditions.add(equalsCondition("status", "approved"));
+        if (nodeId != null) {
+            JsonArray nodeOptions = new JsonArray();
+            nodeOptions.add(equalsCondition("node_id", nodeId.toString()));
+            nodeOptions.add(equalsCondition("node_id", ""));
+            JsonObject nodeFilter = new JsonObject();
+            nodeFilter.add("$or", nodeOptions);
+            conditions.add(nodeFilter);
+        }
         if (technologyStack != null && !technologyStack.isBlank()) {
             JsonArray stackOptions = new JsonArray();
             stackOptions.add(equalsCondition("technology_stack", technologyStack));
@@ -107,8 +133,10 @@ public class ChromaClient {
         List<RagModels.ChromaHit> hits = new ArrayList<>();
         if (ids == null) return hits;
         for (int i = 0; i < ids.size(); i++) {
-            double distance = distances != null && i < distances.size() ? distances.get(i).getAsDouble() : Double.MAX_VALUE;
-            hits.add(new RagModels.ChromaHit(ids.get(i).getAsString(), distance));
+            JsonElement id = ids.get(i);
+            if (id == null || !id.isJsonPrimitive() || !id.getAsJsonPrimitive().isString()) continue;
+            double distance = distanceAt(distances, i);
+            hits.add(new RagModels.ChromaHit(id.getAsString(), distance));
         }
         return hits;
     }
@@ -170,7 +198,16 @@ public class ChromaClient {
 
     private JsonArray firstArray(JsonObject root, String name) {
         if (!root.has(name) || !root.get(name).isJsonArray() || root.getAsJsonArray(name).isEmpty()) return null;
-        return root.getAsJsonArray(name).get(0).getAsJsonArray();
+        JsonElement first = root.getAsJsonArray(name).get(0);
+        return first != null && first.isJsonArray() ? first.getAsJsonArray() : null;
+    }
+
+    private double distanceAt(JsonArray distances, int index) {
+        if (distances == null || index >= distances.size()) return Double.MAX_VALUE;
+        JsonElement value = distances.get(index);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) return Double.MAX_VALUE;
+        double distance = value.getAsDouble();
+        return Double.isFinite(distance) && distance >= 0 ? distance : Double.MAX_VALUE;
     }
 
     private String normalize(String value) {

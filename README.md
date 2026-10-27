@@ -30,7 +30,7 @@ Bug 经验按实验隔离：AI 只能起草案例；学生确认后提交，授�
 
 当前浏览器页面已包含真实认证、课程和实验发布入口：
 
-- 学生和教师账号由服务端管理员创建，并通过 BCrypt 密码哈希认证
+- 学生和教师账号通过平台账号流程创建，并通过 BCrypt 密码哈希认证
 - 服务端通过 HttpOnly 会话 Cookie 识别当前用户，前端不保存密码、Token 或角色选择
 - 教师可创建课程并获得邀请码；学生可使用邀请码加入课程
 - 教师选择自己的实验草稿发布到课程后，课程成员才能访问该实验
@@ -84,6 +84,9 @@ database/migrations/20261001_fix_rejected_patch_timestamp_constraint.sql
 database/migrations/20261001_add_workspace_starting_state.sql
 database/migrations/20261021_add_dsh_plugin_baseline.sql
 database/migrations/20261022_add_git_commit_acceptance.sql
+database/migrations/20261023_teacher_role_personal_center_course_git.sql
+database/migrations/20261027_node_acceptance_criteria.sql
+database/migrations/20261027_rag_index_retry.sql
 ```
 
 迁移完成后先执行 `database/verify.sql`，确认认证、课程、Bug、补丁、诊断任务、教师评价和 Git 验收结构均为 `OK`，并确认 `task_progress_status` 为 `OK`、`inconsistent_task_progress_rows` 为 `0`，课程关键 CHECK 定义和 `ENFORCED` 状态匹配，再启动后端和前端。验证脚本会显式限定 `BM-sql`，缺少必要进度表时报告 `SKIPPED_MISSING_SCHEMA_OR_TABLE`；没有完成迁移时，不得进行正向页面验收。当前新增迁移只在隔离/本地测试库验证后使用；未经审批不得对生产库执行。
@@ -195,7 +198,9 @@ Bug 案例使用 `POST /api/runs/{runId}/bugs` 保存，教师使用 `GET /api/b
 
 教师工作台已经接入上述看板接口：课程选择会恢复最近查看的课程，学生表支持空数据和未开始状态，已开始的运行实例可展开时间线、节点/命令/对话/Bug 统计，并提交 0–100 分及文字评价。教师查看运行摘要时，后端仅将统计和事件元数据交给 DeepSeek 生成辅助摘要；模型不可用时返回 `aiSummaryAvailable=false`，页面明确显示真实统计，不把 AI 摘要当作教师评价。
 
-教师工作台的“Bug 案例审核”区域按当前课程加载学生提交的案例；教师可以填写审核意见并选择“通过并入库”或“拒绝”。通过后由后端建立 Chroma 向量索引，页面展示审核状态和 RAG 索引状态。课程切换时会阻止旧请求覆盖当前课程，后端仍负责最终的课程权限校验。
+教师工作台的“Bug 案例审核”区域按当前课程加载学生提交的案例；教师可以填写审核意见并选择“通过并入库”或“拒绝”。通过后案例只进入所属实验的记忆池，不会被其他实验检索。后端建立 Chroma 向量索引，按实验、节点和技术栈筛选，并由 MySQL 再校验审核状态和实验归属；超过 `RAG_MAX_DISTANCE` 的弱相关候选不会提供给验收 Harness。索引失败会按退避间隔自动重试，最多六次；老师可手动重新审核失败案例触发重试。已被拒绝的案例会从 Chroma 删除；删除失败时后台有限重试，MySQL 仍立即阻止其进入检索结果，教师也可手动重试清理。页面展示审核状态和 RAG 索引状态。课程切换时会阻止旧请求覆盖当前课程，后端仍负责最终的课程权限校验。
+
+`RAG_MAX_DISTANCE` 默认值为 `1.0`，适用于当前 Chroma 默认平方 L2 距离；若现有集合使用其他距离度量，应先用代表性 Bug 案例校准阈值，再调整服务器环境变量。`RAG_INDEX_RETRY_INTERVAL` 控制后台扫描间隔，默认五分钟。
 
 学生端会在当前浏览会话保存最近打开的实验编号；刷新后先通过 `/api/me` 恢复身份，再从后端重新读取该实验，避免恢复到过期的静态演示数据。退出登录会清除该会话状态。
 
@@ -210,4 +215,4 @@ docker compose config --quiet
 
 ## 前端课程发布验收
 
-启动静态服务器和后端后访问 `http://127.0.0.1:8000/`。使用管理员预置的教师账号创建课程并发布实验，再使用学生账号通过邀请码加入课程。刷新页面后，课程、成员和发布结果应仍来自服务端；未登录用户、其他课程教师和非成员学生不得访问受保护数据。
+启动静态服务器和后端后访问 `http://127.0.0.1:8000/`。使用教师账号创建课程、设置课程 Git 仓库地址并发布实验，再使用学生账号通过邀请码加入课程。学生和教师均可在个人中心维护显示名称及 Git 提交署名；全站 Gitea 服务密钥不向浏览器开放。刷新页面后，课程、成员和发布结果应仍来自服务端；未登录用户、其他课程教师和非成员学生不得访问受保护数据。

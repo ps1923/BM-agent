@@ -245,10 +245,11 @@ public class GitAcceptanceService {
         String cloneUrl = repoUrl + ".git";
         GitModels.RepositoryRecord stored = repository.createRepositoryRecord(run, owner, name, repoUrl, cloneUrl);
         try {
+            boolean prepareCredential = stored.credentialCiphertext() == null;
             GitModels.GiteaRepository remote = gitea.ensureRepository(run.runId(), run.studentId(), stored.owner(), stored.name(),
-                    config.webhookTargetUrl(), config.webhookSecret());
-            if (stored.credentialCiphertext() == null) {
-                String rawToken = gitea.createGitToken(stored.credentialUsername(), run.runId());
+                    config.webhookTargetUrl(), config.webhookSecret(), prepareCredential);
+            if (prepareCredential) {
+                String rawToken = gitea.createGitToken(stored.credentialUsername(), run.runId(), remote.bootstrapPassword());
                 repository.saveCredential(run.runId(), cipher.encrypt(rawToken));
             }
             repository.markRepositoryReady(run.runId(), remote.id());
@@ -278,7 +279,7 @@ public class GitAcceptanceService {
             List<GitModels.NodeSpec> nodes = repository.nodeSpecs(submissionId);
             if (nodes.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "GIT_NODES_REQUIRED", "提交未关联可验收节点");
             List<GitModels.RawResult> results = analyzeNodes(submission, nodes, files);
-            repository.saveResults(submissionId, submission.experimentId(), results);
+            repository.saveResults(submissionId, submission.experimentId(), nodes, results);
         } catch (RuntimeException exception) {
             String code = exception instanceof ApiException api ? api.code() : "GIT_ACCEPTANCE_FAILED";
             repository.fail(submissionId, code);
@@ -286,13 +287,21 @@ public class GitAcceptanceService {
         }
     }
 
-    private List<GitModels.RawResult> analyzeNodes(GitModels.SubmissionRecord submission,
-                                                   List<GitModels.NodeSpec> nodes,
-                                                   List<GitModels.CommitFile> files) {
-        String query = nodes.stream().map(node -> node.name() + " " + node.description()).reduce(" ", String::concat);
-        RagModels.RagSearchResult memories = rag.searchForExperiment(submission.studentId(), submission.experimentId(),
-                null, null, query, 5);
-        return acceptanceHarness.evaluate(submission.commitSha(), nodes, files, memories.references());
+    List<GitModels.RawResult> analyzeNodes(GitModels.SubmissionRecord submission,
+                                            List<GitModels.NodeSpec> nodes,
+                                            List<GitModels.CommitFile> files) {
+        Map<Long, List<RagModels.RagReference>> memoriesByNode = new HashMap<>();
+        for (GitModels.NodeSpec node : nodes) {
+            String query = node.name() + "\n" + node.description() + "\n"
+                    + String.join("\n", node.tasks() == null ? List.of() : node.tasks()) + "\n"
+                    + (node.acceptanceCriteria() == null ? "" : node.acceptanceCriteria().stream()
+                    .map(criterion -> criterion.criterion() + " " + criterion.expectedEvidence())
+                    .reduce("", (left, right) -> left + "\n" + right));
+            RagModels.RagSearchResult memories = rag.searchForExperiment(submission.studentId(),
+                    submission.experimentId(), node.nodeId(), null, query, 3);
+            memoriesByNode.put(node.nodeId(), memories.available() ? memories.references() : List.of());
+        }
+        return acceptanceHarness.evaluate(submission.commitSha(), nodes, files, memoriesByNode);
     }
 
     private List<GitModels.CommitFile> safeFiles(List<GitModels.CommitFile> input) {

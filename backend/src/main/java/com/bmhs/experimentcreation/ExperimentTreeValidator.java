@@ -64,8 +64,8 @@ public class ExperimentTreeValidator {
                 errors.add("节点前置列表不能为空: " + node.key());
             }
             totalMinutes += node.estimatedMinutes();
-            if (node.tasks() == null || node.tasks().size() < 3 || node.tasks().size() > 7) {
-                errors.add("每个节点必须包含 3–7 个任务: " + node.key());
+            if (node.tasks() == null || node.tasks().isEmpty()) {
+                errors.add("每个节点至少需要一个可执行任务: " + node.key());
             } else {
                 node.tasks().forEach(task -> {
                     if (task == null) {
@@ -83,6 +83,19 @@ public class ExperimentTreeValidator {
                     }
                     if (task.validationType() == null || !VALIDATION_TYPES.contains(task.validationType())) {
                         errors.add("任务验收类型不受支持: " + node.key());
+                    }
+                });
+            }
+            if (node.acceptanceCriteria() == null || node.acceptanceCriteria().isEmpty()) {
+                errors.add("每个节点必须包含可核验的验收准则: " + node.key());
+            } else {
+                node.acceptanceCriteria().forEach(criterion -> {
+                    if (criterion == null || blankOrLong(criterion.criterion(), 500)
+                            || blankOrLong(criterion.expectedEvidence(), 1000)
+                            || criterion.verificationMethod() == null
+                            || !Set.of("static_code", "test_artifact", "manual_demo")
+                            .contains(criterion.verificationMethod())) {
+                        errors.add("节点验收准则格式不合法: " + node.key());
                     }
                 });
             }
@@ -111,8 +124,6 @@ public class ExperimentTreeValidator {
         }
 
         detectCycles(byKey, errors);
-        int allowedMinutes = Math.max(durationMinutes + 60, (int) Math.ceil(durationMinutes * 1.2));
-        if (totalMinutes > allowedMinutes) errors.add("节点预计总工时明显超过学习周期");
         if (totalMinutes <= 0) errors.add("节点预计工时必须大于零");
         if (!errors.isEmpty()) fail(errors);
     }

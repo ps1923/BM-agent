@@ -14,22 +14,25 @@ public class ExperimentReviewerService {
 
     public ExperimentReviewerModels.AssignmentView assign(AuthenticatedUser user, long experimentId,
                                                             ExperimentReviewerModels.AssignmentRequest request) {
-        AuthContext.requireRole(user, "admin");
-        return repository.assign(experimentId, request.teacherId(), user.id());
+        AuthContext.requireRole(user, "teacher");
+        if (request != null && request.teacherId() != user.id()) {
+            throw new com.bmhs.experimentcreation.ApiException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    "EXPERIMENT_REVIEW_FORBIDDEN", "课程教师只能将自己设为审核教师");
+        }
+        if (request == null) {
+            throw new com.bmhs.experimentcreation.ApiException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "EXPERIMENT_REVIEW_INVALID", "请选择负责课程");
+        }
+        return repository.assign(experimentId, user.id(), request.courseId());
     }
 
     public ExperimentReviewerModels.AssignmentView get(AuthenticatedUser user, long experimentId) {
-        AuthContext.requireRole(user, "admin");
-        return repository.find(experimentId);
+        AuthContext.requireRole(user, "teacher");
+        return repository.find(experimentId, user.id());
     }
 
     public java.util.List<ExperimentReviewerModels.ReviewableExperimentView> reviewableExperiments(AuthenticatedUser user) {
-        AuthContext.requireRole(user, "admin");
-        return repository.reviewableExperiments();
-    }
-
-    public java.util.List<ExperimentReviewerModels.TeacherOption> activeTeachers(AuthenticatedUser user) {
-        AuthContext.requireRole(user, "admin");
-        return repository.activeTeachers();
+        AuthContext.requireRole(user, "teacher");
+        return repository.reviewableExperiments(user.id());
     }
 }

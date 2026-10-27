@@ -3,6 +3,7 @@ package com.bmhs.course;
 import com.bmhs.auth.AuthContext;
 import com.bmhs.auth.AuthModels.AuthenticatedUser;
 import com.bmhs.course.CourseModels.CreateCourseRequest;
+import com.bmhs.course.CourseModels.CourseGitRepositoryRequest;
 import com.bmhs.course.CourseModels.JoinCourseRequest;
 import com.bmhs.course.CourseModels.PublishExperimentRequest;
 import jakarta.validation.Valid;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,9 +22,11 @@ import java.util.Map;
 @RequestMapping("/api")
 public class CourseController {
     private final CourseService service;
+    private final CourseGitRepositoryService gitRepositoryService;
 
-    public CourseController(CourseService service) {
+    public CourseController(CourseService service, CourseGitRepositoryService gitRepositoryService) {
         this.service = service;
+        this.gitRepositoryService = gitRepositoryService;
     }
 
     @PostMapping("/courses")
@@ -52,6 +56,19 @@ public class CourseController {
     public ResponseEntity<?> members(@PathVariable long courseId, AuthenticatedUser user) {
         AuthContext.requireRole(user, "teacher");
         return ResponseEntity.ok(service.members(user, courseId));
+    }
+
+    @GetMapping("/courses/{courseId}/git-repository")
+    public ResponseEntity<?> gitRepository(@PathVariable long courseId, AuthenticatedUser user) {
+        return ResponseEntity.ok().header("Cache-Control", "no-store")
+                .body(gitRepositoryService.get(user, courseId));
+    }
+
+    @PutMapping("/courses/{courseId}/git-repository")
+    public ResponseEntity<?> updateGitRepository(@PathVariable long courseId, AuthenticatedUser user,
+                                                  @Valid @RequestBody CourseGitRepositoryRequest request) {
+        return ResponseEntity.ok().header("Cache-Control", "no-store")
+                .body(gitRepositoryService.update(user, courseId, request));
     }
 
     @GetMapping("/experiments/drafts")

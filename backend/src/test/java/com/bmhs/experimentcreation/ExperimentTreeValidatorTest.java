@@ -41,6 +41,16 @@ class ExperimentTreeValidatorTest {
     }
 
     @Test
+    void acceptsAdaptiveTaskCountAndEstimatesAboveReferenceDuration() {
+        PlanNode oneTask = new PlanNode("root", null, 0, "阶段", "可运行成果",
+                "完成一个可运行成果", 1_440,
+                List.of(new PlanTask("创建并运行程序", "保存可核验的运行入口", "manual", Map.of())));
+        ExperimentTree tree = new ExperimentTree("0.1", "实验", List.of("完成成果"), List.of(oneTask));
+
+        assertThatCode(() -> validator.validate(tree, 15)).doesNotThrowAnyException();
+    }
+
+    @Test
     void rejectsPrerequisiteThatDoesNotMatchParent() {
         ExperimentTree valid = tree(false);
         PlanNode branch = valid.nodes().get(1);

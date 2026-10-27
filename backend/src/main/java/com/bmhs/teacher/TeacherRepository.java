@@ -196,10 +196,12 @@ public class TeacherRepository {
                           JOIN course_members m ON m.course_id = c.id AND m.student_id = r.student_id AND m.status = 'active'
                           WHERE a.experiment_id = r.experiment_id AND a.status = 'published')
                   OR EXISTS (SELECT 1 FROM experiment_reviewers er
-                             WHERE er.experiment_id = r.experiment_id AND er.teacher_id = ?)
+                             JOIN courses rc ON rc.id = er.course_id AND rc.status = 'active'
+                             JOIN course_members rm ON rm.course_id = rc.id AND rm.student_id = r.student_id AND rm.status = 'active'
+                             WHERE er.experiment_id = r.experiment_id AND er.teacher_id = ? AND rc.teacher_id = ?)
                 ) LIMIT 1
                 """, (rs, rowNum) -> new RunAccess(rs.getLong("experiment_id"), rs.getLong("student_id"), rs.getObject("course_id", Long.class)),
-                teacherId, runId, teacherId, teacherId);
+                teacherId, runId, teacherId, teacherId, teacherId);
         if (rows.isEmpty()) throw new ApiException(HttpStatus.FORBIDDEN, "RUN_FORBIDDEN", "无权查看该学生运行实例");
         return rows.get(0);
     }

@@ -7,21 +7,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin")
-public class AdminReviewerController {
+@RequestMapping("/api/teacher/personal-experiments")
+public class TeacherPersonalExperimentController {
     private final ExperimentReviewerService service;
 
-    public AdminReviewerController(ExperimentReviewerService service) {
+    public TeacherPersonalExperimentController(ExperimentReviewerService service) {
         this.service = service;
     }
 
-    @GetMapping("/reviewable-experiments")
+    @GetMapping("/reviewable")
     public ResponseEntity<?> experiments(AuthenticatedUser user) {
         return ResponseEntity.ok(service.reviewableExperiments(user));
-    }
-
-    @GetMapping("/teachers")
-    public ResponseEntity<?> teachers(AuthenticatedUser user) {
-        return ResponseEntity.ok(service.activeTeachers(user));
     }
 }

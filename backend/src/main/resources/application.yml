@@ -87,6 +87,9 @@ bm-hs:
     collection: ${CHROMA_COLLECTION:bm_hs_bugs}
     api-key: ${CHROMA_API_KEY:}
     timeout: ${CHROMA_TIMEOUT:PT20S}
+  rag:
+    max-distance: ${RAG_MAX_DISTANCE:1.0}
+    index-retry-interval: ${RAG_INDEX_RETRY_INTERVAL:PT5M}
   git:
     api-base-url: ${GITEA_API_BASE_URL:}
     public-base-url: ${GITEA_PUBLIC_BASE_URL:}

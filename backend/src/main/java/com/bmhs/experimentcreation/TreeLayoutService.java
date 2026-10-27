@@ -42,7 +42,8 @@ public class TreeLayoutService {
                         node.tasks().stream().map(task -> new PositionedTask(null, task.title(), task.description(),
                                 task.validationType(), task.validationConfig())).toList(),
                         BigDecimal.valueOf(rawX.get(node.key()) - rootX),
-                        BigDecimal.valueOf(node.depth() * Y_GAP), null)));
+                        BigDecimal.valueOf(node.depth() * Y_GAP), null,
+                        node.acceptanceCriteria(), 1, "generated")));
         return positioned;
     }
 
