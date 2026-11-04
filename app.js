@@ -3300,7 +3300,7 @@ async function saveBugCase(event) {
   try {
     const endpoint = currentGitBugDraftContext
       ? `/student/submissions/${encodeURIComponent(currentGitBugDraftContext.submissionId)}/bug-draft/${encodeURIComponent(currentGitBugDraftContext.nodeId)}/confirm`
-      : `/runs/${activeRun.runId}/bugs`;
+      : `/student/runs/${activeRun.runId}/bugs`;
     await apiRequest(endpoint, {
       method: 'POST',
       body: JSON.stringify({ title, problem, solution: bugSolution.value.trim() || null,

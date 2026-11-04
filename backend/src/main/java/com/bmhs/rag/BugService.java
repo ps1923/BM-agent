@@ -24,6 +24,11 @@ public class BugService {
         return repository.create(runId, user.id(), request);
     }
 
+    public RagModels.BugCaseView createForGitRun(AuthenticatedUser user, long runId, RagModels.BugRequest request) {
+        requireRole(user, "student");
+        return repository.createForGitRun(runId, user.id(), request);
+    }
+
     public RagModels.BugCaseView createFromDsh(DshPrincipal principal, long runId, RagModels.BugRequest request) {
         return repository.create(runId, principal.studentId(), request);
     }

@@ -24,6 +24,16 @@ public class BugRepository {
     @Transactional
     public RagModels.BugCaseView create(long runId, long studentId, RagModels.BugRequest request) {
         RunContext context = findRunContext(runId, studentId);
+        return insert(context, runId, studentId, request);
+    }
+
+    @Transactional
+    public RagModels.BugCaseView createForGitRun(long runId, long studentId, RagModels.BugRequest request) {
+        RunContext context = findGitRunContext(runId, studentId);
+        return insert(context, runId, studentId, request);
+    }
+
+    private RagModels.BugCaseView insert(RunContext context, long runId, long studentId, RagModels.BugRequest request) {
         if (request.nodeId() != null && !nodeBelongs(context.experimentId(), request.nodeId())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "NODE_NOT_IN_EXPERIMENT", "节点不属于当前实验");
         }
@@ -262,6 +272,22 @@ public class BugRepository {
                 """, (rs, rowNum) -> new RunContext(rs.getLong("experiment_id"), rs.getObject("course_id", Long.class)),
                 runId, studentId);
         if (rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", "运行实例不存在");
+        return rows.get(0);
+    }
+
+    private RunContext findGitRunContext(long runId, long studentId) {
+        List<RunContext> rows = jdbc.query("""
+                SELECT r.experiment_id,
+                  (SELECT a.course_id FROM course_experiment_assignments a
+                   JOIN course_members m ON m.course_id = a.course_id AND m.student_id = r.student_id AND m.status = 'active'
+                   JOIN courses c ON c.id = a.course_id AND c.status = 'active'
+                   WHERE a.experiment_id = r.experiment_id AND a.status = 'published' LIMIT 1) AS course_id
+                FROM experiment_runs r
+                JOIN git_repositories gr ON gr.run_id = r.id AND gr.experiment_id = r.experiment_id
+                WHERE r.id = ? AND r.student_id = ? AND r.execution_mode = 'git' AND gr.status = 'ready'
+                """, (rs, rowNum) -> new RunContext(rs.getLong("experiment_id"), rs.getObject("course_id", Long.class)),
+                runId, studentId);
+        if (rows.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", "Git 运行实例不存在或尚未就绪");
         return rows.get(0);
     }
 

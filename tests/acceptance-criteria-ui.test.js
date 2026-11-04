@@ -44,3 +44,9 @@ test('teacher Bug review explains experiment-level memory isolation', async () =
   assert.match(app, /正在从实验记忆池清理/);
   assert.match(app, /已进入实验记忆池/);
 });
+
+test('Git submission manual Bug form uses the authenticated Git-run submission endpoint', async () => {
+  const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+  assert.match(app, /`\/student\/runs\/\$\{activeRun\.runId\}\/bugs`/);
+  assert.doesNotMatch(app, /`\/runs\/\$\{activeRun\.runId\}\/bugs`/);
+});

@@ -27,6 +27,12 @@ public class BugController {
         throw LegacyWriteDisabled.exception();
     }
 
+    @PostMapping("/student/runs/{runId:\\d+}/bugs")
+    public ResponseEntity<RagModels.BugCaseView> createForGitRun(@PathVariable long runId, AuthenticatedUser user,
+                                                                  @Valid @RequestBody RagModels.BugRequest request) {
+        return ResponseEntity.status(201).body(service.createForGitRun(user, runId, request));
+    }
+
     @GetMapping("/bugs")
     public ResponseEntity<?> list(@RequestParam(required = false) Long courseId, AuthenticatedUser user) {
         return ResponseEntity.ok(service.list(user, courseId));

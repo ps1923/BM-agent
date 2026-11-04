@@ -52,6 +52,24 @@ class BugRepositoryTest {
     }
 
     @Test
+    void manualBugSubmissionRequiresTheOwningStudentsReadyGitRun() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.any(RowMapper.class), eq(11L), eq(7L)))
+                .thenReturn(List.of());
+        BugRepository repository = new BugRepository(jdbc);
+
+        org.junit.jupiter.api.Assertions.assertThrows(com.bmhs.experimentcreation.ApiException.class,
+                () -> repository.createForGitRun(11L, 7L, new RagModels.BugRequest("标题", "问题", "解决", null)));
+
+        ArgumentCaptor<String> statement = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).query(statement.capture(), org.mockito.ArgumentMatchers.any(RowMapper.class), eq(11L), eq(7L));
+        String sql = statement.getValue().replaceAll("\\s+", " ");
+        assertTrue(sql.contains("r.student_id = ?"));
+        assertTrue(sql.contains("r.execution_mode = 'git'"));
+        assertTrue(sql.contains("gr.status = 'ready'"));
+    }
+
+    @Test
     void teacherReapprovalResetsRetryState() {
         java.time.Instant now = java.time.Instant.now();
         RagModels.BugCaseView pending = new RagModels.BugCaseView(14L, 5L, 11L, 8L, 4L, 7L,

@@ -24,6 +24,29 @@ class BugServiceTest {
     }
 
     @Test
+    void studentCanSubmitBugFromGitRunForTeacherReview() {
+        BugRepository repository = mock(BugRepository.class);
+        BugService service = new BugService(repository, mock(RagService.class));
+        AuthenticatedUser student = new AuthenticatedUser(7L, "student@example.com", "学生", "student");
+        RagModels.BugRequest request = new RagModels.BugRequest("标题", "问题", "解决", "Python", 88L);
+
+        service.createForGitRun(student, 11L, request);
+
+        verify(repository).createForGitRun(11L, 7L, request);
+    }
+
+    @Test
+    void teacherCannotSubmitStudentBugFromGitRun() {
+        BugService service = new BugService(mock(BugRepository.class), mock(RagService.class));
+        AuthenticatedUser teacher = new AuthenticatedUser(3L, "teacher@example.com", "教师", "teacher");
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> service.createForGitRun(teacher, 11L, new RagModels.BugRequest("标题", "问题", "解决", null)));
+
+        assertEquals("ROLE_FORBIDDEN", exception.code());
+    }
+
+    @Test
     void studentListDoesNotAcceptTeacherCourseFilter() {
         BugRepository repository = mock(BugRepository.class);
         BugService service = new BugService(repository, mock(RagService.class));
